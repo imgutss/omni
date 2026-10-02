@@ -1,0 +1,20 @@
+{
+  "name": "omni",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Omni — پنل مدیریت پروکسی VLESS روی Cloudflare Workers (بدون سرور، رایگان، با ربات تلگرام)",
+  "scripts": {
+    "dev": "wrangler dev --local --port 8787 --ip 0.0.0.0",
+    "deploy": "wrangler deploy",
+    "deploy:auto": "node deploy/deploy.mjs",
+    "push:github": "node deploy/github.mjs",
+    "test": "bash test/run-e2e.sh",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0",
+    "wrangler": "^3.80.0",
+    "ws": "^8.18.0"
+  }
+}

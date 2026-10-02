@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════════════════════════════
+#  Omni Panel — Cloudflare Worker (رایگان)
+#  deploy: node deploy/deploy.mjs   یا   npx wrangler deploy
+# ═══════════════════════════════════════════════════════════════
+name = "omni"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "omni-db"
+database_id = "11111111-2222-3333-4444-555555555555"
+
+[vars]
+PANEL_NAME = "Omni"
+BOT_WEBHOOK_SECRET = "omni-hook"
+# توکن ربات و آیدی مدیر از طریق secrets ست می‌شوند:
+#   npx wrangler secret put BOT_TOKEN
+#   npx wrangler secret put ADMIN_CHAT_ID
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[observability]
+enabled = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true

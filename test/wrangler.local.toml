@@ -1,0 +1,17 @@
+name = "omni-local"
+main = "../src/worker.js"
+compatibility_date = "2024-09-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "omni-local"
+database_id = "11111111-2222-3333-4444-555555555555"
+
+[vars]
+PANEL_NAME = "Omni"
+BOT_WEBHOOK_SECRET = "omni-hook"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
