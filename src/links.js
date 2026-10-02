@@ -18,15 +18,25 @@ export const FINGERPRINTS = ['chrome', 'firefox', 'safari', 'ios', 'android', 'e
 
 export const fragmentValue = (id) => (FRAGMENT_PRESETS.find((p) => p.id === id) || { value: '' }).value;
 
-/** آدرس‌های مورد استفاده برای ساخت کانفیگ: آی‌پی‌های کاربر → آی‌پی‌های تمیز → دامنه */
+/** نام سرور برای TLS (SNI) و هدر Host — همیشه دامنه‌ی خود پنل است، حتی وقتی آدرس یک آی‌پی تمیز باشد */
+export const sniFor = (settings) => String(settings.public_host || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+
+/** آدرس‌های کانفیگ به ترتیب اولویت:
+ *  ۱) آی‌پی‌هایی که کاربران واقعی تست و تأیید کرده‌اند (hits>0) — بهترین برای عبور از فیلتر
+ *  ۲) آی‌پی‌های اختصاصی خود کاربر (اگر ادمین ست کرده باشد)
+ *  ۳) دامنه‌ی خود پنل (همیشه سالم)
+ *  ۴) آی‌پی‌های تمیز تأییدنشده (فقط حدس لبه)
+ */
 export function addressesFor(user, settings, cleanIps = []) {
+  const norm = (cleanIps || []).map((r) => (typeof r === 'string' ? { ip: r, hits: 0 } : r)).filter((r) => r && r.ip);
+  const verified = norm.filter((r) => Number(r.hits || 0) > 0).sort((a, b) => (a.ms || 9999) - (b.ms || 9999)).map((r) => r.ip);
+  const guessed = norm.filter((r) => !(Number(r.hits || 0) > 0)).map((r) => r.ip);
   const list = [];
   const push = (h) => { if (h && !list.includes(h)) list.push(h); };
-  const userIps = safeArray(user?.ips);
-  if (userIps.length) userIps.forEach(push);
-  else if (cleanIps?.length) cleanIps.slice(0, 12).forEach((r) => push(typeof r === 'string' ? r : r.ip));
-  const host = settings.public_host || '';
-  if (host) push(host);
+  safeArray(user?.ips).forEach(push);          // آی‌پی‌های اختصاصی کاربر
+  verified.slice(0, 10).forEach(push);          // تأییدشده توسط دستگاه کاربران
+  if (settings.public_host) push(String(settings.public_host).replace(/^https?:\/\//, '').replace(/\/.*$/, ''));
+  guessed.slice(0, 6).forEach(push);            // حدس‌های لبه
   return list;
 }
 
@@ -49,13 +59,14 @@ export function vlessUri(user, settings, host, { index = 1, total = 1, tag = '' 
   const path = encodeURIComponent(settings.path || '/ws');
   const ed = user.early_data || settings.early_data || 2048;
   const frag = fragmentValue(user.fragment || settings.fragment_preset);
+  const sni = sniFor(settings) || host;
   const params = [
     'encryption=none',
     'security=tls',
-    `sni=${host}`,
+    `sni=${sni}`,
     `fp=${fp}`,
     'type=ws',
-    `host=${host}`,
+    `host=${sni}`,
     `path=${path}`,
     'alpn=http%2F1.1',
     `ed=${ed}`,
@@ -70,7 +81,8 @@ export function trojanUri(user, settings, host, { tag = '' } = {}) {
   const port = settings.port || '443';
   const fp = user.fingerprint || settings.fingerprint || 'chrome';
   const path = encodeURIComponent(settings.path || '/ws');
-  const params = [`security=tls`, `sni=${host}`, `fp=${fp}`, 'type=ws', `host=${host}`, `path=${path}`, 'alpn=http%2F1.1'];
+  const sni = sniFor(settings) || host;
+  const params = [`security=tls`, `sni=${sni}`, `fp=${fp}`, 'type=ws', `host=${sni}`, `path=${path}`, 'alpn=http%2F1.1'];
   const remark = `${settings.remark_prefix || ''}${user.username}${tag}`;
   return `trojan://${settings.trojan_password || ''}@${host}:${port}?${params.join('&')}#${enc(remark)}`;
 }
@@ -97,6 +109,7 @@ export function buildConfigs(user, settings, cleanIps = []) {
 /* ─────────────── sing-box / clash ─────────────── */
 function sbOutbound(user, settings, host) {
   const path = settings.path || '/ws';
+  const sni = sniFor(settings) || host;
   return {
     type: 'vless',
     tag: `omni-${user.username}-${host}`.slice(0, 60),
@@ -106,12 +119,12 @@ function sbOutbound(user, settings, host) {
     flow: '',
     tls: {
       enabled: true,
-      server_name: host,
+      server_name: sni,
       insecure: false,
       alpn: ['http/1.1'],
       utls: { enabled: true, fingerprint: user.fingerprint || settings.fingerprint || 'chrome' },
     },
-    transport: { type: 'ws', path, headers: { Host: host }, early_data_header_name: 'Sec-WebSocket-Protocol' },
+    transport: { type: 'ws', path, headers: { Host: sni }, early_data_header_name: 'Sec-WebSocket-Protocol' },
   };
 }
 
@@ -147,6 +160,7 @@ export function buildSingbox(user, settings, addrs) {
 
 export function buildClash(user, settings, addrs) {
   const path = settings.path || '/ws';
+  const sni = sniFor(settings);
   const proxies = addrs.map((h, i) => ({
     name: `omni-${i + 1}`,
     type: 'vless',
@@ -154,9 +168,9 @@ export function buildClash(user, settings, addrs) {
     port: Number(settings.port || 443),
     uuid: user.uuid,
     tls: true,
-    servername: h,
+    servername: sni || h,
     network: 'ws',
-    'ws-opts': { path, headers: { Host: h } },
+    'ws-opts': { path, headers: { Host: sni || h } },
     'client-fingerprint': user.fingerprint || settings.fingerprint || 'chrome',
     udp: true,
   }));

@@ -66,7 +66,8 @@ let settingsPath = '/ws', userUuid = '', subToken = '', trojanPw = '';
   ok('لینک VLESS با دامنه‌ی ورکر', uris.some((x) => x.startsWith('vless://') && x.includes('workers.dev')), uris[0]?.slice(0, 120));
   ok('لینک Trojan', uris.some((x) => x.startsWith('trojan://')), uris.find((x) => x.startsWith('trojan://'))?.slice(0, 100) || '—');
   ok('مسیر سکرت غیرپیش‌فرض', settingsPath !== '/ws' || true, settingsPath);
-  ok('host داخل لینک = دامنه ورکر', (c.body?.configs?.host || '').includes('workers.dev'));
+  ok('آدرس کانفیگ = آی‌پی تمیز یا دامنه', /^(\d+\.\d+\.\d+\.\d+|[a-z0-9.-]+\.workers\.dev)$/.test(c.body?.configs?.host || ''), c.body?.configs?.host);
+  ok('SNI/Host = دامنه‌ی ورکر', (uris[0] || '').includes('sni=omni.rasa-744a56.workers.dev') && (uris[0] || '').includes('host=omni.rasa-744a56.workers.dev'), (uris[0] || '').slice(0, 190));
 }
 
 console.log('\n[ساب‌لینک عمومی]');

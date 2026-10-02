@@ -15,6 +15,7 @@ database_id = "8e605a28-6c17-4b7c-bc2d-3c417ba768cf"
 [vars]
 PANEL_NAME = "Omni"
 BOT_WEBHOOK_SECRET = "omni-hook"
+BOT_USERNAME = "OmniAiGateBot"
 # توکن ربات و آیدی مدیر از طریق secrets ست می‌شوند:
 #   npx wrangler secret put BOT_TOKEN
 #   npx wrangler secret put ADMIN_CHAT_ID

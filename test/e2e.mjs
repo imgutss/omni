@@ -78,6 +78,7 @@ let subToken = '', uuid = '';
   ok('ساخت کاربر + configs', c.status === 200 && u?.username === 'ali' && Array.isArray(c.body?.configs?.uris) && c.body.configs.uris.length > 0, JSON.stringify(c.body).slice(0, 300));
   ok('استاتوس کاربر active', u?.status === 'active');
   ok('لینک VLESS صحیح', /^vless:\/\/[0-9a-f-]{36}@.+:443\?/.test(c.body?.configs?.uris?.[0] || ''), c.body?.configs?.uris?.[0]?.slice(0, 120));
+  ok('SNI و Host = دامنه‌ی پنل (حتی با آدرس آی‌پی)', /sni=omni\.example\.workers\.dev/.test(c.body?.configs?.uris?.[0] || '') && /host=omni\.example\.workers\.dev/.test(c.body?.configs?.uris?.[0] || ''), (c.body?.configs?.uris?.[0] || '').slice(0, 200));
   ok('sing-box + clash ساخته شد', !!c.body?.configs?.singbox?.outbounds && !!c.body?.configs?.clash?.proxies);
   subToken = u.sub_token; uuid = u.uuid;
   const dup = await req('POST', '/api/users', { body: { username: 'ali' } });
