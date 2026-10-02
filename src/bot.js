@@ -5,7 +5,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { allSettings, putSetting, getSetting, logEvent, randomToken, randomUuid, ensureSchema, settingsCached } from './auth.js';
 import { buildConfigs, FRAGMENT_PRESETS } from './links.js';
-import { rankIpsHttp, SEED_IPS, httpProbe, tcpProbe } from './scan.js';
+import { rankIpsHttp, SEED_IPS, httpProbe, tcpProbe, CF_GOOD_IPS, PORTS_PLAIN, PORTS_TLS } from './scan.js';
 import { safeJsonArray } from './core.js';
 
 const GB = 1024 ** 3;
@@ -221,7 +221,7 @@ export async function handleUpdate(env, ctx, origin, update) {
       const st = await allSettings(env);
       const pool = [...new Set([
         ...String(st.ip_pool || '').split(/[\n,\s]+/).filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x)),
-        ...SEED_IPS,
+        ...CF_GOOD_IPS,
       ])].slice(0, 60);
       const edge = await rankIpsHttp(pool, { concurrency: 8, timeoutMs: 2500 });
       const client = await env.DB.prepare('SELECT ip, ms, colo, COALESCE(hits,0) hits FROM clean_ips WHERE ok = 1 ORDER BY (hits * 1000) DESC, ms ASC LIMIT 10').all();
@@ -234,9 +234,9 @@ export async function handleUpdate(env, ctx, origin, update) {
         await logEvent(env, 'info', `اسکن ربات: ${top.length} آی‌پی از لبه`);
       }
       return send(
-        `<b>نتیجه‌ی اسکن</b> (${edge.length} پاسخ از ${pool.length})\n\n` +
+        `<b>نتیجه‌ی اسکن</b> (${edge.length} پاسخ از ${pool.length}${validated.length ? ` — ${validated.length} تأییدشده` : ''})\n\n` +
         (lines.join('\n\n') || 'چیزی پیدا نشد.') +
-        '\n\nℹ️ کلودفلر اجازه‌ی تست مستقیم آی‌پی‌های خودش از داخل ورکر را نمی‌دهد؛ دقیق‌ترین نتیجه از «تست روی دستگاه من» در صفحه‌ی وضعیت کاربران می‌آید (کشور/شبکه‌ی کاربر مهم است).'
+        '\n\nℹ️ کلودفلر اجازه‌ی تست مستقیم آی‌پی‌های خودش از داخل ورکر را نمی‌دهد؛ دقیق‌ترین نتیجه از «تست روی دستگاه من» در صفحه‌ی وضعیت کاربران می‌آید (شبکه‌ی کاربر مهم است).'
       );
     }
 

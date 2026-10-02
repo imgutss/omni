@@ -118,10 +118,36 @@ export async function fetchCfCidrs() {
   return CF_CIDR_FALLBACK;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   استخر آی‌پی تمیز — الگوگرفته از پنل‌هایی که در ایران پینگ می‌دهند:
+   آی‌پی‌ها باید «هاست واقعی» باشند (نه آدرس شبکه .0/.255) و از محدوده‌هایی
+   که برای اپراتورهای ایران باز است انتخاب شوند (Cloudflare + WARP).
+   ═══════════════════════════════════════════════════════════════════ */
+export const CF_GOOD_IPS = [
+  // کلودفلر — پرتکرار در گزارش‌های کاربران ایرانی
+  '172.67.73.161', '104.17.209.9', '104.21.32.115', '104.26.12.188', '172.67.182.201',
+  '104.16.18.15', '104.17.24.15', '104.21.64.1', '172.67.73.88', '104.26.10.12',
+  '104.18.32.115', '162.159.36.1', '162.159.140.38', '172.67.12.188', '104.16.132.229',
+  // WARP anycast — روی بیشتر پورت‌ها پاسخ می‌دهد
+  '188.114.97.7', '188.114.96.1', '188.114.97.1', '188.114.96.10',
+  '162.159.192.1', '162.159.193.1', '162.159.193.10',
+];
+/** محدوده‌های کلودفلر/WARP برای نمونه‌گیری (بدون آدرس شبکه) */
+export const CF_NETS = [
+  '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '162.159.0.0/16', '188.114.96.0/22', '162.159.192.0/24',
+];
+export const IPV6_SEEDS = [
+  '2606:4700:3033::6815:1e29', '2606:4700:3037::6815:32a1', '2606:4700:3030::ac43:49a1',
+  '2606:4700:3034::6815:4a1', '2606:4700:3035::6815:1a2b', '2803:f800:50::6ca2:c101',
+];
+/** پورت‌های پشتیبانی‌شده‌ی کلودفلر برای ترافیک Worker */
+export const PORTS_PLAIN = [80, 8080, 8880, 2052, 2082, 2086, 2095];
+export const PORTS_TLS = [443, 2053, 2083, 2087, 2096, 8443];
+export const portIsTls = (p) => PORTS_TLS.includes(Number(p));
+
 /* ───────────── پروب از لبه با fetch (برای آی‌پی‌های کلودفلر) ─────────────
-   نکته‌ی مهم: Workers اجازه‌ی connect() به آی‌پی‌های کلودفلر (و لوکال/خصوصی) را
-   نمی‌دهد. اما fetch() به /cdn-cgi/trace کار می‌کند و همان RTT واقعی تا لبه را
-   می‌دهد — برای آی‌پی‌هایی که پاسخ می‌دهند (خطای 1003 هم یعنی «رسید»). ───────────── */
+   Workers اجازه‌ی connect() به آی‌پی‌های کلودفلر را نمی‌دهد؛ fetch به
+   /cdn-cgi/trace اما انجام می‌شود و همان RTT واقعی تا لبه را می‌دهد. ───────────── */
 export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' } = {}) {
   const t0 = Date.now();
   try {
@@ -132,9 +158,9 @@ export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' 
     });
     const ms = Date.now() - t0;
     const body = await r.text().catch(() => '');
-    const colo = (body.match(/colo=(\w+)/) || [])[1] || null;
-    const egress = (body.match(/ip=([0-9.]+)/) || [])[1] || null;
-    return { ip, ok: true, alive: true, ms, status: r.status, colo, egress };
+    return { ip, ok: true, alive: true, ms, status: r.status,
+      colo: (body.match(/colo=(\w+)/) || [])[1] || null,
+      egress: (body.match(/ip=([0-9.]+)/) || [])[1] || null };
   } catch (e) {
     return { ip, ok: false, alive: false, ms: null, error: String(e?.message || e).slice(0, 80) };
   }
@@ -143,20 +169,47 @@ export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' 
 export async function rankIpsHttp(ips, { concurrency = 10, timeoutMs = 2500 } = {}) {
   const out = [];
   const queue = [...ips];
-  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
     while (queue.length) {
       const ip = queue.shift();
       const r = await httpProbe(ip, { timeoutMs });
       if (r.alive) out.push(r);
     }
-  });
-  await Promise.all(workers);
+  }));
   return out.sort((a, b) => a.ms - b.ms);
 }
 
-/* نمونه‌ی آی‌پی‌های شناخته‌شده‌ی کلودفلر (بذر اولیه تا اندازه‌گیری کاربران) */
-export const SEED_IPS = [
-  '104.16.0.0', '104.17.0.0', '104.18.0.0', '104.19.0.0', '104.20.0.0', '104.21.0.0', '104.22.0.0',
-  '104.24.0.0', '104.25.0.0', '104.26.0.0', '104.27.0.0', '162.159.36.0', '162.159.46.0',
-  '172.64.0.0', '172.66.0.0', '172.67.0.0', '188.114.96.0', '188.114.97.0', '188.114.98.0',
-];
+/** سازگاری با نسخه‌های قبلی */
+export const SEED_IPS = CF_GOOD_IPS;
+
+
+/* ───────────── اعتبارسنجی آی‌پی‌ها از داخل خود ورکر ─────────────
+   نکته‌ی کلیدی: نمی‌توان با connect() به آی‌پی‌های کلودفلر وصل شد، اما با
+   fetch + resolveOverride می‌شود «همان آی‌پی» را با Host و SNI خود پنل صدا زد.
+   اگر پاسخ درست برگردد یعنی آن آی‌پی واقعاً ترافیک ورکر ما را سرو می‌کند
+   (همان چیزی که کلاینت هنگام اتصال تجربه می‌کند). ───────────── */
+export async function validateIps(ips, { host, path = '/api/whoami', timeoutMs = 4000, concurrency = 8 } = {}) {
+  const out = [];
+  const queue = [...ips];
+  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (queue.length) {
+      const ip = queue.shift();
+      const t0 = Date.now();
+      try {
+        const r = await fetch(`https://${host}${path}`, {
+          headers: { 'user-agent': 'omni-validate' },
+          signal: AbortSignal.timeout(timeoutMs),
+          cf: { resolveOverride: ip, cacheTtl: 0 },
+        });
+        const ms = Date.now() - t0;
+        const body = await r.text().catch(() => '');
+        const good = r.status === 200 && /"ok"\s*:\s*true/.test(body);
+        out.push({ ip, ok: good, ms, status: r.status, sample: body.slice(0, 60) });
+      } catch (e) {
+        out.push({ ip, ok: false, ms: null, error: String(e?.message || e).slice(0, 90) });
+      }
+    }
+  });
+  await Promise.all(workers);
+  return out.sort((a, b) => (a.ok === b.ok ? (a.ms ?? 9e9) - (b.ms ?? 9e9) : a.ok ? -1 : 1));
+}

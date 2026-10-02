@@ -3,6 +3,8 @@
    احراز هویت پنل (PBKDF2-SHA256)، نشست‌های D1، کد بازیابی
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { CF_GOOD_IPS } from './scan.js';
+
 const enc = new TextEncoder();
 const SESSION_COOKIE = 'omni_sid';
 const CSRF_HEADER = 'x-kaveh-csrf';
@@ -191,7 +193,12 @@ export const DEFAULTS = {
   panel_name: 'Omni',
   public_host: '',
   port: '443',
-  fragment_preset: 'none',
+  ports_mode: 'auto',
+  ports_custom: '',
+  config_count: '30',
+  ipv6_enabled: '1',
+  ipv6_pool: '',
+  fragment_preset: 'mci',
   fingerprint: 'chrome',
   remark_prefix: '',
   default_quota_gb: '50',
@@ -289,7 +296,7 @@ export async function bootstrap(env, url) {
   if (!st.path) missing.path = '/' + randomToken(6).slice(0, 12);
   if (!st.trojan_password) missing.trojan_password = randomToken(16);
   if (!st.admin_chat_id && env.ADMIN_CHAT_ID) missing.admin_chat_id = String(env.ADMIN_CHAT_ID);
-  if (!st.ip_pool) missing.ip_pool = ['104.16.0.0', '104.17.0.0', '104.18.0.0', '104.19.0.0', '104.20.0.0', '104.21.0.0', '172.64.0.0', '172.66.0.0', '172.67.0.0', '162.159.36.0'].join('\n');
+  if (!st.ip_pool) missing.ip_pool = CF_GOOD_IPS.join('\n');
   if (!st.public_host) missing.public_host = url.host;
   if (Object.keys(missing).length) await putSettingsBulk(env, missing);
   await ensureRecoveryCode(env);

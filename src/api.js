@@ -9,7 +9,7 @@ import {
   settingsCached, ensureRecoveryCode, sessionIdFrom,
 } from './auth.js';
 import { buildConfigs, subscriptionBody, statusPage, FRAGMENT_PRESETS, FINGERPRINTS, safeArray, esc } from './links.js';
-import { rankIps, rankIpsHttp, probeNode, tcpProbe, fetchCfCidrs, sampleIPs, SEED_IPS } from './scan.js';
+import { rankIps, rankIpsHttp, probeNode, tcpProbe, fetchCfCidrs, sampleIPs, SEED_IPS, CF_GOOD_IPS, IPV6_SEEDS, PORTS_PLAIN, PORTS_TLS } from './scan.js';
 import { userStatus, safeJsonArray, invalidateUser } from './core.js';
 
 const GB = 1024 ** 3;
@@ -218,7 +218,10 @@ export async function handleApi(request, env, ctx, url) {
     if (st === 'limited') return new Response('حجم اشتراک به پایان رسیده است', { status: 403 });
     const view = userView(u, settings);
     const ips = await cleanIpsList(env, settings);
-    const { body, contentType } = subscriptionBody(view, settings, ips, url.searchParams.get('type') || '');
+    const ua = (request.headers.get('user-agent') || '').toLowerCase();
+    const byUa = ua.includes('clash') || ua.includes('mihomo') || ua.includes('stash') ? 'clash'
+      : (ua.includes('sing-box') || ua.includes('singbox') || ua.includes('happ') || ua.includes('streisand') || ua.includes('karing') || ua.includes('v2box')) ? 'singbox' : '';
+    const { body, contentType } = subscriptionBody(view, settings, ips, url.searchParams.get('type') || byUa);
     const expire = u.expires_at ? Math.floor(new Date(String(u.expires_at).replace(' ', 'T') + 'Z').getTime() / 1000) : 0;
     return new Response(body, {
       headers: {
@@ -459,7 +462,7 @@ export async function handleApi(request, env, ctx, url) {
       'default_quota_gb', 'default_expiry_days', 'rotate_minutes', 'signup_max_per_ip', 'signup_max_per_day',
       'public_signup', 'maintenance', 'auto_rotate', 'mux_enabled', 'block_ads', 'block_nsfw', 'block_list',
       'clean_ips', 'ip_pool', 'device_limit', 'dns_upstream', 'proto', 'path', 'early_data', 'decoy_url', 'announce',
-      'trojan_password'];
+      'trojan_password', 'ports_mode', 'ports_custom', 'config_count', 'ipv6_enabled', 'ipv6_pool', 'verified_pairs'];
     const patch = {};
     for (const k of allowed) {
       const v = body[k];
@@ -482,7 +485,12 @@ export async function handleApi(request, env, ctx, url) {
   }
 
   if (p === '/api/fragments') {
-    return json({ ok: true, presets: FRAGMENT_PRESETS.map(({ id, label }) => ({ id, label })), fingerprints: FINGERPRINTS });
+    return json({
+      ok: true,
+      presets: FRAGMENT_PRESETS.map(({ id, label }) => ({ id, label })),
+      fingerprints: FINGERPRINTS,
+      ports: { plain: PORTS_PLAIN, tls: PORTS_TLS, recommended: [80, 443, 2053, 8080, 2087, 8443] },
+    });
   }
 
   /* ───────── password ───────── */
@@ -628,30 +636,28 @@ export async function handleApi(request, env, ctx, url) {
     const pool = [...new Set([
       ...given.map((x) => String(x).trim()),
       ...(settings.ip_pool || '').split(/[\n,\s]+/).filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x)),
-      ...SEED_IPS,
-    ])].slice(0, 200);
+      ...CF_GOOD_IPS,
+    ])].slice(0, 120);
 
-    // ۱) اندازه‌گیری‌های واقعی کاربران (از صفحه‌ی وضعیت) — باارزش‌ترین داده
+    // ۱) اندازه‌گیری‌های واقعی دستگاه کاربران (باارزش‌ترین داده)
     const clientRows = await env.DB.prepare(
-      `SELECT ip, ms, colo, hits, src FROM clean_ips WHERE ok = 1 ORDER BY (hits * 1000) DESC, ms ASC LIMIT 40`).all();
-    const measured = new Map((clientRows.results || []).map((r) => [r.ip, r]));
-
-    // ۲) پروب از لبه با fetch (آی‌پی‌های کلودفلر با connect() قابل تست نیستند)
-    const edge = await rankIpsHttp(pool.slice(0, 60), { concurrency: Number(body.concurrency || 10), timeoutMs: Number(body.timeout || 2500) });
+      `SELECT ip, ms, colo, COALESCE(hits,0) hits FROM clean_ips WHERE ok = 1 ORDER BY (COALESCE(hits,0) * 1000) DESC, ms ASC LIMIT 40`).all();
+    // ۲) پروب لبه (فقط برای آی‌پی‌های غیرکلودفلر معنا دارد؛ برای کلودفلر خطای ۱۰۰۳ هم یعنی «رسید»)
+    const edge = await rankIpsHttp(pool.slice(0, 40), { concurrency: Number(body.concurrency || 10), timeoutMs: Number(body.timeout || 2500) });
 
     const merged = new Map();
     for (const r of edge) merged.set(r.ip, { ip: r.ip, ms: r.ms, colo: r.colo, src: 'edge', hits: 0 });
     for (const r of (clientRows.results || [])) {
       const cur = merged.get(r.ip) || { ip: r.ip, ms: null, colo: null, src: 'client', hits: 0 };
-      cur.client_ms = r.ms; cur.colo = cur.colo || r.colo; cur.hits = r.hits || 0; cur.src = cur.src === 'edge' ? 'both' : 'client';
+      cur.client_ms = r.ms; cur.colo = cur.colo || r.colo; cur.hits = r.hits || 0;
+      cur.src = cur.src === 'edge' ? 'both' : 'client';
       merged.set(r.ip, cur);
     }
     const results = [...merged.values()]
-      .map((x) => ({ ...x, score: (x.client_ms ?? x.ms ?? 9999) - Math.min(50, x.hits || 0) }))
+      .map((x) => ({ ...x, score: (x.client_ms ?? x.ms ?? 9999) - Math.min(80, x.hits || 0) }))
       .sort((a, b) => a.score - b.score)
       .slice(0, 40);
 
-    // ذخیره‌ی ۲۰ نتیجه‌ی برتر به‌عنوان آی‌پی تمیز پیشنهادی ساب‌لینک‌ها
     const top = results.filter((r) => (r.client_ms ?? r.ms) !== null).slice(0, 20);
     if (top.length) {
       for (const r of top) {
@@ -662,12 +668,11 @@ export async function handleApi(request, env, ctx, url) {
       }
       await putSetting(env, 'clean_ips', JSON.stringify(top.map((r) => r.ip)));
     }
-
-    const note = edge.length
-      ? 'تست از لبه‌ی کلودفلر انجام شد. برای انتخاب دقیق‌تر، از کاربران بخواه آی‌پی‌ها را از صفحه‌ی وضعیت خودشان تست کنند.'
-      : 'کلودفلر اجازه‌ی تست مستقیم آی‌پی‌های خودش از داخل ورکر را نمی‌دهد (connect به آی‌پی‌های کلودفلر مسدود است). نتیجه‌ها از اندازه‌گیری دستگاه کاربران می‌آید؛ از صفحه‌ی وضعیت، دکمه‌ی «تست روی دستگاه من» را بزن.';
-    await logEvent(env, 'info', `رتبه‌بندی آی‌پی: ${edge.length} پاسخ از لبه + ${clientRows.results?.length || 0} اندازه‌گیری کاربران`);
-    return json({ ok: true, tested: pool.length, alive: edge.length, client: clientRows.results?.length || 0, results, note });
+    await logEvent(env, 'info', `رتبه‌بندی آی‌پی: ${edge.length} از لبه + ${clientRows.results?.length || 0} اندازه‌گیری کاربران`);
+    return json({
+      ok: true, tested: pool.length, alive: edge.length, client: clientRows.results?.length || 0, results,
+      note: 'رتبه‌بندی ترکیبی: اندازه‌گیری واقعی دستگاه کاربران (وزن بالا؛ ستاره آن را تقویت می‌کند) + پروب لبه. کلودفلر اجازه‌ی تست مستقیم آی‌پی‌هایش از داخل ورکر را نمی‌دهد، پس دقیق‌ترین داده همان تست کاربران و ابزار npm run pool است.',
+    });
   }
 
   if (p === '/api/diag/logs' && method === 'GET') {

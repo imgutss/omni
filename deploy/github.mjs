@@ -79,7 +79,8 @@ if (!existsSync(resolve(ROOT, '.git'))) {
   await git(['remote', 'add', 'origin', remote]);
   console.log('  ✅ مخزن محلی ساخته شد');
 } else {
-  await git(['remote', 'set-url', 'origin', remote]);
+  const hasOrigin = await run('git', ['remote'], { quiet: true }).then((o) => /(^|\n)origin(\n|$)/.test(o)).catch(() => false);
+  await git(hasOrigin ? ['remote', 'set-url', 'origin', remote] : ['remote', 'add', 'origin', remote]);
 }
 await git(['add', '-A']);
 const msg = process.env.OMNI_COMMIT_MSG || 'Omni panel: Cloudflare Worker + D1 + Telegram bot';

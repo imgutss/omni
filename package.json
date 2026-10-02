@@ -10,6 +10,8 @@
     "deploy:auto": "node deploy/deploy.mjs",
     "push:github": "node deploy/github.mjs",
     "test": "bash test/run-e2e.sh",
+    "pool": "node tools/pool-scan.mjs",
+    "verify": "node tools/sub-verify.mjs",
     "tail": "wrangler tail"
   },
   "devDependencies": {
