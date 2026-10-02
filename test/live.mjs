@@ -88,7 +88,7 @@ console.log('\n[تونل واقعی VLESS روی WSS]');
 await new Promise((resolve0) => {
   let settled = false;
   const resolve = (v) => { if (!settled) { settled = true; resolve0(v); } };
-  const t = setTimeout(() => { ok('تونل WSS → www.gnu.org', false, 'timeout'); resolve(); }, 20000);
+  const t = setTimeout(() => { ok('تونل WSS → www.gnu.org', false, 'timeout'); resolve(); }, 30000);
   const ws = new WebSocket(`wss://${BASE.replace('https://', '')}${settingsPath}`, { headers: { 'user-agent': 'omni-live' } });
   ws.binaryType = 'arraybuffer';
   let got = '';
@@ -111,7 +111,7 @@ console.log('\n[تونل واقعی Trojan روی WSS]');
 await new Promise((resolve0) => {
   let settled = false;
   const resolve = (v) => { if (!settled) { settled = true; resolve0(v); } };
-  const t = setTimeout(() => { ok('تونل Trojan → www.gnu.org', false, 'timeout'); resolve(); }, 20000);
+  const t = setTimeout(() => { ok('تونل Trojan → www.gnu.org', false, 'timeout'); resolve(); }, 30000);
   const ws = new WebSocket(`wss://${BASE.replace('https://', '')}${settingsPath}`, { headers: { 'user-agent': 'omni-live' } });
   ws.binaryType = 'arraybuffer';
   let got = '';

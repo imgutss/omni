@@ -3756,8 +3756,9 @@ var qrcode = function() {
     <div class="scan-row">
       <code>${a(r.ip)}</code>
       <span class="scan-bar"><i style="width:${r.ms===null?0:r.ms<0?100:Math.min(100,Math.max(4,r.ms/10))}%;background:${r.ms===null?"var(--border)":it(r.ms)}"></i></span>
-      <b style="color:${r.ms===null?"var(--text-faint)":it(r.ms)}">${r.ms===null?"\u2026":r.ms<0?a(n("scanner.timeout")):r.ms+" ms"}</b>
-      ${r.healthy?`<span class="badge ok">${a(n("scanner.healthy"))}</span>`:""}
+      <b style="color:${r.ms===null?"var(--text-faint)":it(r.ms)}">${r.ms===null?"\u2026":r.ms<0?a(n("scanner.timeout")):r.ms===0&&r.src==="edge"?"\u2014":r.ms+" ms"}</b>
+      ${r.ms===0&&r.src==="edge"?`<span class="badge info">${a(n("scanner.rank"))}</span>`:r.healthy?`<span class="badge ok">${a(n("scanner.healthy"))}</span>`:""}
+      ${r.src==="browser"?`<span class="badge">${a(n("scanner.testing"))}</span>`:""}
     </div>`).join("")}async function Zt(e,t){const s=performance.now(),i=new AbortController,o=setTimeout(()=>i.abort(),t||4e3);try{await fetch(`https://${e}/cdn-cgi/trace?x=${Math.round(s)}`,{mode:"no-cors",cache:"no-store",signal:i.signal}),clearTimeout(o);return Math.round(performance.now()-s)}catch{clearTimeout(o);return -1}}function dt(e){let t=document.querySelector("#scan-ranges"),s=t?t.value.split(/[\s,]+/).filter(Boolean):rt.slice(0,4),i=new Set,o=[...Oe(e.settings)];for(let r of o)i.add(r);for(let r of s)for(let c of Rt(r,6))i.has(c)||(i.add(c),o.push(c));return o.slice(0,48)}async function Wt(e){if(O.running)return;let o=[],s=[],i=e.settings();for(let x of(Oe(i.settings)||[]))s.push(x);
   for(let x of(Re(i.settings.address_domains)||[]))o.push(String(x).trim());
   if(i.settings.public_host)o.push(String(i.settings.public_host).replace(/^https?:\/\//,"").replace(/\/.*$/,""));
