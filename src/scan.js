@@ -117,3 +117,46 @@ export async function fetchCfCidrs() {
   } catch { /* ignore */ }
   return CF_CIDR_FALLBACK;
 }
+
+/* ───────────── پروب از لبه با fetch (برای آی‌پی‌های کلودفلر) ─────────────
+   نکته‌ی مهم: Workers اجازه‌ی connect() به آی‌پی‌های کلودفلر (و لوکال/خصوصی) را
+   نمی‌دهد. اما fetch() به /cdn-cgi/trace کار می‌کند و همان RTT واقعی تا لبه را
+   می‌دهد — برای آی‌پی‌هایی که پاسخ می‌دهند (خطای 1003 هم یعنی «رسید»). ───────────── */
+export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' } = {}) {
+  const t0 = Date.now();
+  try {
+    const r = await fetch(`https://${ip}${path}`, {
+      headers: { 'user-agent': 'omni-probe' },
+      signal: AbortSignal.timeout(timeoutMs),
+      cf: { cacheTtl: 0 },
+    });
+    const ms = Date.now() - t0;
+    const body = await r.text().catch(() => '');
+    const colo = (body.match(/colo=(\w+)/) || [])[1] || null;
+    const egress = (body.match(/ip=([0-9.]+)/) || [])[1] || null;
+    return { ip, ok: true, alive: true, ms, status: r.status, colo, egress };
+  } catch (e) {
+    return { ip, ok: false, alive: false, ms: null, error: String(e?.message || e).slice(0, 80) };
+  }
+}
+
+export async function rankIpsHttp(ips, { concurrency = 10, timeoutMs = 2500 } = {}) {
+  const out = [];
+  const queue = [...ips];
+  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (queue.length) {
+      const ip = queue.shift();
+      const r = await httpProbe(ip, { timeoutMs });
+      if (r.alive) out.push(r);
+    }
+  });
+  await Promise.all(workers);
+  return out.sort((a, b) => a.ms - b.ms);
+}
+
+/* نمونه‌ی آی‌پی‌های شناخته‌شده‌ی کلودفلر (بذر اولیه تا اندازه‌گیری کاربران) */
+export const SEED_IPS = [
+  '104.16.0.0', '104.17.0.0', '104.18.0.0', '104.19.0.0', '104.20.0.0', '104.21.0.0', '104.22.0.0',
+  '104.24.0.0', '104.25.0.0', '104.26.0.0', '104.27.0.0', '162.159.36.0', '162.159.46.0',
+  '172.64.0.0', '172.66.0.0', '172.67.0.0', '188.114.96.0', '188.114.97.0', '188.114.98.0',
+];

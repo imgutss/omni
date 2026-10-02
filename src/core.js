@@ -135,19 +135,22 @@ function bytesToUuid(b) {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
-async function readAddress(reader, { withPort = true } = {}) {
+async function readAddress(reader, { withPort = true, socks = false } = {}) {
   if (!(await reader.ensure(1))) return null;
+  // VLESS: 1=IPv4، 2=دامنه، 3=IPv6 | Trojan (سبک SOCKS5): 1=IPv4، 3=دامنه، 4=IPv6
   const type = reader.take(1)[0];
+  const isDomain = socks ? type === 3 : type === 2;
+  const isIpv6 = socks ? type === 4 : type === 3;
   let hostname = null;
   if (type === 1) {
     if (!(await reader.ensure(4))) return null;
     hostname = [...reader.take(4)].join('.');
-  } else if (type === 2) {
+  } else if (isDomain) {
     if (!(await reader.ensure(1))) return null;
     const len = reader.take(1)[0];
     if (!(await reader.ensure(len))) return null;
     hostname = new TextDecoder().decode(reader.take(len));
-  } else if (type === 3) {
+  } else if (isIpv6) {
     if (!(await reader.ensure(16))) return null;
     const b = [...reader.take(16)];
     const g = Array.from({ length: 8 }, (_, i) => ((b[i * 2] << 8) | b[i * 2 + 1]).toString(16));
@@ -158,6 +161,7 @@ async function readAddress(reader, { withPort = true } = {}) {
     });
     hostname = bestLen > 1 ? `${g.slice(0, best).join(':')}::${g.slice(best + bestLen).join(':')}` : g.join(':');
   } else return null;
+  if (!hostname) return null;
   let port = null;
   if (withPort) {
     if (!(await reader.ensure(2))) return null;
@@ -186,7 +190,7 @@ async function parseTrojan(reader) {
   const c1 = reader.take(2);
   if (c1[0] !== 13 || c1[1] !== 10) return null;
   const cmd = reader.take(1)[0];
-  const addr = await readAddress(reader, { withPort: true });
+  const addr = await readAddress(reader, { withPort: true, socks: true });
   if (!addr) return null;
   if (!(await reader.ensure(2))) return null;
   const c2 = reader.take(2);
@@ -396,9 +400,11 @@ async function runProxy(env, ctx, request, server, queue, settings) {
 
     const b0 = (await reader.peek(1))[0];
     let cred = null;
+    // VLESS همیشه با bYTE 0 (نسخه ۰) شروع می‌شود؛ Trojan با ۵۶ کاراکتر hex پسورد.
     if (b0 === 0) cred = await parseVless(reader);
     else {
-      await Promise.race([reader.ensure(58), sleep(1500)]);
+      // منتظر کامل‌شدن هدر Trojan (۵۶ + CRLF + cmd + addr) می‌مانیم تا فریم‌های تکه‌تکه هم درست پارس شوند
+      await Promise.race([reader.ensure(59), sleep(8000)]);
       const head = await reader.peek(58);
       const looksTrojan = head.byteLength >= 58 && /^[\x20-\x7e]{56}\r\n/.test(new TextDecoder().decode(head));
       cred = looksTrojan ? await parseTrojan(reader) : await parseVless(reader);

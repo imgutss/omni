@@ -174,8 +174,10 @@ if (BOT_TOKEN) {
   if (cmds?.ok) ok('منوی دستورات ثبت شد');
   const info = await tg('getWebhookInfo');
   if (info?.ok) ok('وضعیت وب‌هوک: ' + (info.result.url || '—') + (info.result.last_error_message ? ' | خطا: ' + info.result.last_error_message : ''));
-  await tg('sendMessage', {
-    chat_id: ADMIN_CHAT_ID || undefined,
+  const chatLooksReal = /^-?\d{5,}$/.test(String(ADMIN_CHAT_ID)) && String(ADMIN_CHAT_ID) !== '123456789';
+  if (!chatLooksReal) warn('ADMIN_CHAT_ID معتبر نیست — ربات با دستور /pair به پنل وصل می‌شود');
+  if (chatLooksReal) await tg('sendMessage', {
+    chat_id: ADMIN_CHAT_ID,
     text:
       `🚀 <b>Omni روی Cloudflare اجرا شد!</b>\n\n` +
       `🌐 پنل: ${workerUrl}\n` +
@@ -195,5 +197,6 @@ console.log(`
    📱 ربات     : ${workerUrl}/tg/{secret}
    🗄  D1       : ${DB_NAME} (${databaseId})
    🔑 نصب پنل  : پنل را باز کن → نام کاربری/رمز مدیر را بساز
+   🤖 اتصال ربات: در پنل → «ربات» → ساخت کد اتصال، سپس در تلگرام: /pair کد
 ╚══════════════════════════════════════════════════════════════╝
 `);

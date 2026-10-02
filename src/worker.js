@@ -30,7 +30,15 @@ export default {
 
     /* ── روت‌های API / ساب / وضعیت ── */
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/s/') || url.pathname.startsWith('/status/')) {
-      const res = await handleApi(request, env, ctx, url);
+      let res;
+      try {
+        res = await handleApi(request, env, ctx, url);
+      } catch (e) {
+        // خطای پیش‌بینی‌نشده باید همان شکل خطای فرانت‌اند را داشته باشد
+        res = new Response(JSON.stringify({ ok: false, code: 'internal', error: String(e?.message || e) }), {
+          status: 500, headers: { 'content-type': 'application/json; charset=utf-8' },
+        });
+      }
       const out = new Response(res.body, res);
       out.headers.set('x-omni', '1');          // فرانت‌اند از این هدر می‌فهمد بک‌اند واقعی است
       out.headers.set('access-control-expose-headers', 'x-omni');

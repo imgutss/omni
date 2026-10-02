@@ -8,17 +8,46 @@ const SESSION_COOKIE = 'omni_sid';
 const CSRF_HEADER = 'x-kaveh-csrf';
 
 /* ─────────── رمز عبور ─────────── */
+/* نکته: Cloudflare Workers سقف ۱۰۰٬۰۰۰ تکرار برای PBKDF2 دارد
+   («iteration counts above 100000 are not supported»). */
+export const PBKDF2_ITER = 100000;
+export const PBKDF2_ITER_LEGACY = [100000, 50000, 12000];
+
+async function pbkdf2Hex(password, salt, iterations) {
+  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256);
+  return bytesToHex(new Uint8Array(bits));
+}
+
 export async function hashPassword(password, saltHex = null) {
   const salt = saltHex ? hexToBytes(saltHex) : crypto.getRandomValues(new Uint8Array(16));
-  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 210000, hash: 'SHA-256' }, key, 256);
-  return { hash: bytesToHex(new Uint8Array(bits)), salt: bytesToHex(salt) };
+  let hash = '';
+  try {
+    hash = await pbkdf2Hex(password, salt, PBKDF2_ITER);
+  } catch (e) {
+    // اگر روزی سقف تکرار تغییر کرد، به عدد مجاز نزدیک‌تر برو
+    const m = String(e?.message || '').match(/(\d{4,})/);
+    const allowed = m ? Math.min(PBKDF2_ITER, Number(m[1]) - 1 || 50000) : 50000;
+    hash = await pbkdf2Hex(password, salt, Math.max(1000, allowed));
+  }
+  return { hash, salt: bytesToHex(salt) };
 }
 
 export async function verifyPassword(password, hashHex, saltHex) {
   if (!hashHex || !saltHex) return false;
-  const { hash } = await hashPassword(password, saltHex);
-  return timingSafeEqualHex(hash, hashHex);
+  const salt = hexToBytes(saltHex);
+  let hash = '';
+  try { hash = await pbkdf2Hex(password, salt, PBKDF2_ITER); } catch { hash = ''; }
+  if (hash && timingSafeEqualHex(hash, hashHex)) return true;
+  // سازگاری با هش‌های قدیمی‌تر (تکرار کمتر)
+  for (const it of PBKDF2_ITER_LEGACY) {
+    if (it === PBKDF2_ITER) continue;
+    try {
+      const h2 = await pbkdf2Hex(password, salt, it);
+      if (timingSafeEqualHex(h2, hashHex)) return true;
+    } catch { /* ignore */ }
+  }
+  return false;
 }
 
 function timingSafeEqualHex(a, b) {
@@ -232,7 +261,8 @@ export async function ensureSchema(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, level TEXT DEFAULT 'info', msg TEXT, meta TEXT,
       at TEXT DEFAULT (datetime('now')))`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS clean_ips(
-      ip TEXT PRIMARY KEY, ms INTEGER, colo TEXT, ok INTEGER DEFAULT 1, checked_at TEXT DEFAULT (datetime('now')))`),
+      ip TEXT PRIMARY KEY, ms INTEGER, colo TEXT, ok INTEGER DEFAULT 1, hits INTEGER DEFAULT 0,
+      src TEXT DEFAULT 'edge', checked_at TEXT DEFAULT (datetime('now')))`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS signups(
       id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, username TEXT, at TEXT DEFAULT (datetime('now')))`),
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_users_token ON users(sub_token)`),
@@ -244,6 +274,8 @@ export async function ensureSchema(env) {
     'ALTER TABLE users ADD COLUMN pending_days INTEGER DEFAULT 30',
     'ALTER TABLE users ADD COLUMN early_data INTEGER DEFAULT 2048',
     'ALTER TABLE users ADD COLUMN notify INTEGER DEFAULT 1',
+    'ALTER TABLE clean_ips ADD COLUMN hits INTEGER DEFAULT 0',
+    'ALTER TABLE clean_ips ADD COLUMN src TEXT DEFAULT \'edge\'',
   ]) { try { await env.DB.prepare(sql).run(); } catch { /* ستون هست */ } }
   SCHEMA_READY = true;
 }
@@ -256,6 +288,8 @@ export async function bootstrap(env, url) {
   for (const [k, v] of Object.entries(DEFAULTS)) if (st[k] === undefined) missing[k] = v;
   if (!st.path) missing.path = '/' + randomToken(6).slice(0, 12);
   if (!st.trojan_password) missing.trojan_password = randomToken(16);
+  if (!st.admin_chat_id && env.ADMIN_CHAT_ID) missing.admin_chat_id = String(env.ADMIN_CHAT_ID);
+  if (!st.ip_pool) missing.ip_pool = ['104.16.0.0', '104.17.0.0', '104.18.0.0', '104.19.0.0', '104.20.0.0', '104.21.0.0', '172.64.0.0', '172.66.0.0', '172.67.0.0', '162.159.36.0'].join('\n');
   if (!st.public_host) missing.public_host = url.host;
   if (Object.keys(missing).length) await putSettingsBulk(env, missing);
   await ensureRecoveryCode(env);

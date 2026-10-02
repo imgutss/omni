@@ -9,7 +9,7 @@ import {
   settingsCached, ensureRecoveryCode, sessionIdFrom,
 } from './auth.js';
 import { buildConfigs, subscriptionBody, statusPage, FRAGMENT_PRESETS, FINGERPRINTS, safeArray, esc } from './links.js';
-import { rankIps, probeNode, tcpProbe, fetchCfCidrs, sampleIPs } from './scan.js';
+import { rankIps, rankIpsHttp, probeNode, tcpProbe, fetchCfCidrs, sampleIPs, SEED_IPS } from './scan.js';
 import { userStatus, safeJsonArray, invalidateUser } from './core.js';
 
 const GB = 1024 ** 3;
@@ -166,6 +166,32 @@ export async function handleApi(request, env, ctx, url) {
     return json({ ok: true, username, user: userView(user, settings), sub_url: `${origin}/s/${user.sub_token}` });
   }
 
+  /* ───────── ثبت نتیجه‌ی تست آی‌پی از دستگاه کاربر (عمومی، با توکن ساب) ───────── */
+  if (p === '/api/report-ip' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const token = String(body.token || '');
+    const rows = Array.isArray(body.results) ? body.results.slice(0, 60) : [];
+    const u = await env.DB.prepare('SELECT username, is_active FROM users WHERE sub_token = ?').bind(token).first();
+    if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
+    let saved = 0;
+    for (const r of rows) {
+      const ip = String(r?.ip || '').trim();
+      const ms = Number(r?.ms);
+      if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip) || !Number.isFinite(ms) || ms <= 0 || ms > 20000) continue;
+      await env.DB.prepare(
+        `INSERT INTO clean_ips(ip, ms, colo, ok, hits, checked_at) VALUES(?,?,?,1,1,datetime('now'))
+         ON CONFLICT(ip) DO UPDATE SET
+           ms = CASE WHEN clean_ips.ms IS NULL OR excluded.ms < clean_ips.ms THEN excluded.ms ELSE clean_ips.ms END,
+           colo = COALESCE(excluded.colo, clean_ips.colo),
+           hits = COALESCE(clean_ips.hits, 0) + 1,
+           checked_at = datetime('now')`
+      ).bind(ip, Math.round(ms), r?.colo ? String(r.colo).slice(0, 12) : null).run();
+      saved++;
+    }
+    if (saved) await logEvent(env, 'info', `اندازه‌گیری ${saved} آی‌پی از دستگاه کاربر «${u.username}»`);
+    return json({ ok: true, saved });
+  }
+
   /* ───────── صفحه‌ی وضعیت کاربر (عمومی) ───────── */
   if (p.startsWith('/status/')) {
     const token = p.slice(8);
@@ -174,7 +200,9 @@ export async function handleApi(request, env, ctx, url) {
     if (!u) return new Response('not found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
     const conns = await env.DB.prepare(`SELECT COALESCE(SUM(conns),0) c FROM usage_daily WHERE username = ?`).bind(u.username).first();
     const view = userView(u, settings);
-    return new Response(statusPage(view, settings, url.origin, { conns: conns?.c || 0 }),
+    const ipRows = await env.DB.prepare('SELECT ip, ms, colo FROM clean_ips WHERE ok = 1 ORDER BY (hits * 1000) DESC, ms ASC LIMIT 16').all();
+    const candidateIps = (ipRows.results || []).map((r) => ({ ip: r.ip, ms: r.ms, colo: r.colo }));
+    return new Response(statusPage(view, settings, url.origin, { conns: conns?.c || 0, ips: candidateIps }),
       { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
   }
 
@@ -500,10 +528,91 @@ export async function handleApi(request, env, ctx, url) {
 
   /* ───────── دیاگ: ping / probe / rank / logs / maintenance ───────── */
   if (p === '/api/diag/ping') {
-    const target = url.searchParams.get('target') || settings.public_host;
+    let target = (url.searchParams.get('target') || settings.public_host || '').trim();
+    target = target.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
     if (!target) return bad('no_target', 'مقصد مشخص نیست');
-    const r = await tcpProbe(target, { port: Number(settings.port || 443), timeoutMs: 4000 });
-    return json({ ok: Boolean(r.ok), ms: r.ms, host: target, error: r.err || null });
+    const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(target);
+    const t0 = Date.now();
+    // آی‌پی یا هاست غیرکلودفلر → پروب TCP واقعی؛ هاست/آی‌پی کلودفلر → fetch به /cdn-cgi/trace
+    if (isIp) {
+      const tcp = await tcpProbe(target, { port: Number(settings.port || 443), timeoutMs: 4000 });
+      if (tcp.ok) return json({ ok: true, ms: tcp.ms, host: target, via: 'tcp' });
+      const http = await (await import('./scan.js')).httpProbe(target, { timeoutMs: 5000 });
+      return json({ ok: Boolean(http.alive), ms: http.ms ?? tcp.ms, host: target, via: http.alive ? 'fetch' : 'tcp', colo: http.colo || null, error: http.alive ? null : (tcp.err || http.error || 'timeout') });
+    }
+    try {
+      const r = await fetch(`https://${target}/cdn-cgi/trace`, { signal: AbortSignal.timeout(6000), cf: { cacheTtl: 0 } });
+      const body = await r.text().catch(() => '');
+      const colo = (body.match(/colo=(\w+)/) || [])[1] || null;
+      return json({ ok: true, ms: Date.now() - t0, host: target, via: 'fetch', colo, status: r.status });
+    } catch (e) {
+      const tcp = await tcpProbe(target, { port: Number(settings.port || 443), timeoutMs: 4000 });
+      return json({ ok: Boolean(tcp.ok), ms: tcp.ms ?? Date.now() - t0, host: target, via: 'tcp', error: tcp.ok ? null : String(e?.message || e).slice(0, 80) });
+    }
+  }
+
+  if (p === '/api/diag/reach') {
+    // آیا ورکر اصلاً می‌تواند به آی‌پی‌های کلودفلر وصل شود؟ (connect و fetch)
+    const ip = url.searchParams.get('ip') || '104.16.0.1';
+    const out = { ip };
+    const { connect } = await import('cloudflare:sockets');
+    try {
+      const sock = connect({ hostname: ip, port: 443 });
+      out.connect = await Promise.race([
+        sock.opened.then(() => 'opened').catch((e) => 'error: ' + String(e?.message || e).slice(0, 90)),
+        new Promise((r) => setTimeout(() => r('pending'), 5000)),
+      ]);
+      try { await sock.close(); } catch { /* ignore */ }
+    } catch (e) { out.connect = 'throw: ' + String(e?.message || e).slice(0, 90); }
+    try {
+      const t0 = Date.now();
+      const r = await fetch(`https://${ip}/cdn-cgi/trace`, { signal: AbortSignal.timeout(6000) });
+      out.fetch = { status: r.status, ms: Date.now() - t0, body: (await r.text()).slice(0, 60).replace(/\n/g, ' ') };
+    } catch (e) { out.fetch = 'error: ' + String(e?.message || e).slice(0, 120); }
+    return json({ ok: true, ...out });
+  }
+
+  if (p === '/api/diag/tcp') {
+    const host = url.searchParams.get('host') || settings.public_host;
+    const port = Number(url.searchParams.get('port') || 443);
+    const doWrite = url.searchParams.get('write') !== '0';
+    const waitMs = Math.min(Number(url.searchParams.get('wait') || 6000), 15000);
+    const t0 = Date.now();
+    const { connect } = await import('cloudflare:sockets');
+    let socket = null;
+    const out = { host, port, wrote: false, opened: null, bytes: 0, head: null, eof: false, timeout: false, error: null };
+    try {
+      socket = connect({ hostname: host, port });
+      if (socket.opened) {
+        out.opened = await Promise.race([
+          socket.opened.then(() => true).catch((e) => { out.error = 'opened: ' + String(e?.message || e); return false; }),
+          new Promise((res) => setTimeout(() => res('pending'), waitMs)),
+        ]);
+      }
+      if (doWrite) {
+        const w = socket.writable.getWriter();
+        await w.write(new TextEncoder().encode(`GET / HTTP/1.0\r\nHost: ${host}\r\nConnection: close\r\n\r\n`));
+        out.wrote = true;
+        await w.close().catch(() => {});
+      }
+      const r = socket.readable.getReader();
+      const first = await Promise.race([
+        r.read().then((x) => ({ ...x, kind: 'read' })),
+        new Promise((res) => setTimeout(() => res({ kind: 'timeout' }), waitMs)),
+      ]);
+      if (first.kind === 'timeout') out.timeout = true;
+      else {
+        out.eof = Boolean(first.done);
+        out.bytes = first.value ? first.value.byteLength : 0;
+        if (out.bytes) out.head = new TextDecoder().decode(first.value.slice(0, 80)).split('\n')[0];
+      }
+      await socket.close().catch(() => {});
+    } catch (e) {
+      out.error = (out.error ? out.error + ' | ' : '') + String(e?.message || e);
+      try { await socket?.close?.(); } catch { /* ignore */ }
+    }
+    out.ms = Date.now() - t0;
+    return json({ ok: !out.error, ...out });
   }
 
   if (p === '/api/diag/probe-node' && method === 'POST') {
@@ -515,26 +624,50 @@ export async function handleApi(request, env, ctx, url) {
 
   if (p === '/api/diag/rank-ips' && method === 'POST') {
     const body = await request.json().catch(() => ({}));
-    let ips = Array.isArray(body.ips) ? body.ips.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(String(x))).slice(0, 400) : [];
-    if (!ips.length) {
-      const cidrs = await fetchCfCidrs();
-      ips = sampleIPs(cidrs, 120);
+    const given = Array.isArray(body.ips) ? body.ips.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(String(x).trim())).slice(0, 300) : [];
+    const pool = [...new Set([
+      ...given.map((x) => String(x).trim()),
+      ...(settings.ip_pool || '').split(/[\n,\s]+/).filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x)),
+      ...SEED_IPS,
+    ])].slice(0, 200);
+
+    // ۱) اندازه‌گیری‌های واقعی کاربران (از صفحه‌ی وضعیت) — باارزش‌ترین داده
+    const clientRows = await env.DB.prepare(
+      `SELECT ip, ms, colo, hits, src FROM clean_ips WHERE ok = 1 ORDER BY (hits * 1000) DESC, ms ASC LIMIT 40`).all();
+    const measured = new Map((clientRows.results || []).map((r) => [r.ip, r]));
+
+    // ۲) پروب از لبه با fetch (آی‌پی‌های کلودفلر با connect() قابل تست نیستند)
+    const edge = await rankIpsHttp(pool.slice(0, 60), { concurrency: Number(body.concurrency || 10), timeoutMs: Number(body.timeout || 2500) });
+
+    const merged = new Map();
+    for (const r of edge) merged.set(r.ip, { ip: r.ip, ms: r.ms, colo: r.colo, src: 'edge', hits: 0 });
+    for (const r of (clientRows.results || [])) {
+      const cur = merged.get(r.ip) || { ip: r.ip, ms: null, colo: null, src: 'client', hits: 0 };
+      cur.client_ms = r.ms; cur.colo = cur.colo || r.colo; cur.hits = r.hits || 0; cur.src = cur.src === 'edge' ? 'both' : 'client';
+      merged.set(r.ip, cur);
     }
-    const results = await rankIps(ips, {
-      port: Number(settings.port || 443),
-      timeoutMs: Number(body.timeout || 1500),
-      concurrency: Number(body.concurrency || 12),
-      rounds: Number(body.rounds || 1),
-      deep: Boolean(body.deep),
-    });
-    const best = results.slice(0, 20);
-    await env.DB.prepare('DELETE FROM clean_ips').run();
-    for (const r of best.slice(0, 12)) {
-      await env.DB.prepare('INSERT OR REPLACE INTO clean_ips(ip, ms, colo, ok, checked_at) VALUES(?,?,?,1,datetime(\'now\'))')
-        .bind(r.ip, r.ms, null).run();
+    const results = [...merged.values()]
+      .map((x) => ({ ...x, score: (x.client_ms ?? x.ms ?? 9999) - Math.min(50, x.hits || 0) }))
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 40);
+
+    // ذخیره‌ی ۲۰ نتیجه‌ی برتر به‌عنوان آی‌پی تمیز پیشنهادی ساب‌لینک‌ها
+    const top = results.filter((r) => (r.client_ms ?? r.ms) !== null).slice(0, 20);
+    if (top.length) {
+      for (const r of top) {
+        await env.DB.prepare(
+          `INSERT INTO clean_ips(ip, ms, colo, ok, checked_at) VALUES(?,?,?,1,datetime('now'))
+           ON CONFLICT(ip) DO UPDATE SET ms = COALESCE(excluded.ms, clean_ips.ms), colo = COALESCE(excluded.colo, clean_ips.colo), checked_at = datetime('now')`
+        ).bind(r.ip, r.client_ms ?? r.ms, r.colo).run();
+      }
+      await putSetting(env, 'clean_ips', JSON.stringify(top.map((r) => r.ip)));
     }
-    await logEvent(env, 'info', `رتبه‌بندی آی‌پی: ${results.length} پاسخ‌دهنده از ${ips.length} تست (بهترین ${best[0]?.ms ?? '—'}ms)`);
-    return json({ ok: true, tested: ips.length, alive: results.length, results: best });
+
+    const note = edge.length
+      ? 'تست از لبه‌ی کلودفلر انجام شد. برای انتخاب دقیق‌تر، از کاربران بخواه آی‌پی‌ها را از صفحه‌ی وضعیت خودشان تست کنند.'
+      : 'کلودفلر اجازه‌ی تست مستقیم آی‌پی‌های خودش از داخل ورکر را نمی‌دهد (connect به آی‌پی‌های کلودفلر مسدود است). نتیجه‌ها از اندازه‌گیری دستگاه کاربران می‌آید؛ از صفحه‌ی وضعیت، دکمه‌ی «تست روی دستگاه من» را بزن.';
+    await logEvent(env, 'info', `رتبه‌بندی آی‌پی: ${edge.length} پاسخ از لبه + ${clientRows.results?.length || 0} اندازه‌گیری کاربران`);
+    return json({ ok: true, tested: pool.length, alive: edge.length, client: clientRows.results?.length || 0, results, note });
   }
 
   if (p === '/api/diag/logs' && method === 'GET') {

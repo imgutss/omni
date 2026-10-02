@@ -5,7 +5,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { allSettings, putSetting, getSetting, logEvent, randomToken, randomUuid, ensureSchema, settingsCached } from './auth.js';
 import { buildConfigs, FRAGMENT_PRESETS } from './links.js';
-import { rankIps, fetchCfCidrs, sampleIPs, tcpProbe } from './scan.js';
+import { rankIpsHttp, SEED_IPS, httpProbe, tcpProbe } from './scan.js';
 import { safeJsonArray } from './core.js';
 
 const GB = 1024 ** 3;
@@ -75,6 +75,7 @@ export async function handleUpdate(env, ctx, origin, update) {
   }
 
   const kb = { inline_keyboard: [[{ text: '🌐 باز کردن پنل', web_app: { url: `${origin}/` } }]] };
+  if (cmd.startsWith('/')) ctx?.waitUntil?.(logEvent(env, 'info', `دستور ربات: ${cmd} از ${chatId}`).catch(() => {}));
 
   switch (cmd) {
     case '/start':
@@ -210,36 +211,47 @@ export async function handleUpdate(env, ctx, origin, update) {
     }
 
     case '/ips': {
-      const rows = await env.DB.prepare('SELECT ip, ms FROM clean_ips ORDER BY ms ASC LIMIT 20').all();
-      if (!rows.results?.length) return send('هنوز آی‌پی تمیزی ذخیره نشده. /scan را بزن.');
-      return send(`⚡️ <b>آی‌پی‌های تمیز</b>\n\n${rows.results.map((r, i) => `${i + 1}. <code>${r.ip}</code> — ${r.ms ?? '?'}ms`).join('\n')}`);
+      const rows = await env.DB.prepare('SELECT ip, ms, colo, COALESCE(hits,0) hits FROM clean_ips WHERE ok = 1 ORDER BY (hits * 1000) DESC, ms ASC LIMIT 20').all();
+      if (!rows.results?.length) return send('هنوز آی‌پی تمیزی ذخیره نشده. /scan را بزن یا از کاربرانت بخواه در صفحه‌ی وضعیت، دکمه‌ی «تست روی دستگاه من» را بزنند.');
+      return send(`⚡️ <b>آی‌پی‌های تمیز</b> (اندازه‌گیری‌شده)\n\n${rows.results.map((r, i) => `${i + 1}. <code>${r.ip}</code> — ${r.ms ?? '?'}ms${r.colo ? ' · ' + r.colo : ''}${r.hits ? ' · ' + r.hits + '★' : ''}`).join('\n')}`);
     }
 
     case '/scan': {
-      await send('⚡️ اسکن شروع شد... (چند ثانیه)');
-      const cidrs = await fetchCfCidrs();
-      const ips = sampleIPs(cidrs, 200);
-      const res = await rankIps(ips, { concurrency: 12, rounds: 1, timeoutMs: 1500 });
-      const best = res.slice(0, 15);
-      if (best.length) {
-        await env.DB.prepare('DELETE FROM clean_ips').run();
-        for (const r of best.slice(0, 12)) {
-          await env.DB.prepare(`INSERT OR REPLACE INTO clean_ips(ip, ms, ok, checked_at) VALUES(?,?,1,datetime('now'))`).bind(r.ip, r.ms).run();
-        }
-        // ذخیره در تنظیمات تا ساب‌لینک‌ها هم استفاده کنند
-        await putSetting(env, 'clean_ips', JSON.stringify(best.map((b) => b.ip)));
-        await logEvent(env, 'info', `اسکن ربات: ${best.length} آی‌پی ذخیره شد (بهترین ${best[0].ms}ms)`);
+      await send('⚡️ اسکن شروع شد…');
+      const st = await allSettings(env);
+      const pool = [...new Set([
+        ...String(st.ip_pool || '').split(/[\n,\s]+/).filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x)),
+        ...SEED_IPS,
+      ])].slice(0, 60);
+      const edge = await rankIpsHttp(pool, { concurrency: 8, timeoutMs: 2500 });
+      const client = await env.DB.prepare('SELECT ip, ms, colo, COALESCE(hits,0) hits FROM clean_ips WHERE ok = 1 ORDER BY (hits * 1000) DESC, ms ASC LIMIT 10').all();
+      const top = edge.slice(0, 10);
+      const lines = [];
+      if (top.length) lines.push('<b>از لبه‌ی کلودفلر:</b>\n' + top.map((r, i) => `${i + 1}. <code>${r.ip}</code> — ${r.ms}ms${r.colo ? ' · ' + r.colo : ''}`).join('\n'));
+      if (client.results?.length) lines.push('<b>اندازه‌گیری کاربران:</b>\n' + client.results.slice(0, 8).map((r, i) => `${i + 1}. <code>${r.ip}</code> — ${r.ms ?? '?'}ms${r.hits ? ' · ' + r.hits + '★' : ''}`).join('\n'));
+      if (top.length) {
+        await putSetting(env, 'clean_ips', JSON.stringify(top.map((r) => r.ip)));
+        await logEvent(env, 'info', `اسکن ربات: ${top.length} آی‌پی از لبه`);
       }
       return send(
-        `⚡️ <b>نتیجه اسکن</b> (${res.length} از ${ips.length} پاسخ دادند)\n\n` +
-        (best.length ? best.slice(0, 10).map((r, i) => `${i + 1}. <code>${r.ip}</code> — ${r.ms}ms`).join('\n') : 'چیزی پیدا نشد.') +
-        (best.length ? '\n\n✅ در ساب‌لینک همه‌ی کاربران اعمال شد.' : ''));
+        `<b>نتیجه‌ی اسکن</b> (${edge.length} پاسخ از ${pool.length})\n\n` +
+        (lines.join('\n\n') || 'چیزی پیدا نشد.') +
+        '\n\nℹ️ کلودفلر اجازه‌ی تست مستقیم آی‌پی‌های خودش از داخل ورکر را نمی‌دهد؛ دقیق‌ترین نتیجه از «تست روی دستگاه من» در صفحه‌ی وضعیت کاربران می‌آید (کشور/شبکه‌ی کاربر مهم است).'
+      );
     }
 
     case '/ping': {
-      const host = args[0] || settings.public_host;
-      const r = await tcpProbe(host, { port: Number(settings.port || 443), timeoutMs: 4000 });
-      return send(r.ok ? `✅ سرویس <code>${esc(host)}</code> سالم است — ${r.ms}ms` : `⚠️ پاسخ نداد: ${esc(r.err || 'timeout')}`);
+      const host = (args[0] || settings.public_host || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      const t0 = Date.now();
+      try {
+        const r = await fetch(`https://${host}/cdn-cgi/trace`, { signal: AbortSignal.timeout(6000), cf: { cacheTtl: 0 } });
+        const body = await r.text().catch(() => '');
+        const colo = (body.match(/colo=(\w+)/) || [])[1] || '—';
+        return send(`✅ <code>${esc(host)}</code> سالم است — ${Date.now() - t0}ms · کولو ${colo}`);
+      } catch (e) {
+        const r = await tcpProbe(host, { port: Number(settings.port || 443), timeoutMs: 4000 });
+        return send(r.ok ? `✅ <code>${esc(host)}</code> — ${r.ms}ms` : `⚠️ پاسخ نداد: ${esc(r.err || String(e?.message || e))}`);
+      }
     }
 
     case '/notify': {

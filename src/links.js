@@ -258,6 +258,12 @@ export function statusPage(user, settings, origin, stats) {
  .badge.ok{background:rgba(52,211,153,.14);color:var(--ok)}
  .badge.bad{background:rgba(248,113,113,.14);color:var(--bad)}
  .badge.warn{background:rgba(251,191,36,.14);color:var(--warn)}
+ .ip{display:flex;align-items:center;gap:8px;background:#0a0e15;border:1px solid var(--line);border-radius:12px;padding:9px 11px;margin-top:7px;font-size:12.5px}
+ .ip b{font-family:ui-monospace,Menlo,monospace;direction:ltr;font-weight:600}
+ .ip .ms{margin-inline-start:auto;color:var(--dim);font-variant-numeric:tabular-nums}
+ .ip .ms.good{color:var(--ok)}.ip .ms.bad{color:var(--bad)}
+ .ip .star{cursor:pointer;background:transparent;border:0;color:var(--warn);font-size:15px;padding:0 2px}
+ .ip .off{opacity:.45;text-decoration:line-through}
 </style></head><body><div class="card">
   <div class="brand"><div class="logo">${esc((name[0] || 'O').toUpperCase())}</div>
     <div><h1>${esc(name)}</h1><div class="muted">وضعیت اشتراک — ${esc(user.username)}</div></div>
@@ -279,8 +285,73 @@ export function statusPage(user, settings, origin, stats) {
   <a class="btn ghost" href="v2rayng://install-config?url=${encodeURIComponent(`${origin}/s/${user.sub_token}`)}">افزودن مستقیم در v2rayNG</a>
   <div class="muted" style="margin-top:10px">لینک اشتراک (در کلاینت وارد کن):</div>
   <code>${esc(origin)}/s/${esc(user.sub_token)}</code>
+  <div class="muted" style="margin-top:18px">⚡️ آی‌پی تمیز برای اینترنت شما</div>
+  <div class="muted" style="font-size:11.5px;margin-top:3px">تست از روی دستگاه خودت انجام می‌شود؛ هر آی‌پی سریع‌تری پیدا کردی، ستاره بزن تا برای همه بهتر شود.</div>
+  <div id="iplist" style="margin-top:10px"></div>
+  <button class="btn ghost" id="ip-test" type="button">🔍 تست آی‌پی‌ها روی دستگاه من</button>
+  <div id="ip-out" class="muted" style="margin-top:8px;font-size:11.5px"></div>
   <div class="muted" style="margin-top:14px;font-size:11px">${esc(name)} — پنل مدیریت پروکسی روی Cloudflare Workers</div>
-</div></body></html>`;
+</div>
+<script>
+(function(){
+  var IPS = ${JSON.stringify((stats && stats.ips) || [])}.map(function(x){ return typeof x === 'string' ? {ip:x} : x; });
+  var TOKEN = ${JSON.stringify(user.sub_token)};
+  var el = document.getElementById('iplist'), out = document.getElementById('ip-out');
+  function cls(ms){ if(ms == null) return ''; return ms < 120 ? 'good' : ms > 600 ? 'bad' : ''; }
+  function render(){
+    if(!IPS.length){ el.innerHTML = '<div class="muted" style="font-size:11.5px">هنوز آی‌پی تمیزی ثبت نشده — تست را بزن.</div>'; return; }
+    el.innerHTML = IPS.slice(0,12).map(function(r,i){
+      var ms = r.test_ms != null ? r.test_ms : r.ms;
+      return '<div class="ip"><b>'+r.ip+'</b>'+(r.colo?'<span class="muted">· '+r.colo+'</span>':'')+
+        '<span class="ms '+cls(ms)+'">'+(ms!=null?ms+' ms':'—')+'</span>'+
+        '<button class="star" data-ip="'+r.ip+'" title="این آی‌پی برای من خوب بود">★</button></div>';
+    }).join('');
+  }
+  render();
+  async function probe(ip){
+    var t0 = performance.now();
+    // مسیر ۱: HTTPS مستقیم (اگر گواهی آی‌پی پذیرفته شود)
+    try {
+      var c1 = new AbortController(); var to1 = setTimeout(function(){ c1.abort(); }, 3500);
+      var r1 = await fetch('https://'+ip+'/cdn-cgi/trace', { cache:'no-store', signal:c1.signal, mode:'cors' });
+      clearTimeout(to1);
+      var body = await r1.text().catch(function(){ return ''; });
+      return { ip: ip, test_ms: Math.round(performance.now()-t0), colo: (body.match(/colo=(\w+)/)||[])[1] || null, how:'https' };
+    } catch(e){ /* برو سراغ مسیر ۲ */ }
+    // مسیر ۲: HTTP ساده (بدون مسئله‌ی گواهی) — رسیدن پاسخ یعنی آی‌پی باز است
+    try {
+      var c2 = new AbortController(); var to2 = setTimeout(function(){ c2.abort(); }, 4000);
+      await fetch('http://'+ip+'/cdn-cgi/trace', { cache:'no-store', signal:c2.signal, mode:'no-cors' });
+      clearTimeout(to2);
+      return { ip: ip, test_ms: Math.round(performance.now()-t0), colo: null, how:'http' };
+    } catch(e2){ return { ip: ip, test_ms: null, colo: null, how:'down' }; }
+  }
+  document.getElementById('ip-test').onclick = async function(){
+    var btn = this; btn.disabled = true; out.textContent = 'در حال تست… (تا ۲۰ ثانیه)';
+    var results = await Promise.all(IPS.slice(0,12).map(probe));
+    results.sort(function(a,b){ return (a.test_ms==null?9e9:a.test_ms) - (b.test_ms==null?9e9:b.test_ms); });
+    IPS = results;
+    render();
+    var ok = results.filter(function(r){ return r.test_ms != null; });
+    out.textContent = ok.length ? (ok.length + ' آی‌پی پاسخ داد — سبزترین را در کلاینت امتحان کن.') : 'هیچ آی‌پی جواب نداد؛ ممکن است شبکه‌ی شما کلودفلر را محدود کرده باشد.';
+    try {
+      await fetch('/api/report-ip', { method:'POST', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ token: TOKEN, results: ok }) });
+    } catch(e){}
+    btn.disabled = false;
+  };
+  el.addEventListener('click', async function(ev){
+    var b = ev.target.closest('.star'); if(!b) return;
+    b.textContent = '★';
+    try {
+      await fetch('/api/report-ip', { method:'POST', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ token: TOKEN, results: [{ ip: b.dataset.ip, ms: 1 }] }) });
+      out.textContent = 'ممنون! ثبت شد.';
+    } catch(e){}
+  });
+})();
+</script>
+</body></html>`;
 }
 
 export const esc = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));

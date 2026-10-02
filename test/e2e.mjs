@@ -132,6 +132,7 @@ console.log('\n[4] ساب‌لینک و صفحه‌ی وضعیت');
   const stp = await req('GET', `/status/${subToken}`, { raw: true });
   const html = await stp.text();
   ok('صفحه وضعیت', stp.status === 200 && html.includes('Omni') && html.includes('ali'));
+  ok('صفحه وضعیت: تستر آی‌پی روی دستگاه کاربر', html.includes('ip-test') && html.includes('/api/report-ip') && html.includes('\u0622\u06cc\u200c\u067e\u06cc'));
   const stBad = await req('GET', '/status/nope', { raw: true });
   ok('وضعیت نامعتبر → 404', stBad.status === 404);
 }
@@ -162,8 +163,19 @@ console.log('\n[6] دیاگ شبکه');
   ok('ping: ok/ms', ping.body?.ok === true && typeof ping.body.ms === 'number' && ping.body.ms >= 0, JSON.stringify(ping.body));
   const pn = await req('POST', '/api/diag/probe-node', { body: { proxy: 'vless://' + uuid + '@1.1.1.1:443?encryption=none&type=ws&path=%2Fws#n' } });
   ok('probe-node پاسخ ساختاری دارد', pn.body && typeof pn.body.ok === 'boolean', JSON.stringify(pn.body));
-  const rank = await req('POST', '/api/diag/rank-ips', { body: { ips: ['104.16.0.1', '104.16.0.2', '104.16.0.3', '104.16.0.4'], timeout: 1200 } });
-  ok('rank-ips: tested/alive/results', rank.body?.ok === true && rank.body.tested === 4 && Array.isArray(rank.body.results), JSON.stringify(rank.body).slice(0, 200));
+  const rank = await req('POST', '/api/diag/rank-ips', { body: { ips: ['104.16.0.1', '104.16.0.2', '172.66.0.1', '1.1.1.1'], timeout: 1200 } });
+  ok('rank-ips: ساختار درست پاسخ', rank.body?.ok === true && rank.body.tested >= 4 && Array.isArray(rank.body.results) && typeof rank.body.note === 'string', JSON.stringify(rank.body).slice(0, 160));
+  const rep = await req('POST', '/api/report-ip', { body: { token: subToken, results: [{ ip: '104.99.1.7', ms: 43, colo: 'FRA' }, { ip: '104.99.1.8', ms: 88 }] } });
+  ok('ثبت اندازه‌گیری آی‌پی از دستگاه کاربر', rep.body?.ok === true && rep.body.saved === 2, JSON.stringify(rep.body));
+  const repBad = await req('POST', '/api/report-ip', { body: { token: 'nope', results: [{ ip: '1.2.3.4', ms: 10 }] } });
+  ok('report-ip با توکن غلط → 403', repBad.status === 403);
+  const rank2 = await req('POST', '/api/diag/rank-ips', { body: { ips: [], timeout: 800 } });
+  ok('rank-ips اندازه‌گیری‌های کاربران را برمی‌گرداند', (rank2.body?.results || []).some((r) => r.ip === '104.99.1.7' && r.client_ms === 43), JSON.stringify(rank2.body).slice(0, 200));
+  const stp2 = await req('GET', `/status/${subToken}`, { raw: true });
+  const html2 = await stp2.text();
+  ok('صفحه وضعیت: کاندیدهای آی‌پی اندازه‌گیری‌شده', html2.includes('104.99.1.7'));
+  const pingH = await req('GET', '/api/diag/ping?target=cloudflare.com');
+  ok('ping هاست (مسیر fetch)', pingH.body?.host === 'cloudflare.com' && typeof pingH.body.ms === 'number', JSON.stringify(pingH.body));
 }
 
 console.log('\n[7] نشست‌ها / رمز / بازیابی');
