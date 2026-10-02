@@ -31,7 +31,13 @@ if (!PASSWORD) { console.error('✖ رمز مدیر لازم است:  --password
 
 const PORTS = arg('full')
   ? [80, 8080, 8880, 2052, 2082, 2086, 2095, 443, 2053, 2083, 2087, 2096, 8443]
-  : [80, 443, 8080, 2053, 2087, 8443];
+  : [443, 80, 8443, 2087, 2053];            // ۴۴۳ و ۸۰ = پورت‌هایی که واقعاً روی موبایل ایران جواب می‌دهند
+/** فهرست‌های عمومی «آی‌پی تمیز» که پنل‌های دیگر (vfarid / NiREvil / BPB) استفاده می‌کنند.
+ *  هیچ‌کدام بدون تست قبول نمی‌شوند: فقط هندشیک واقعی با ورکر خودمان ملاک است. */
+const COMMUNITY_LISTS = [
+  'https://raw.githubusercontent.com/vfarid/cf-clean-ips/main/list.txt',
+  'https://raw.githubusercontent.com/NiREvil/vless/main/sub/Cf-ip-bpb.txt',
+];
 const IPS = String(arg('ips', '')).split(',').map((x) => x.trim()).filter(Boolean);
 const TLS_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
 
@@ -69,6 +75,24 @@ if (!candidates.length) {
   ])];
 }
 const frag = await call('GET', '/api/fragments');
+
+/* ── فهرست‌های اجتماعی (اختیاری، با شکست نرم) ── */
+if (!IPS.length) {
+  const extra = [];
+  for (const url of COMMUNITY_LISTS) {
+    try {
+      const txt = await (await fetch(url, { signal: AbortSignal.timeout(15000) })).text();
+      for (const line of txt.split('\n')) {
+        const m = line.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/);
+        if (m) extra.push(m[1]);
+      }
+      console.log(`  ‹ ${extra.length} آی‌پی تا اینجا (${new URL(url).pathname})`);
+    } catch (e) { console.log(`  ‹ لیست ${url} در دسترس نبود: ${e.message.slice(0, 40)}`); }
+  }
+  const uniqExtra = [...new Set(extra)].slice(0, 220);
+  candidates = [...new Set([...candidates, ...uniqExtra])];
+  console.log(`  ‹ مجموع کاندیدها با فهرست‌های عمومی: ${candidates.length}`);
+}
 if (String(arg('ipv6', ''))) {
   const ipv6 = ['2606:4700:3033::6815:1e29', '2606:4700:3037::6815:32a1', '2606:4700:3030::ac43:49a1', '2606:4700:3034::6815:4a1'];
   candidates.push(...ipv6);

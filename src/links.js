@@ -78,14 +78,17 @@ export function configPool(user, settings, cleanIps = []) {
     .map((r) => (typeof r === 'string' ? { ip: r, hits: 0, ms: null } : r))
     .filter((r) => r && r.ip);
   const byMs = (a, b) => (a.ms ?? 9999) - (b.ms ?? 9999);
-  const verified = norm.filter((r) => Number(r.hits || 0) > 0).sort(byMs).map((r) => r.ip);
+  const verifiedAll = norm.filter((r) => Number(r.hits || 0) > 0).sort(byMs).map((r) => r.ip);
+  const verified = verifiedAll.filter((x) => !/[a-z]/i.test(x));          // آی‌پی‌های تأییدشده
+  const verifiedDomains = verifiedAll.filter((x) => /[a-z]/i.test(x));    // دامنه‌های تأییدشده از دستگاه کاربران
   const guessed = norm.filter((r) => !(Number(r.hits || 0) > 0)).sort(byMs).map((r) => r.ip);
   const host = sniFor(settings);
   const uniq = (arr) => [...new Set(arr.filter(Boolean))];
 
-  const domain = (safeArray(settings.address_domains).length
-    ? safeArray(settings.address_domains)
-    : CF_DOMAINS).slice(0, 4);
+  const domain = uniq([
+    ...verifiedDomains,                                        // آن‌هایی که از شبکه‌ی کاربران جواب داده‌اند
+    ...(safeArray(settings.address_domains).length ? safeArray(settings.address_domains) : CF_DOMAINS),
+  ]).slice(0, 6);
   const ipv6 = String(settings.ipv6_enabled || '1') === '1'
     ? (safeArray(settings.ipv6_pool).length ? safeArray(settings.ipv6_pool) : IPV6_SEEDS).slice(0, 3)
     : [];
@@ -158,32 +161,44 @@ export function buildConfigs(user, settings, cleanIps = []) {
   const maxConfigs = Math.max(6, Math.min(60, Number(settings.config_count || 30)));
   const pool = configPool(user, settings, cleanIps);
   const pairs = verifiedPairs(settings);                       // «ip:port» اثبات‌شده با هندشیک واقعی
+  const pairAddr = (pr) => pr.slice(0, pr.lastIndexOf(':'));
   const pairPort = (pr) => Number(pr.slice(pr.lastIndexOf(':') + 1));
   const tlsPairs = pairs.filter((pr) => isTlsPort(pairPort(pr)));
   const plainPairs = pairs.filter((pr) => !isTlsPort(pairPort(pr)));
   const ports = choosePorts(settings, 4);
-  const extraPorts = ports.filter((p) => p !== 443);
+  /** پورت همزاد: اگر ۴۴۳ باز بود ولی ۸۰ بسته (یا برعکس) کاربر یک کانفیگ سالم از دست می‌دهد.
+   *  در ایران بسته به اپراتور یکی از این دو کار می‌کند، پس هر دو را می‌فرستیم. */
+  const sibling = (p) => (p === 443 ? 80 : p === 80 ? 443 : p === 8443 ? 2096 : p === 2096 ? 8443 : null);
 
-  /* برنامه‌ی کانفیگ — مثل پنل کارکرده: هر گروه با آدرس‌های خودش، ۴۴۳ اول.
-     ۱) Domain  : دامنه‌ی معروف کلودفلر (آی‌پی‌اش معمولاً در ایران باز است)
-     ۲) IPv6    : آدرس‌های IPv6 کلودفلر
-     ۳) Clean   : جفت‌های اثبات‌شده با هندشیک واقعی (اول TLS)
-     ۴) IPv4    : آی‌پی‌های تأییدشده/سفارشی کاربر و دامنه‌ی پنل
-     ۵) Alt     : پورت‌های جایگزین (۲۰۵۳/۸۴۴۳/…) روی بهترین آدرس‌ها */
   const plan = [];
   const seen = new Set();
   const add = (address, port, cat) => {
-    if (!address || seen.has(`${address}:${port}`)) return;
-    seen.add(`${address}:${port}`);
-    plan.push({ address, port: Number(port), cat });
+    const a = String(address || '').trim();
+    if (!a || seen.has(`${a}:${port}`)) return;
+    seen.add(`${a}:${port}`);
+    plan.push({ address: a, port: Number(port), cat });
   };
-  pool.domain.slice(0, 3).forEach((d) => add(d, 443, 'Domain'));
-  pool.ipv6.slice(0, 2).forEach((v) => add(v, 443, 'IPv6'));
-  tlsPairs.slice(0, 6).forEach((pr) => add(pr.slice(0, pr.lastIndexOf(':')), pairPort(pr), 'Clean'));
+  const addPair = (pr, cat, withSibling = true) => {
+    const a = pairAddr(pr), p = pairPort(pr);
+    add(a, p, cat);
+    const sib = sibling(p);
+    if (withSibling && sib) add(a, sib, 'Alt');   // پورت همزادِ تأییدنشده → گروه Alt
+  };
+
+  // ترتیب = ترتیب احتمال کار کردن روی موبایل ایرانی
+  tlsPairs.slice(0, 2).forEach((pr) => addPair(pr, 'Clean'));            // ۴۴۳ تأییدشده + همزاد ۸۰
+  plainPairs.slice(0, 2).forEach((pr) => addPair(pr, 'Clean'));          // ۸۰ تأییدشده (همراه اول) + همزاد ۴۴۳
+  pool.ipv6.slice(0, 2).forEach((v) => add(v, 443, 'IPv6'));             // IPv6 کلودفلر — اغلب تمیز
+  pool.domain.slice(0, 3).forEach((d) => add(d, 443, 'Domain'));         // دامنه‌های معروف کلودفلر
+  if (pool.host) add(pool.host, 443, 'Panel');                           // دامنه‌ی خود پنل
+  tlsPairs.slice(2, 6).forEach((pr) => addPair(pr, 'Clean'));
+  plainPairs.slice(2, 5).forEach((pr) => addPair(pr, 'Clean'));
+  pool.domain.slice(3, 5).forEach((d) => add(d, 443, 'Domain'));
   pool.ip.slice(0, 3).forEach((ip) => add(ip, 443, 'IPv4'));
-  plainPairs.slice(0, 2).forEach((pr) => add(pr.slice(0, pr.lastIndexOf(':')), pairPort(pr), 'Clean'));
-  const rotate = [pool.domain[0], pool.ipv6[0], pool.ip[0], pool.domain[1]].filter(Boolean);
-  extraPorts.forEach((p, i) => add(rotate[i % rotate.length], p, 'Alt'));
+  ports.filter((p) => p !== 443).forEach((p, i) => {
+    const a = [pool.ipv6[0], pool.ip[0], pool.domain[0], pool.ipv6[1]][i % 4];
+    if (a) add(a, p, isTlsPort(p) ? 'Alt' : 'Plain');
+  });
 
   const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
   const uris = [];
@@ -202,7 +217,7 @@ export function buildConfigs(user, settings, cleanIps = []) {
   };
   plan.forEach(emit);
 
-  // پرکردن باقیمانده تا سقف: آدرس × پورت‌های دیگر (تنوع برای عبور از فیلتر)
+  // پرکردن باقی‌مانده تا سقف با ترکیب آدرس × پورت
   if (uris.length < maxConfigs) {
     const addrs = [...new Set([...pool.ip, ...pool.domain, ...pool.ipv6])];
     outer:
@@ -479,66 +494,93 @@ export function statusPage(user, settings, origin, stats) {
   <div class="muted" style="margin-top:18px">⚡️ آی‌پی تمیز برای اینترنت شما</div>
   <div class="muted" style="font-size:11.5px;margin-top:3px">تست از روی دستگاه خودت انجام می‌شود؛ هر آی‌پی سریع‌تری پیدا کردی، ستاره بزن تا برای همه بهتر شود.</div>
   <div id="iplist" style="margin-top:10px"></div>
-  <button class="btn ghost" id="ip-test" type="button">🔍 تست آی‌پی‌ها روی دستگاه من</button>
+  <button class="btn ghost" id="ip-test" type="button">🔍 تست از روی دستگاه من (پینگ دامنه‌ها + سرعت)</button>
   <div id="ip-out" class="muted" style="margin-top:8px;font-size:11.5px"></div>
   <div class="muted" style="margin-top:14px;font-size:11px">${esc(name)} — پنل مدیریت پروکسی روی Cloudflare Workers</div>
 </div>
 <script>
+/* تستر دستگاه: فقط چیزهایی که از یک صفحه‌ی HTTPS قابل سنجش‌اند را می‌سنجد:
+   دامنه‌ها/هاست پنل (گواهی معتبر → fetch با no-cors) + سرعت دانلود از خود ورکر.
+   آی‌پی خام را مرورگر نمی‌تواند بسنجد (گواهی/ترافیک مختلط) — برای آن‌ها v2rayNG معیار است
+   و نتیجه‌ی «ستاره» در همین صفحه ثبت می‌شود. */
 (function(){
-  var IPS = ${JSON.stringify((stats && stats.ips) || [])}.map(function(x){ return typeof x === 'string' ? {ip:x} : x; });
+  var CANDS = ${JSON.stringify((stats && stats.candidates) || [])};
   var TOKEN = ${JSON.stringify(user.sub_token)};
+  var ORIGIN = ${JSON.stringify(origin)};
+  var SELF = ORIGIN.replace('https://', '').replace('http://', '');
   var el = document.getElementById('iplist'), out = document.getElementById('ip-out');
-  function cls(ms){ if(ms == null) return ''; return ms < 120 ? 'good' : ms > 600 ? 'bad' : ''; }
+  function nm(v){ return (v && typeof v === 'object') ? String(v.addr || v.ip || '') : String(v == null ? '' : v); }
+  function kind(a){ if (a.indexOf(':') >= 0) return 'ipv6'; var c = a.charAt(0); return (c >= '0' && c <= '9') ? 'ipv4' : 'host'; }
+  function cls(ms){ if (ms == null) return ''; return ms < 120 ? 'good' : ms > 600 ? 'bad' : ''; }
+  var rows = CANDS.map(function(c){ return { addr: nm(c), ms: (c && c.ms != null ? c.ms : null), colo: (c && c.colo) || null, mbps: null }; })
+    .filter(function(r){ return r.addr; });
   function render(){
-    if(!IPS.length){ el.innerHTML = '<div class="muted" style="font-size:11.5px">هنوز آی‌پی تمیزی ثبت نشده — تست را بزن.</div>'; return; }
-    el.innerHTML = IPS.slice(0,12).map(function(r,i){
-      var ms = r.test_ms != null ? r.test_ms : r.ms;
-      return '<div class="ip"><b>'+r.ip+'</b>'+(r.colo?'<span class="muted">· '+r.colo+'</span>':'')+
-        '<span class="ms '+cls(ms)+'">'+(ms!=null?ms+' ms':'—')+'</span>'+
-        '<button class="star" data-ip="'+r.ip+'" title="این آی‌پی برای من خوب بود">★</button></div>';
+    if (!rows.length) { el.innerHTML = '<div class="muted" style="font-size:11.5px">هنوز کاندیدی ثبت نشده.</div>'; return; }
+    el.innerHTML = rows.slice(0, 14).map(function(r){
+      var k = kind(r.addr), tag = k === 'host' ? 'دامنه' : k === 'ipv6' ? 'IPv6' : 'آی‌پی';
+      var ms = r.ms == null ? '—' : r.ms + ' ms';
+      return '<div class="ip"><b>' + r.addr + '</b><span class="muted" style="font-size:10.5px">' + tag + (r.colo ? ' · ' + r.colo : '') + '</span>' +
+        '<span class="ms ' + cls(r.ms) + '">' + ms + (r.mbps ? ' · ' + r.mbps + ' Mbps' : '') + '</span>' +
+        '<button class="star" data-addr="' + r.addr + '" title="این برای من خوب بود">★</button></div>';
     }).join('');
   }
   render();
-  async function probe(ip){
-    var t0 = performance.now();
-    // مسیر ۱: HTTPS مستقیم (اگر گواهی آی‌پی پذیرفته شود)
-    try {
-      var c1 = new AbortController(); var to1 = setTimeout(function(){ c1.abort(); }, 3500);
-      var r1 = await fetch('https://'+ip+'/cdn-cgi/trace', { cache:'no-store', signal:c1.signal, mode:'cors' });
-      clearTimeout(to1);
-      var body = await r1.text().catch(function(){ return ''; });
-      return { ip: ip, test_ms: Math.round(performance.now()-t0), colo: (body.match(/colo=(\w+)/)||[])[1] || null, how:'https' };
-    } catch(e){ /* برو سراغ مسیر ۲ */ }
-    // مسیر ۲: HTTP ساده (بدون مسئله‌ی گواهی) — رسیدن پاسخ یعنی آی‌پی باز است
-    try {
-      var c2 = new AbortController(); var to2 = setTimeout(function(){ c2.abort(); }, 4000);
-      await fetch('http://'+ip+'/cdn-cgi/trace', { cache:'no-store', signal:c2.signal, mode:'no-cors' });
-      clearTimeout(to2);
-      return { ip: ip, test_ms: Math.round(performance.now()-t0), colo: null, how:'http' };
-    } catch(e2){ return { ip: ip, test_ms: null, colo: null, how:'down' }; }
+  function probeHost(addr){
+    return new Promise(function(res){
+      var t0 = performance.now(), c = new AbortController();
+      var to = setTimeout(function(){ c.abort(); res(null); }, 5000);
+      fetch('https://' + addr + '/cdn-cgi/trace?x=' + Math.round(performance.now()), { mode: 'no-cors', cache: 'no-store', signal: c.signal })
+        .then(function(){ clearTimeout(to); res(Math.round(performance.now() - t0)); })
+        .catch(function(){ clearTimeout(to); res(null); });
+    });
+  }
+  function speedTest(){
+    var BYTES = 3 * 1024 * 1024;
+    return new Promise(function(res){
+      var t0 = performance.now(), c = new AbortController();
+      var to = setTimeout(function(){ c.abort(); res(null); }, 30000);
+      fetch(ORIGIN + '/api/diag/speed?bytes=' + BYTES + '&token=' + encodeURIComponent(TOKEN) + '&x=' + Math.round(performance.now()), { cache: 'no-store', signal: c.signal })
+        .then(function(r){ return r.arrayBuffer(); })
+        .then(function(b){
+          clearTimeout(to);
+          var sec = (performance.now() - t0) / 1000;
+          res(sec > 0 ? { mbps: Math.round((b.byteLength * 8 / sec) / 1e5) / 10, ms: Math.round(performance.now() - t0) } : null);
+        })
+        .catch(function(){ clearTimeout(to); res(null); });
+    });
   }
   document.getElementById('ip-test').onclick = async function(){
-    var btn = this; btn.disabled = true; out.textContent = 'در حال تست… (تا ۲۰ ثانیه)';
-    var results = await Promise.all(IPS.slice(0,12).map(probe));
-    results.sort(function(a,b){ return (a.test_ms==null?9e9:a.test_ms) - (b.test_ms==null?9e9:b.test_ms); });
-    IPS = results;
+    var btn = this; btn.disabled = true;
+    out.textContent = 'در حال سنجش از شبکه‌ی خودت…';
+    var hosts = rows.filter(function(r){ return kind(r.addr) !== 'ipv4' && kind(r.addr) !== 'ipv6'; });
+    var res = await Promise.all(hosts.map(function(r){ return probeHost(r.addr); }));
+    hosts.forEach(function(r, i){ r.ms = res[i]; });
+    var sp = await speedTest();
+    var self = rows.filter(function(r){ return r.addr === SELF || r.addr === ORIGIN; })[0];
+    if (sp) {
+      if (self) { self.ms = sp.ms; self.mbps = sp.mbps; }
+      else rows.unshift({ addr: SELF, ms: sp.ms, mbps: sp.mbps, colo: null });
+    }
+    rows.sort(function(a, b){ return (a.ms == null ? 9e9 : a.ms) - (b.ms == null ? 9e9 : b.ms); });
     render();
-    var ok = results.filter(function(r){ return r.test_ms != null; });
-    out.textContent = ok.length ? (ok.length + ' آی‌پی پاسخ داد — سبزترین را در کلاینت امتحان کن.') : 'هیچ آی‌پی جواب نداد؛ ممکن است شبکه‌ی شما کلودفلر را محدود کرده باشد.';
+    var good = rows.filter(function(r){ return r.ms != null; });
+    out.textContent = sp
+      ? (good.length + ' کاندید از شبکه‌ی تو جواب داد — سرعت پنل: ' + sp.mbps + ' Mbps. ستاره بزن تا برای همه اولویت بگیرد.')
+      : 'سنجش انجام شد؛ اگر همه خالی بودند یعنی شبکه‌ات کلودفلر را محدود کرده — آی‌پی خام را در v2rayNG تست کن.';
     try {
-      await fetch('/api/report-ip', { method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ token: TOKEN, results: ok }) });
-    } catch(e){}
+      await fetch('/api/report-ip', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: TOKEN, results: good.map(function(r){ return { ip: r.addr, ms: r.ms, colo: r.colo, mbps: r.mbps }; }) }) });
+    } catch (e) {}
     btn.disabled = false;
   };
   el.addEventListener('click', async function(ev){
-    var b = ev.target.closest('.star'); if(!b) return;
+    var b = ev.target.closest('.star'); if (!b) return;
     b.textContent = '★';
     try {
-      await fetch('/api/report-ip', { method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ token: TOKEN, results: [{ ip: b.dataset.ip, ms: 1 }] }) });
-      out.textContent = 'ممنون! ثبت شد.';
-    } catch(e){}
+      await fetch('/api/report-ip', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: TOKEN, results: [{ ip: b.dataset.addr, ms: 1 }] }) });
+      out.textContent = 'ممنون! ثبت شد و از این به بعد بالای ساب می‌آید.';
+    } catch (e) {}
   });
 })();
 </script>

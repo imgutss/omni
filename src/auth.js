@@ -281,6 +281,7 @@ export async function ensureSchema(env) {
     'ALTER TABLE users ADD COLUMN pending_days INTEGER DEFAULT 30',
     'ALTER TABLE users ADD COLUMN early_data INTEGER DEFAULT 2048',
     'ALTER TABLE users ADD COLUMN notify INTEGER DEFAULT 1',
+    'ALTER TABLE clean_ips ADD COLUMN mbps REAL',
     'ALTER TABLE clean_ips ADD COLUMN hits INTEGER DEFAULT 0',
     'ALTER TABLE clean_ips ADD COLUMN src TEXT DEFAULT \'edge\'',
   ]) { try { await env.DB.prepare(sql).run(); } catch { /* ستون هست */ } }

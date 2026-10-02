@@ -56,6 +56,16 @@ function userView(u, settings, cleanIps = [], { withConfigs = false } = {}) {
   return view;
 }
 
+/** نرمال‌سازی آدرس: IPv4 / IPv6 / دامنه (برای اندازه‌گیری‌های دستگاه کاربر) */
+export function normalizeAddr(v) {
+  const s = String(v ?? '').trim().replace(/^\[|\]$/g, '');
+  if (!s || s.length > 120) return null;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) return s.split('.').every((n) => Number(n) <= 255) ? s : null;
+  if (s.includes(':') && /^[0-9a-f:]{3,45}$/i.test(s)) return s;                       // IPv6
+  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(s)) return s.toLowerCase();  // دامنه
+  return null;
+}
+
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
 
 async function cleanIpsList(env, settings) {
@@ -170,26 +180,52 @@ export async function handleApi(request, env, ctx, url) {
   if (p === '/api/report-ip' && method === 'POST') {
     const body = await request.json().catch(() => ({}));
     const token = String(body.token || '');
-    const rows = Array.isArray(body.results) ? body.results.slice(0, 60) : [];
+    const rows = Array.isArray(body.results) ? body.results.slice(0, 80) : [];
     const u = await env.DB.prepare('SELECT username, is_active FROM users WHERE sub_token = ?').bind(token).first();
     if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
     let saved = 0;
     for (const r of rows) {
-      const ip = String(r?.ip || '').trim();
+      const addr = normalizeAddr(r?.addr ?? r?.ip);
       const ms = Number(r?.ms);
-      if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip) || !Number.isFinite(ms) || ms <= 0 || ms > 20000) continue;
+      const mbps = Number(r?.mbps);
+      if (!addr || !Number.isFinite(ms) || ms <= 0 || ms > 20000) continue;
       await env.DB.prepare(
-        `INSERT INTO clean_ips(ip, ms, colo, ok, hits, checked_at) VALUES(?,?,?,1,1,datetime('now'))
+        `INSERT INTO clean_ips(ip, ms, colo, ok, hits, mbps, checked_at) VALUES(?,?,?,1,1,?,datetime('now'))
          ON CONFLICT(ip) DO UPDATE SET
            ms = CASE WHEN clean_ips.ms IS NULL OR excluded.ms < clean_ips.ms THEN excluded.ms ELSE clean_ips.ms END,
            colo = COALESCE(excluded.colo, clean_ips.colo),
+           mbps = CASE WHEN excluded.mbps IS NULL THEN clean_ips.mbps
+                       WHEN clean_ips.mbps IS NULL OR excluded.mbps > clean_ips.mbps THEN excluded.mbps ELSE clean_ips.mbps END,
            hits = COALESCE(clean_ips.hits, 0) + 1,
            checked_at = datetime('now')`
-      ).bind(ip, Math.round(ms), r?.colo ? String(r.colo).slice(0, 12) : null).run();
+      ).bind(addr, Math.round(ms), r?.colo ? String(r.colo).slice(0, 12) : null,
+        Number.isFinite(mbps) && mbps > 0 ? Math.round(mbps * 10) / 10 : null).run();
       saved++;
     }
-    if (saved) await logEvent(env, 'info', `اندازه‌گیری ${saved} آی‌پی از دستگاه کاربر «${u.username}»`);
+    if (saved) await logEvent(env, 'info', `اندازه‌گیری ${saved} کاندید از دستگاه «${u.username}»`);
     return json({ ok: true, saved });
+  }
+
+  /* ───────── تست سرعت واقعی از دستگاه کاربر (پشت تونل خودش) ───────── */
+  if (p === '/api/diag/speed') {
+    const q = url.searchParams;
+    const u = await env.DB.prepare('SELECT username FROM users WHERE sub_token = ?')
+      .bind(String(q.get('token') || '')).first();
+    if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
+    const bytes = Math.max(65536, Math.min(8 * 1024 * 1024, Number(q.get('bytes') || 2 * 1024 * 1024) || 0));
+    const buf = new Uint8Array(bytes);
+    for (let i = 0; i < bytes; i += 4) {                     // داده‌ی تصادفی‌نما: غیرقابل فشرده‌سازی
+      const v = (i * 2654435761) >>> 0;
+      buf[i] = v & 255; buf[i + 1] = (v >>> 8) & 255; buf[i + 2] = (v >>> 16) & 255; buf[i + 3] = (v >>> 24) & 255;
+    }
+    return new Response(buf, {
+      headers: {
+        'content-type': 'application/octet-stream',
+        'content-length': String(bytes),
+        'cache-control': 'no-store, no-cache, must-revalidate',
+        'access-control-allow-origin': '*',
+      },
+    });
   }
 
   /* ───────── صفحه‌ی وضعیت کاربر (عمومی) ───────── */
@@ -201,8 +237,21 @@ export async function handleApi(request, env, ctx, url) {
     const conns = await env.DB.prepare(`SELECT COALESCE(SUM(conns),0) c FROM usage_daily WHERE username = ?`).bind(u.username).first();
     const view = userView(u, settings);
     const ipRows = await env.DB.prepare('SELECT ip, ms, colo FROM clean_ips WHERE ok = 1 ORDER BY (hits * 1000) DESC, ms ASC LIMIT 16').all();
-    const candidateIps = (ipRows.results || []).map((r) => ({ ip: r.ip, ms: r.ms, colo: r.colo }));
-    return new Response(statusPage(view, settings, url.origin, { conns: conns?.c || 0, ips: candidateIps }),
+    // کاندیدها = همان چیزهایی که در کانفیگ‌ها به‌کار می‌روند: آی‌پی‌های تأییدشده، دامنه‌ها،
+    // IPv6 و دامنه‌ی پنل — تا دستگاه کاربر دقیقاً همان‌ها را بسنجد و نتیجه در D1 بنشیند.
+    const cands = [];
+    const seenAddr = new Set();
+    const pushCand = (addr, ms, colo) => {
+      const a = normalizeAddr(addr);
+      if (!a || seenAddr.has(a)) return;
+      seenAddr.add(a);
+      cands.push({ addr: a, ms: Number.isFinite(Number(ms)) ? Number(ms) : null, colo: colo || null });
+    };
+    (ipRows.results || []).forEach((r) => pushCand(r.ip, r.ms, r.colo));
+    safeArray(settings.address_domains).forEach((d) => pushCand(d, null, null));
+    pushCand(String(settings.public_host || '').replace(/^https?:\/\//, '').replace(/\/.*$/, ''), null, null);
+    safeArray(settings.ipv6_pool).forEach((v) => pushCand(v, null, null));
+    return new Response(statusPage(view, settings, url.origin, { conns: conns?.c || 0, candidates: cands.slice(0, 20) }),
       { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
   }
 
