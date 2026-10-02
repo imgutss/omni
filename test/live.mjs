@@ -33,7 +33,8 @@ let settingsPath = '/ws', userUuid = '', subToken = '', trojanPw = '';
   const panel = await req('GET', '/', { raw: true });
   const html = await panel.text();
   ok('پنل HTML روی HTTPS', panel.status === 200 && html.includes('kaveh') && html.length > 200000, String(html.length));
-  ok('شیم دمو فقط fallback است (omniLive)', html.includes('omniLive'));
+  ok('آمار فیک حذف شده (شیم دمو وجود ندارد)', !html.includes('omniLive') && !html.includes('demo API') && !html.includes('taraneh'));
+  ok('برند پنل Omni است (بدون kaveh)', html.includes('Omni') && !html.includes('kaveh v'));
 
   if (!w.body.installed) {
     const s = await req('POST', '/api/setup', { body: { username: ADMIN_USER, password: ADMIN_PASS } });
@@ -87,7 +88,7 @@ console.log('\n[تونل واقعی VLESS روی WSS]');
 await new Promise((resolve0) => {
   let settled = false;
   const resolve = (v) => { if (!settled) { settled = true; resolve0(v); } };
-  const t = setTimeout(() => { ok('تونل WSS → example.com', false, 'timeout'); resolve(); }, 20000);
+  const t = setTimeout(() => { ok('تونل WSS → www.gnu.org', false, 'timeout'); resolve(); }, 20000);
   const ws = new WebSocket(`wss://${BASE.replace('https://', '')}${settingsPath}`, { headers: { 'user-agent': 'omni-live' } });
   ws.binaryType = 'arraybuffer';
   let got = '';
@@ -96,7 +97,7 @@ await new Promise((resolve0) => {
     const hdr = Buffer.concat([Buffer.from([0]), ub, Buffer.from([0]), Buffer.from([1])]);
     const port = Buffer.from([TPORT >> 8, TPORT & 255]);
     const addr = Buffer.concat([Buffer.from([2, TARGET.length]), Buffer.from(TARGET)]);
-    ws.send(Buffer.concat([hdr, port, addr, Buffer.from(`GET / HTTP/1.1\r\nHost: ${TARGET}\r\nUser-Agent: curl/8\r\nConnection: close\r\n\r\n`)]));
+    ws.send(Buffer.concat([hdr, port, addr, Buffer.from(`GET /debian/ HTTP/1.1\r\nHost: ${TARGET}\r\nUser-Agent: Mozilla/5.0 (Linux; Android 13) omni-verify\r\nConnection: close\r\n\r\n`)]));
   });
   ws.on('message', (d) => {
     got += Buffer.from(d).toString('latin1');
@@ -110,7 +111,7 @@ console.log('\n[تونل واقعی Trojan روی WSS]');
 await new Promise((resolve0) => {
   let settled = false;
   const resolve = (v) => { if (!settled) { settled = true; resolve0(v); } };
-  const t = setTimeout(() => { ok('تونل Trojan → example.com', false, 'timeout'); resolve(); }, 20000);
+  const t = setTimeout(() => { ok('تونل Trojan → www.gnu.org', false, 'timeout'); resolve(); }, 20000);
   const ws = new WebSocket(`wss://${BASE.replace('https://', '')}${settingsPath}`, { headers: { 'user-agent': 'omni-live' } });
   ws.binaryType = 'arraybuffer';
   let got = '';
@@ -121,7 +122,7 @@ await new Promise((resolve0) => {
       pw, Buffer.from('\r\n'), Buffer.from([1]), Buffer.from([3, TARGET.length]), Buffer.from(TARGET),
       Buffer.from([TPORT >> 8, TPORT & 255]), Buffer.from('\r\n'),
     ]);
-    ws.send(Buffer.concat([hdr, Buffer.from(`GET / HTTP/1.1\r\nHost: ${TARGET}\r\nUser-Agent: curl/8\r\nConnection: close\r\n\r\n`)]));
+    ws.send(Buffer.concat([hdr, Buffer.from(`GET /debian/ HTTP/1.1\r\nHost: ${TARGET}\r\nUser-Agent: Mozilla/5.0 (Linux; Android 13) omni-verify\r\nConnection: close\r\n\r\n`)]));
   });
   ws.on('message', (d) => { got += Buffer.from(d).toString('latin1'); if (got.includes('HTTP/1.')) { ok(`تونل Trojan → ${TARGET}`, true, got.slice(0, 60)); clearTimeout(t); ws.close(); resolve(); } });
   ws.on('close', (code) => { if (!got.includes('HTTP/1.')) { ok('تونل Trojan', false, `closed ${code}`); clearTimeout(t); resolve(); } });

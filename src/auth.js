@@ -198,7 +198,7 @@ export const DEFAULTS = {
   config_count: '30',
   ipv6_enabled: '1',
   ipv6_pool: '',
-  fragment_preset: 'mci',
+  fragment_preset: 'none',
   fingerprint: 'chrome',
   remark_prefix: '',
   default_quota_gb: '50',

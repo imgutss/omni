@@ -3,7 +3,7 @@
    ساخت لینک‌های VLESS/Trojan، ساب‌لینک (base64/clash/sing-box) و صفحه‌ی وضعیت
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { IPV6_SEEDS } from './scan.js';
+import { IPV6_SEEDS, CF_DOMAINS } from './scan.js';
 
 const enc = encodeURIComponent;
 
@@ -60,7 +60,8 @@ export function choosePorts(settings, count = 4) {
     if (list.length) return [...new Set(list)].slice(0, 8);
   }
   // ترتیب: اول پورت ۸۰ (بدون TLS، بدون SNI — مقاوم‌ترین حالت در ایران)، بعد ۴۴۳ و بقیه
-  const rotation = [80, 443, 2053, 8080, 2087, 8443, 8880, 2082, 2083, 2095, 2096, 2086, 2052];
+  // الگوی پنل کارکرده: ۴۴۳ (TLS) اول — کمترین احتمال throttle؛ پورت‌های بدون TLS فقط در انتها
+  const rotation = [443, 2053, 8443, 2087, 2096, 2083, 80, 8080, 8880, 2052, 2082, 2086, 2095];
   const out = rotation.includes(primary) ? rotation : [primary, ...rotation];
   return [...new Set(out)].slice(0, Math.max(1, Math.min(13, count)));
 }
@@ -68,32 +69,41 @@ export function choosePorts(settings, count = 4) {
 /** آدرس‌های کانفیگ به ترتیب اولویت:
  *  ۱) آی‌پی‌های اختصاصی کاربر  ۲) آی‌پی‌های تأییدشده توسط کاربران واقعی
  *  ۳) استخر آماده‌ی کلودفلر/WARP  ۴) دامنه‌ی پنل  ۵) IPv6 */
-export function addressesFor(user, settings, cleanIps = [], { limit = 6 } = {}) {
+/** استخر آدرس‌ها در سه سبد، مثل پنل کارکرده: دامنه / IPv6 / آی‌پی.
+ *  دامنه = دامنه‌ی معروف کلودفلر (آی‌پی‌اش معمولاً باز است)
+ *  IPv6 = آدرس‌های IPv6 کلودفلر (در ایران اغلب تمیزترین راه)
+ *  آی‌پی = آی‌پی‌های سفارشی کاربر، تأییدشده‌ها، دامنه‌ی پنل و در آخر حدس‌ها */
+export function configPool(user, settings, cleanIps = []) {
   const norm = (cleanIps || [])
     .map((r) => (typeof r === 'string' ? { ip: r, hits: 0, ms: null } : r))
     .filter((r) => r && r.ip);
-  const verified = norm.filter((r) => Number(r.hits || 0) > 0)
-    .sort((a, b) => (a.ms ?? 9999) - (b.ms ?? 9999)).map((r) => r.ip);
-  const guessed = norm.filter((r) => !(Number(r.hits || 0) > 0))
-    .sort((a, b) => (a.ms ?? 9999) - (b.ms ?? 9999)).map((r) => r.ip);
+  const byMs = (a, b) => (a.ms ?? 9999) - (b.ms ?? 9999);
+  const verified = norm.filter((r) => Number(r.hits || 0) > 0).sort(byMs).map((r) => r.ip);
+  const guessed = norm.filter((r) => !(Number(r.hits || 0) > 0)).sort(byMs).map((r) => r.ip);
   const host = sniFor(settings);
-  const list = [];
-  const push = (h) => { if (h && !list.includes(h)) list.push(h); };
-  safeArray(user?.ips).forEach(push);
-  verified.forEach(push);
-  if (host) push(host);        // دامنه‌ی پنل: همیشه به‌عنوان گزینه‌ی مطمئن
-  guessed.forEach(push);
-  if (String(settings.ipv6_enabled || '1') === '1') {
-    const pool = safeArray(settings.ipv6_pool).length ? safeArray(settings.ipv6_pool) : IPV6_SEEDS;
-    pool.forEach(push);
-  }
-  return list.slice(0, limit);
+  const uniq = (arr) => [...new Set(arr.filter(Boolean))];
+
+  const domain = (safeArray(settings.address_domains).length
+    ? safeArray(settings.address_domains)
+    : CF_DOMAINS).slice(0, 4);
+  const ipv6 = String(settings.ipv6_enabled || '1') === '1'
+    ? (safeArray(settings.ipv6_pool).length ? safeArray(settings.ipv6_pool) : IPV6_SEEDS).slice(0, 3)
+    : [];
+  const ip = uniq([...safeArray(user?.ips), ...verified, host, ...guessed]);
+
+  return { domain, ipv6, ip, host, verified, guessed };
+}
+
+/** آدرس‌ها به ترتیب اولویت (برای sing-box/clash و فهرست‌های ساده) */
+export function addressesFor(user, settings, cleanIps = [], { limit = 8 } = {}) {
+  const p = configPool(user, settings, cleanIps);
+  return [...new Set([...p.domain.slice(0, 2), ...p.ipv6.slice(0, 2), ...p.ip.slice(0, 5)])].slice(0, limit);
 }
 
 const encHost = (h) => (String(h).includes(':') ? `[${h}]` : h);
 
 /** یک لینک VLESS برای آدرس/پورت مشخص */
-export function vlessUri(user, settings, host, { index = 1, port = 443 } = {}) {
+export function vlessUri(user, settings, host, { index = 1, port = 443, cat = 'Global' } = {}) {
   const tls = isTlsPort(port);
   const fp = user.fingerprint || settings.fingerprint || 'chrome';
   const ed = Number(user.early_data || settings.early_data || 2048);
@@ -111,12 +121,12 @@ export function vlessUri(user, settings, host, { index = 1, port = 443 } = {}) {
     if (frag.interval) params.push(`fragmentInterval=${encodeURIComponent(frag.interval)}`);
   }
   if (settings.mux_enabled === '1') params.push('mux=1', 'xmux=maxStreams=8');
-  const remark = `${settings.remark_prefix || ''}${user.username} · 🌐 Global · VLESS · ${port} · #${String(index).padStart(2, '0')}`;
+  const remark = `${settings.remark_prefix || ''}${user.username} · 🌐 ${cat} · VLESS · ${port} · #${String(index).padStart(2, '0')}`;
   return `vless://${user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 
 /** یک لینک Trojan برای آدرس/پورت مشخص */
-export function trojanUri(user, settings, host, { index = 1, port = 443 } = {}) {
+export function trojanUri(user, settings, host, { index = 1, port = 443, cat = 'Global' } = {}) {
   const tls = isTlsPort(port);
   const fp = user.fingerprint || settings.fingerprint || 'chrome';
   const basePath = settings.path || '/ws';
@@ -127,7 +137,7 @@ export function trojanUri(user, settings, host, { index = 1, port = 443 } = {}) 
   if (tls) params.push('security=tls', `sni=${sni}`, `fp=${fp}`, `host=${sni}`, 'alpn=http%2F1.1');
   else params.push('security=none', `host=${sni || host}`);
   params.push(`path=${path}`);
-  const remark = `${settings.remark_prefix || ''}${user.username} · 🌐 Global · TROJAN · ${port} · #${String(index).padStart(2, '0')}`;
+  const remark = `${settings.remark_prefix || ''}${user.username} · 🌐 ${cat} · TROJAN · ${port} · #${String(index).padStart(2, '0')}`;
   return `trojan://${settings.trojan_password || ''}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 
@@ -145,60 +155,77 @@ export function verifiedPairs(settings) {
  *  اگر جفت‌های تأییدشده داشته باشیم، همان‌ها اول می‌آیند (چون واقعاً تست شده‌اند)؛
  *  بعد ماتریس آدرس × پورت به‌عنوان گزینه‌های بیشتر. */
 export function buildConfigs(user, settings, cleanIps = []) {
-  const addrs = addressesFor(user, settings, cleanIps);
   const maxConfigs = Math.max(6, Math.min(60, Number(settings.config_count || 30)));
+  const pool = configPool(user, settings, cleanIps);
+  const pairs = verifiedPairs(settings);                       // «ip:port» اثبات‌شده با هندشیک واقعی
+  const pairPort = (pr) => Number(pr.slice(pr.lastIndexOf(':') + 1));
+  const tlsPairs = pairs.filter((pr) => isTlsPort(pairPort(pr)));
+  const plainPairs = pairs.filter((pr) => !isTlsPort(pairPort(pr)));
+  const ports = choosePorts(settings, 4);
+  const extraPorts = ports.filter((p) => p !== 443);
+
+  /* برنامه‌ی کانفیگ — مثل پنل کارکرده: هر گروه با آدرس‌های خودش، ۴۴۳ اول.
+     ۱) Domain  : دامنه‌ی معروف کلودفلر (آی‌پی‌اش معمولاً در ایران باز است)
+     ۲) IPv6    : آدرس‌های IPv6 کلودفلر
+     ۳) Clean   : جفت‌های اثبات‌شده با هندشیک واقعی (اول TLS)
+     ۴) IPv4    : آی‌پی‌های تأییدشده/سفارشی کاربر و دامنه‌ی پنل
+     ۵) Alt     : پورت‌های جایگزین (۲۰۵۳/۸۴۴۳/…) روی بهترین آدرس‌ها */
+  const plan = [];
+  const seen = new Set();
+  const add = (address, port, cat) => {
+    if (!address || seen.has(`${address}:${port}`)) return;
+    seen.add(`${address}:${port}`);
+    plan.push({ address, port: Number(port), cat });
+  };
+  pool.domain.slice(0, 3).forEach((d) => add(d, 443, 'Domain'));
+  pool.ipv6.slice(0, 2).forEach((v) => add(v, 443, 'IPv6'));
+  tlsPairs.slice(0, 6).forEach((pr) => add(pr.slice(0, pr.lastIndexOf(':')), pairPort(pr), 'Clean'));
+  pool.ip.slice(0, 3).forEach((ip) => add(ip, 443, 'IPv4'));
+  plainPairs.slice(0, 2).forEach((pr) => add(pr.slice(0, pr.lastIndexOf(':')), pairPort(pr), 'Clean'));
+  const rotate = [pool.domain[0], pool.ipv6[0], pool.ip[0], pool.domain[1]].filter(Boolean);
+  extraPorts.forEach((p, i) => add(rotate[i % rotate.length], p, 'Alt'));
+
+  const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
   const uris = [];
   const items = [];
-  let n = 0;
-  const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
-  const label = (i) => String(i).padStart(2, '0');
-  const push = (host, port) => {
-    if (uris.length >= maxConfigs) return;
-    if (uris.some((u, i) => i >= 0 && items[i] && items[i].address === host && items[i].port === port && items[i].proto === 'vless')) return;
-    n++;
-    uris.push(vlessUri(user, settings, host, { index: n, port }));
-    items.push({ address: host, port, proto: 'vless', remark: `${user.username} · 🌐 Global · VLESS · ${port} · #${label(n)}` });
-    if (both && uris.length < maxConfigs) {
-      uris.push(trojanUri(user, settings, host, { index: n, port }));
-      items.push({ address: host, port, proto: 'trojan', remark: `${user.username} · 🌐 Global · TROJAN · ${port} · #${label(n)}` });
+  const emit = ({ address, port, cat }) => {
+    for (const proto of both ? ['vless', 'trojan'] : ['vless']) {
+      if (uris.length >= maxConfigs) return;
+      const n = uris.length + 1;
+      const label = String(n).padStart(2, '0');
+      const remark = `${user.username} · 🌐 ${cat} · ${proto === 'vless' ? 'VLESS' : 'TROJAN'} · ${port} · #${label}`;
+      uris.push(proto === 'vless'
+        ? vlessUri(user, settings, address, { index: n, port, cat })
+        : trojanUri(user, settings, address, { index: n, port, cat }));
+      items.push({ address, port, proto, cat, remark });
     }
   };
+  plan.forEach(emit);
 
-  // ۱) جفت‌های تأییدشده (تست‌شده با اتصال واقعی)
-  const pairs = verifiedPairs(settings);
-  const userIps = safeArray(user?.ips);
-  const orderedPairs = [
-    ...pairs.filter((pr) => userIps.some((ip) => pr.startsWith(ip + ':'))),
-    ...pairs.filter((pr) => !userIps.some((ip) => pr.startsWith(ip + ':'))),
-  ];
-  const maxVerified = Math.max(4, Math.round(maxConfigs * 0.45));
-  let usedVerified = 0;
-  for (const pr of orderedPairs) {
-    if (usedVerified >= maxVerified) break;
-    const idx = pr.lastIndexOf(':');
-    const before = uris.length;
-    push(pr.slice(0, idx), Number(pr.slice(idx + 1)));
-    if (uris.length > before) usedVerified++;
-  }
-
-  // ۲) ماتریس آدرس × پورت (پورت‌ها بیرونی تا تنوع پورت حفظ شود)
-  const ports = choosePorts(settings, 4);
-  outer:
-  for (const port of ports) {
-    for (const host of addrs) {
-      if (uris.length >= maxConfigs) break outer;
-      push(host, port);
+  // پرکردن باقیمانده تا سقف: آدرس × پورت‌های دیگر (تنوع برای عبور از فیلتر)
+  if (uris.length < maxConfigs) {
+    const addrs = [...new Set([...pool.ip, ...pool.domain, ...pool.ipv6])];
+    outer:
+    for (const port of ports) {
+      for (const a of addrs) {
+        if (uris.length >= maxConfigs) break outer;
+        const key = `${a}:${port}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        emit({ address: a, port, cat: isTlsPort(port) ? 'Alt' : 'Plain' });
+      }
     }
   }
+
   return {
     uris,
     items,
-    host: addrs[0] || sniFor(settings) || '',
-    addresses: addrs,
+    host: pool.host || pool.domain[0] || '',
+    addresses: [...new Set(items.map((x) => x.address))],
     ports,
     verified: pairs.length,
-    singbox: buildSingbox(user, settings, addrs, ports),
-    clash: buildClash(user, settings, addrs, ports),
+    singbox: buildSingbox(user, settings, [...new Set(items.map((x) => x.address))], ports),
+    clash: buildClash(user, settings, [...new Set(items.map((x) => x.address))], ports),
   };
 }
 

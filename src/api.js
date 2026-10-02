@@ -462,7 +462,7 @@ export async function handleApi(request, env, ctx, url) {
       'default_quota_gb', 'default_expiry_days', 'rotate_minutes', 'signup_max_per_ip', 'signup_max_per_day',
       'public_signup', 'maintenance', 'auto_rotate', 'mux_enabled', 'block_ads', 'block_nsfw', 'block_list',
       'clean_ips', 'ip_pool', 'device_limit', 'dns_upstream', 'proto', 'path', 'early_data', 'decoy_url', 'announce',
-      'trojan_password', 'ports_mode', 'ports_custom', 'config_count', 'ipv6_enabled', 'ipv6_pool', 'verified_pairs'];
+      'trojan_password', 'ports_mode', 'ports_custom', 'config_count', 'ipv6_enabled', 'ipv6_pool', 'verified_pairs', 'address_domains'];
     const patch = {};
     for (const k of allowed) {
       const v = body[k];
@@ -653,8 +653,16 @@ export async function handleApi(request, env, ctx, url) {
       cur.src = cur.src === 'edge' ? 'both' : 'client';
       merged.set(r.ip, cur);
     }
+    // امتیاز: اندازه‌گیری واقعی دستگاه کاربر (client_ms) همیشه جلوتر از پروب لبه است؛
+    // چون پروب لبه از دیتاسنتر کلودفلر انجام می‌شود و تأخیر واقعی شبکه‌ی ایران را نمی‌بیند.
     const results = [...merged.values()]
-      .map((x) => ({ ...x, score: (x.client_ms ?? x.ms ?? 9999) - Math.min(80, x.hits || 0) }))
+      .map((x) => {
+        const hits = x.hits || 0;
+        const score = x.client_ms != null
+          ? x.client_ms - Math.min(60, hits * 3)          // ۰..∞ — داده‌ی واقعی کاربر
+          : 1000 + (x.ms ?? 9999);                        // فقط پروب لبه → همیشه بعد از آن‌ها
+        return { ...x, score: Math.round(score * 10) / 10 };
+      })
       .sort((a, b) => a.score - b.score)
       .slice(0, 40);
 

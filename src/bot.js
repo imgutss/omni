@@ -74,7 +74,7 @@ export async function handleUpdate(env, ctx, origin, update) {
     return send('⛔️ این ربات فقط برای مدیر پنل است.');
   }
 
-  const kb = { inline_keyboard: [[{ text: '🌐 باز کردن پنل', web_app: { url: `${origin}/` } }]] };
+  const kb = { inline_keyboard: [[{ text: '🌐 باز کردن پنل در مرورگر', url: `${origin}/` }]] };
   if (cmd.startsWith('/')) ctx?.waitUntil?.(logEvent(env, 'info', `دستور ربات: ${cmd} از ${chatId}`).catch(() => {}));
 
   switch (cmd) {
