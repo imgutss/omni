@@ -3,9 +3,9 @@
    ربات تلگرام: مدیریت کامل کاربران، گزارش‌ها، اسکن آی‌پی، اعلان‌ها
    (هم وب‌هوک و هم حالت پولینگ با کرون — بدون سرور اضافه)
    ══════════════════════════════════════════════════════════════════════════ */
-import { allSettings, putSetting, getSetting, logEvent, randomToken, randomUuid, ensureSchema, settingsCached } from './auth.js';
+import { allSettings, putSetting, putSettingsBulk, getSetting, logEvent, randomToken, randomUuid, ensureSchema, settingsCached } from './auth.js';
 import { buildConfigs, FRAGMENT_PRESETS } from './links.js';
-import { rankIpsHttp, SEED_IPS, httpProbe, tcpProbe, CF_GOOD_IPS, PORTS_PLAIN, PORTS_TLS } from './scan.js';
+import { rankIpsHttp, SEED_IPS, httpProbe, tcpProbe, CF_GOOD_IPS, PORTS_PLAIN, PORTS_TLS, OMNI_QOS_V4, OMNI_CLEAN_SITES, OMNI_CLEAN_V6, OMNI_CLEAN_IR } from './scan.js';
 import { safeJsonArray } from './core.js';
 
 const GB = 1024 ** 3;
@@ -332,18 +332,29 @@ export async function scheduledTasks(env, ctx, origin) {
     }
   }
 
-  // ۳) چرخش خودکار توکن (اگر فعال باشد)
+  // ۳) چرخش خودکار آی‌پی‌های تمیز مخزن (اگر فعال باشد — بدون تغییر توکن ساب کاربران!)
   if (settings.auto_rotate === '1') {
-    const minutes = Math.max(0, Number(settings.rotate_minutes || 0));
+    const minutes = Math.max(0, Number(settings.rotate_minutes || 15));
     if (minutes > 0) {
       const last = Number(await getSetting(env, 'last_rotate', '0')) || 0;
       if (Date.now() - last > minutes * 60000) {
-        const rows = await env.DB.prepare('SELECT username FROM users LIMIT 200').all();
-        for (const r of (rows.results || [])) {
-          await env.DB.prepare('UPDATE users SET sub_token = ? WHERE username = ?').bind(randomToken(18), r.username).run();
-        }
-        await putSetting(env, 'last_rotate', Date.now());
-        await logEvent(env, 'warn', `چرخش خودکار توکن ساب برای ${rows.results?.length || 0} کاربر`);
+        const offset = Math.floor(Math.random() * Math.max(1, OMNI_QOS_V4.length - 5));
+        const nextClean = [
+          OMNI_QOS_V4[offset % OMNI_QOS_V4.length],
+          OMNI_QOS_V4[(offset + 1) % OMNI_QOS_V4.length],
+          OMNI_QOS_V4[(offset + 2) % OMNI_QOS_V4.length],
+          OMNI_QOS_V4[(offset + 3) % OMNI_QOS_V4.length],
+          OMNI_QOS_V4[(offset + 4) % OMNI_QOS_V4.length],
+          ...OMNI_CLEAN_SITES.slice(0, 3),
+          ...OMNI_CLEAN_V6.slice(0, 3),
+          ...OMNI_CLEAN_IR.slice(0, 2),
+        ];
+        await putSettingsBulk(env, {
+          clean_ips: JSON.stringify(nextClean),
+          ip_pool: nextClean.join('\n'),
+          last_rotate: String(Date.now()),
+        });
+        await logEvent(env, 'info', `چرخش خودکار مخزن آی‌پی تمیز (${nextClean.length} آدرس)`);
       }
     }
   }

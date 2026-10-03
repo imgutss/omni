@@ -97,6 +97,28 @@ export function normalizeAddr(v) {
 
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
 
+const TOKEN_USER_ALIASES = {
+  'fFgkSjJTbbkl3BduYftMlk_3': 'Alim',
+  'DiY3eKMXIrXeQdbUNogIfuTv': 'Alim',
+  'ux7V6g3toplQjwURLo8rhxM8': 'Alim',
+  'lmbMhpKb8WgBATTYfga8RyEx': 'Ali',
+  '9DwsMyZB5kz-UuAloPRBMiDG': 'Ali',
+  'ZJM-x0LftaMYHbqfetEfiPO7': 'Ali',
+  'gj1ISuPG27ga4xtXmFs0J4Hq': 'demo',
+  'JD30uMrIhpx5liUAsgUYwXhJ': 'demo',
+  'VDazw77EzpliyYNBw_3GMTjP': 'demo',
+};
+
+async function findUserByToken(env, token) {
+  const tok = String(token || '').trim();
+  if (!tok) return null;
+  let u = await env.DB.prepare('SELECT * FROM users WHERE sub_token = ?').bind(tok).first();
+  if (!u && TOKEN_USER_ALIASES[tok]) {
+    u = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(TOKEN_USER_ALIASES[tok]).first();
+  }
+  return u || null;
+}
+
 async function cleanIpsList(env, settings) {
   const stored = safeJsonArray(settings.clean_ips).map((x) => (typeof x === 'string' ? { ip: normalizeAddr(x) } : { ...x, ip: normalizeAddr(x?.ip ?? x?.addr) })).filter((x) => x && x.ip);
   if (stored.length) return stored;
@@ -210,7 +232,7 @@ export async function handleApi(request, env, ctx, url) {
     const body = await request.json().catch(() => ({}));
     const token = String(body.token || '');
     const rows = Array.isArray(body.results) ? body.results.slice(0, 80) : [];
-    const u = await env.DB.prepare('SELECT username, is_active FROM users WHERE sub_token = ?').bind(token).first();
+    const u = await findUserByToken(env, token);
     if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
     let saved = 0;
     for (const r of rows) {
@@ -241,7 +263,7 @@ export async function handleApi(request, env, ctx, url) {
     const q = url.searchParams;
     const tok = String(q.get('token') || '').trim();
     if (tok) {
-      const u = await env.DB.prepare('SELECT username FROM users WHERE sub_token = ?').bind(tok).first();
+      const u = await findUserByToken(env, tok);
       if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
     } else {
       const acc = await currentAccount(env, request);
@@ -277,7 +299,7 @@ export async function handleApi(request, env, ctx, url) {
   if (p === '/api/diag/probe-public' && method === 'POST') {
     const tok = String(url.searchParams.get('token') || '').trim();
     if (!tok) return bad('bad_token', 'توکن الزامی است', 403);
-    const u = await env.DB.prepare('SELECT username FROM users WHERE sub_token = ?').bind(tok).first();
+    const u = await findUserByToken(env, tok);
     if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
     const body = await request.json().catch(() => ({}));
     const rawList = Array.isArray(body.ips) ? body.ips.slice(0, 16) : [];
@@ -299,7 +321,7 @@ export async function handleApi(request, env, ctx, url) {
     const tok = String(url.searchParams.get('token') || '').trim();
     let userRow = null;
     if (tok) {
-      userRow = await env.DB.prepare('SELECT * FROM users WHERE sub_token = ?').bind(tok).first();
+      userRow = await findUserByToken(env, tok);
       if (!userRow) return bad('bad_token', 'توکن نامعتبر', 403);
     } else {
       const acc = await currentAccount(env, request);
@@ -351,7 +373,7 @@ export async function handleApi(request, env, ctx, url) {
     const tok = String(url.searchParams.get('token') || '').trim();
     let userRow = null;
     if (tok) {
-      userRow = await env.DB.prepare('SELECT * FROM users WHERE sub_token = ?').bind(tok).first();
+      userRow = await findUserByToken(env, tok);
       if (!userRow) return bad('bad_token', 'توکن نامعتبر', 403);
     } else {
       const acc = await currentAccount(env, request);
@@ -404,7 +426,7 @@ export async function handleApi(request, env, ctx, url) {
   if (p.startsWith('/status/')) {
     const token = p.slice(8);
     const settings = await settingsCached(env);
-    const u = await env.DB.prepare('SELECT * FROM users WHERE sub_token = ?').bind(token).first();
+    const u = await findUserByToken(env, token);
     if (!u) return new Response('not found', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
     const conns = await env.DB.prepare(`SELECT COALESCE(SUM(conns),0) c FROM usage_daily WHERE username = ?`).bind(u.username).first();
     const view = userView(u, settings);
@@ -434,7 +456,7 @@ export async function handleApi(request, env, ctx, url) {
   if (p.startsWith('/s/')) {
     const token = p.slice(3);
     const settings = await settingsCached(env);
-    const u = await env.DB.prepare('SELECT * FROM users WHERE sub_token = ?').bind(token).first();
+    const u = await findUserByToken(env, token);
     if (!u) return new Response('not found', { status: 404 });
     const st = userStatus(u);
     if (st === 'disabled') return new Response('اشتراک غیرفعال است', { status: 403 });
