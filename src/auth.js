@@ -288,25 +288,47 @@ export async function ensureSchema(env) {
   SCHEMA_READY = true;
 }
 
-/* ─────────── بوت‌استرپ: تنظیمات پیش‌فرض (کش در حافظه برای حذف کوئری‌های تکراری D1 روی هر اتصال) ─────────── */
+/* ─────────── بوت‌استرپ: تنظیمات پیش‌فرض (مسیر سریع ۱ کوئری بدون اجرای مجدد ۱۸ کوئری DDL روی هر ایزوله) ─────────── */
+let BOOTSTRAP_PROMISE = null;
 export async function bootstrap(env, url) {
-  if (SCHEMA_READY && SETTINGS_CACHE.data && Date.now() - SETTINGS_CACHE.at < 30000) {
+  if (SCHEMA_READY && SETTINGS_CACHE.data && Date.now() - SETTINGS_CACHE.at < 60000) {
     return SETTINGS_CACHE.data;
   }
-  await ensureSchema(env);
-  const st = await allSettings(env);
-  const missing = {};
-  for (const [k, v] of Object.entries(DEFAULTS)) if (st[k] === undefined) missing[k] = v;
-  if (!st.path) missing.path = '/' + randomToken(6).slice(0, 12);
-  if (!st.trojan_password) missing.trojan_password = randomToken(16);
-  if (!st.admin_chat_id && env.ADMIN_CHAT_ID) missing.admin_chat_id = String(env.ADMIN_CHAT_ID);
-  if (!st.ip_pool) missing.ip_pool = CF_GOOD_IPS.join('\n');
-  if (!st.public_host) missing.public_host = url.host;
-  if (!st.recovery_code) missing.recovery_code = randomToken(12);
-  if (Object.keys(missing).length) {
-    await putSettingsBulk(env, missing);
-    Object.assign(st, missing);
-  }
-  SETTINGS_CACHE = { at: Date.now(), data: st };
-  return st;
+  if (BOOTSTRAP_PROMISE) return BOOTSTRAP_PROMISE;
+  BOOTSTRAP_PROMISE = (async () => {
+    try {
+      // مسیر سریع: اگر جدول settings از قبل وجود دارد و پر شده، صفر کوئری CREATE/ALTER اجرا کن!
+      const rows = await env.DB.prepare('SELECT key, value FROM settings').all();
+      if (rows?.results?.length >= 5) {
+        const st = {};
+        for (const r of rows.results) st[r.key] = r.value;
+        if (st.path && st.trojan_password) {
+          SCHEMA_READY = true;
+          SETTINGS_CACHE = { at: Date.now(), data: st };
+          return st;
+        }
+      }
+    } catch {
+      // جدول هنوز ساخته نشده (مثلاً در نصب اولیه یا تست E2E) -> اجرای کامل ensureSchema
+    }
+    await ensureSchema(env);
+    const st = await allSettings(env);
+    const missing = {};
+    for (const [k, v] of Object.entries(DEFAULTS)) if (st[k] === undefined) missing[k] = v;
+    if (!st.path) missing.path = '/' + randomToken(6).slice(0, 12);
+    if (!st.trojan_password) missing.trojan_password = randomToken(16);
+    if (!st.admin_chat_id && env.ADMIN_CHAT_ID) missing.admin_chat_id = String(env.ADMIN_CHAT_ID);
+    if (!st.ip_pool) missing.ip_pool = CF_GOOD_IPS.join('\n');
+    if (!st.public_host) missing.public_host = url.host;
+    if (!st.recovery_code) missing.recovery_code = randomToken(12);
+    if (Object.keys(missing).length) {
+      await putSettingsBulk(env, missing);
+      Object.assign(st, missing);
+    }
+    SETTINGS_CACHE = { at: Date.now(), data: st };
+    return st;
+  })().finally(() => {
+    BOOTSTRAP_PROMISE = null;
+  });
+  return BOOTSTRAP_PROMISE;
 }

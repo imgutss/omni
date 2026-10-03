@@ -473,17 +473,23 @@ const UUID_ALIASES = {
   '304ab7a9-7db0-4d10-9a3e-6237e533fcd0': 'Alim',
   '8f07153b-bfe4-4cb3-be34-2c92f8640a57': 'Alim',
 };
+const INFLIGHT_UUID = new Map();
 
 async function findUserByUuid(env, uuid) {
   const key = String(uuid || '').toLowerCase();
   const c = USER_CACHE.get(key);
-  if (c && Date.now() - c.at < 60000) return c.user;
-  let u = await env.DB.prepare('SELECT * FROM users WHERE lower(uuid) = ?').bind(key).first();
-  if (!u && UUID_ALIASES[key]) {
-    u = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(UUID_ALIASES[key]).first();
-  }
-  USER_CACHE.set(key, { at: Date.now(), user: u || null });
-  return u;
+  if (c && Date.now() - c.at < 120000) return c.user;
+  if (INFLIGHT_UUID.has(key)) return INFLIGHT_UUID.get(key);
+  const p = (async () => {
+    let u = await env.DB.prepare('SELECT * FROM users WHERE lower(uuid) = ?').bind(key).first();
+    if (!u && UUID_ALIASES[key]) {
+      u = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(UUID_ALIASES[key]).first();
+    }
+    USER_CACHE.set(key, { at: Date.now(), user: u || null });
+    return u;
+  })().finally(() => INFLIGHT_UUID.delete(key));
+  INFLIGHT_UUID.set(key, p);
+  return p;
 }
 
 async function warmPasswordMap(env, trojanGlobalPass) {
