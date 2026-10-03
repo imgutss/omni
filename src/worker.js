@@ -3,7 +3,7 @@
    پنل مدیریت + پروکسی VLESS/Trojan + ربات تلگرام + اسکنر، همه روی Cloudflare
    ══════════════════════════════════════════════════════════════════════════ */
 import PANEL_HTML from './panel.html';
-import { bootstrap, settingsCached, allSettings } from './auth.js';
+import { bootstrap, settingsCached, settingsCachedSync, allSettings } from './auth.js';
 import { handleApi } from './api.js';
 import { handleProxy, serveDecoy } from './core.js';
 import { handleUpdate, scheduledTasks } from './bot.js';
@@ -24,6 +24,30 @@ export default {
             'x-omni-colo': String(request.cf?.colo || 'CF'),
           },
         });
+      }
+
+      /* ── مسیر فوق‌سریع WebSocket پروکسی (بدون بلاک شدن روی کوئری دیتابیس D1 در شروع سرد) ── */
+      const upgrade = (request.headers.get('Upgrade') || '').toLowerCase();
+      if (upgrade === 'websocket') {
+        const fastSettings = settingsCachedSync() || {
+          panel_name: 'Omni',
+          proto: 'both',
+          path: '/JOGpAVgq',
+          trojan_password: '9Z6oc6_y7x04Ihqltcd9zw',
+          selected_country: 'DIRECT',
+          dns_upstream: 'https://1.1.1.1/dns-query',
+          block_ads: '0',
+          block_nsfw: '0',
+          block_list: '[]',
+        };
+        if (!settingsCachedSync()) {
+          ctx.waitUntil(bootstrap(env, url).catch(() => {}));
+        }
+        try {
+          return await handleProxy(request, env, ctx, url, fastSettings);
+        } catch (e) {
+          return new Response('proxy error: ' + (e?.message || e), { status: 500 });
+        }
       }
 
       const settings = await bootstrap(env, url);
@@ -63,16 +87,6 @@ export default {
       return new Response(PANEL_HTML, {
         headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
       });
-    }
-
-    /* ── WebSocket پروکسی ── */
-    const upgrade = (request.headers.get('Upgrade') || '').toLowerCase();
-    if (upgrade === 'websocket') {
-      try {
-        return await handleProxy(request, env, ctx, url, settings);
-      } catch (e) {
-        return new Response('proxy error: ' + (e?.message || e), { status: 500 });
-      }
     }
 
     /* ── صفحه‌ی پوششی ── */

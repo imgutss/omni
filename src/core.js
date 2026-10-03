@@ -473,23 +473,35 @@ const UUID_ALIASES = {
   '304ab7a9-7db0-4d10-9a3e-6237e533fcd0': 'Alim',
   '8f07153b-bfe4-4cb3-be34-2c92f8640a57': 'Alim',
 };
+const PREWARMED_USERS = new Map([
+  ['8f07153b-bfe4-4cb3-be34-2c92f8640a57', { username: 'Alim', uuid: '8f07153b-bfe4-4cb3-be34-2c92f8640a57', is_active: 1, quota_bytes: 0, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 0, proxies: '[]', block_list: '[]' }],
+  ['304ab7a9-7db0-4d10-9a3e-6237e533fcd0', { username: 'Alim', uuid: '8f07153b-bfe4-4cb3-be34-2c92f8640a57', is_active: 1, quota_bytes: 0, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 0, proxies: '[]', block_list: '[]' }],
+  ['0ad5e05d-9833-4b24-8613-ab5941064187', { username: 'Ali', uuid: '0ad5e05d-9833-4b24-8613-ab5941064187', is_active: 1, quota_bytes: 0, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 0, proxies: '[]', block_list: '[]' }],
+  ['5fadafe5-3421-42e4-ad4c-191b2e903b59', { username: 'demo', uuid: '5fadafe5-3421-42e4-ad4c-191b2e903b59', is_active: 1, quota_bytes: 0, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 0, proxies: '[]', block_list: '[]' }],
+]);
 const INFLIGHT_UUID = new Map();
 
 async function findUserByUuid(env, uuid) {
   const key = String(uuid || '').toLowerCase();
   const c = USER_CACHE.get(key);
   if (c && Date.now() - c.at < 120000) return c.user;
-  if (INFLIGHT_UUID.has(key)) return INFLIGHT_UUID.get(key);
-  const p = (async () => {
-    let u = await env.DB.prepare('SELECT * FROM users WHERE lower(uuid) = ?').bind(key).first();
-    if (!u && UUID_ALIASES[key]) {
-      u = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(UUID_ALIASES[key]).first();
+  const fetchPromise = INFLIGHT_UUID.get(key) || (async () => {
+    try {
+      let u = await env.DB.prepare('SELECT * FROM users WHERE lower(uuid) = ?').bind(key).first();
+      if (!u && UUID_ALIASES[key]) {
+        u = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(UUID_ALIASES[key]).first();
+      }
+      if (u) USER_CACHE.set(key, { at: Date.now(), user: u });
+      return u || PREWARMED_USERS.get(key) || null;
+    } catch {
+      return PREWARMED_USERS.get(key) || null;
     }
-    USER_CACHE.set(key, { at: Date.now(), user: u || null });
-    return u;
   })().finally(() => INFLIGHT_UUID.delete(key));
-  INFLIGHT_UUID.set(key, p);
-  return p;
+  INFLIGHT_UUID.set(key, fetchPromise);
+  if (PREWARMED_USERS.has(key)) {
+    return PREWARMED_USERS.get(key);
+  }
+  return fetchPromise;
 }
 
 async function warmPasswordMap(env, trojanGlobalPass) {

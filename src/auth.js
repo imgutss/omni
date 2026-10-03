@@ -182,6 +182,7 @@ export async function putSettingsBulk(env, obj) {
 /* ─────────── کش تنظیمات در حافظه‌ی ورکر ─────────── */
 let SETTINGS_CACHE = { at: 0, data: null };
 export function invalidateSettings() { SETTINGS_CACHE = { at: 0, data: null }; }
+export function settingsCachedSync() { return SETTINGS_CACHE.data; }
 export async function settingsCached(env, maxAgeMs = 15000) {
   if (SETTINGS_CACHE.data && Date.now() - SETTINGS_CACHE.at < maxAgeMs) return SETTINGS_CACHE.data;
   const data = await allSettings(env);
