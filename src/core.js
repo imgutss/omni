@@ -3,7 +3,7 @@
    هسته‌ی تونل WebSocket برای VLESS و Trojan روی Cloudflare Workers
    - پشتیبانی کامل از TLS Fragmentation ایرانسل و مخابرات با صف سریال‌شده‌ی بدون ریزش
      (حفظ تا ۲۵۶ قطعه / ۶۴ کیلوبایت ClientHello بدون تداخل و بدون دوباره‌نویسی)
-   - پشتیبانی از SOCKS5 و HTTP CONNECT (از مخزن VIP زئوس) برای باز کردن Google Gemini و هوش مصنوعی
+   - پشتیبانی از SOCKS5 و HTTP CONNECT (از مخزن VIP اومنی) برای باز کردن Google Gemini و هوش مصنوعی
    - کش هوشمند مقاصد غیرکلودفلر (NON_CF_HOST_CACHE) برای حذف کامل پرش پینگ فرانسه و سایر کشورها
    - پشتیبانی از حالت اتصال مستقیم (Direct Mode) و تک‌لوکیشن (?cc=DE, ?cc=US, ?mode=direct)
    ══════════════════════════════════════════════════════════════════════════ */
@@ -28,19 +28,10 @@ export const NAT64_PREFIXES = [
   '2a02:898:146:64::',
 ];
 
-/** کش دامنه‌هایی که پشت کلودفلر نیستند و ProxyIP روی آن‌ها TLS Alert 0x15 برمی‌گرداند.
-    این کش باعث می‌شود پینگ فرانسه و سایر کشورها روی گوگل، اینستاگرام، تلگرام و یوتیوب
-    هرگز از ۱۱۰ms به ۱۰۰۰ms نپرد! */
+/** کش دامنه‌های مدیا/استریم که پشت کلودفلر نیستند و اتصال مستقیم به آن‌ها سریع‌ترین پینگ را می‌دهد.
+    مهم: دامنه‌های گوگل (google.com / googleapis.com) نباید در این لیست باشند تا ترافیک اپ اندروید Gemini
+    همیشه از پروکسی IPv4 آمریکا عبور کند و هرگز خطای ریجن (This country isn't supported) ندهد! */
 const NON_CF_HOST_CACHE = new Set([
-  'www.google.com',
-  'google.com',
-  'accounts.google.com',
-  'apis.google.com',
-  'www.gstatic.com',
-  'ssl.gstatic.com',
-  'fonts.gstatic.com',
-  'play.googleapis.com',
-  'www.googleapis.com',
   'youtube.com',
   'www.youtube.com',
   'm.youtube.com',
@@ -56,21 +47,33 @@ const NON_CF_HOST_CACHE = new Set([
   't.me',
 ]);
 
-/** دامنه‌های Google Gemini و هوش مصنوعی که به آی‌پی تمیز IPv4 آمریکا/اروپا نیاز دارند */
+/** دامنه‌های Google / Gemini (وب + اپلیکیشن اندروید Google / Gemini) و سرویس‌های هوش مصنوعی */
 const GEMINI_AI_SUFFIXES = [
   'gemini.google.com',
   'bard.google.com',
   'aistudio.google.com',
   'makersuite.google.com',
   'generativelanguage.googleapis.com',
+  'proactivebackend-pa.googleapis.com',
+  'robin-pa.googleapis.com',
+  'assistant-s3-pa.googleapis.com',
+  'alkalimakersuite-pa.googleapis.com',
   'alkalimakersuite-pa.clients6.google.com',
   'aisandbox-pa.googleapis.com',
+  'oauthaccountmanager.googleapis.com',
+  'optimizationguide-pa.googleapis.com',
   'notebooklm.google.com',
   'notebooklm.google',
   'labs.google',
   'jules.google.com',
   'opal.google',
   'deepmind.google',
+  'ai.google',
+  'search.app',
+  'google.com',
+  'googleapis.com',
+  'gstatic.com',
+  '1e100.net',
   'chatgpt.com',
   'openai.com',
   'oaistatic.com',
@@ -81,20 +84,105 @@ const GEMINI_AI_SUFFIXES = [
   'perplexity.ai',
 ];
 
-export function isGeminiOrAiHost(host) {
+function isYoutubeMediaHost(host) {
   const h = String(host || '').trim().toLowerCase().replace(/\.$/, '');
   if (!h) return false;
+  return (
+    h === 'youtube.com' ||
+    h.endsWith('.youtube.com') ||
+    h === 'youtu.be' ||
+    h.endsWith('.googlevideo.com') ||
+    h.endsWith('.ytimg.com') ||
+    h.endsWith('.ggpht.com')
+  );
+}
+
+export function isGeminiOrAiHost(host) {
+  const h = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+  if (!h || isYoutubeMediaHost(h)) return false;
   return GEMINI_AI_SUFFIXES.some((suf) => h === suf || h.endsWith('.' + suf));
+}
+
+/** تشخیص آی‌پی‌های مستقیم گوگل (IPv4 و IPv6) وقتی اپلیکیشن اندروید Gemini آی‌پی از پیش Resolve شده می‌فرستد */
+export function isGoogleIpLiteral(host) {
+  const h = String(host || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (!h) return false;
+  if (h.includes(':')) {
+    return (
+      h.startsWith('2a00:1450:') ||
+      h.startsWith('2607:f8b0:') ||
+      h.startsWith('2001:4860:')
+    );
+  }
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (!m) return false;
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  return (
+    (a === 142 && (b === 250 || b === 251)) ||
+    (a === 172 && (b === 217 || b === 253)) ||
+    (a === 216 && (b === 58 || b === 239)) ||
+    (a === 74 && b === 125) ||
+    (a === 64 && b === 233) ||
+    (a === 108 && b === 177) ||
+    (a === 173 && b === 194) ||
+    (a === 209 && b === 85)
+  );
+}
+
+/** استخراج نام دامنه (SNI) از هدر TLS ClientHello (حتی در حالت تکه‌تکه شدن با TLS Fragment) */
+export function extractTlsSni(chunks) {
+  if (!chunks || !chunks.length) return null;
+  let total = 0;
+  for (const c of chunks) total += c.byteLength;
+  if (total < 43) return null;
+  const buf = new Uint8Array(Math.min(total, 2048));
+  let off = 0;
+  for (const c of chunks) {
+    const n = Math.min(c.byteLength, buf.byteLength - off);
+    if (n <= 0) break;
+    buf.set(c.subarray(0, n), off);
+    off += n;
+  }
+  if (buf[0] !== 0x16 || buf[1] !== 0x03 || buf[5] !== 0x01) return null;
+  let p = 43;
+  if (p >= buf.byteLength) return null;
+  const sessIdLen = buf[p];
+  p += 1 + sessIdLen;
+  if (p + 2 > buf.byteLength) return null;
+  const cipherLen = (buf[p] << 8) | buf[p + 1];
+  p += 2 + cipherLen;
+  if (p + 1 > buf.byteLength) return null;
+  const compLen = buf[p];
+  p += 1 + compLen;
+  if (p + 2 > buf.byteLength) return null;
+  const extTotalLen = (buf[p] << 8) | buf[p + 1];
+  p += 2;
+  const end = Math.min(buf.byteLength, p + extTotalLen);
+  while (p + 4 <= end) {
+    const extType = (buf[p] << 8) | buf[p + 1];
+    const extLen = (buf[p + 2] << 8) | buf[p + 3];
+    p += 4;
+    if (p + extLen > end) break;
+    if (extType === 0x0000 && extLen >= 5) {
+      let q = p + 2;
+      const nameType = buf[q];
+      const nameLen = (buf[q + 1] << 8) | buf[q + 2];
+      q += 3;
+      if (nameType === 0 && q + nameLen <= p + extLen) {
+        return dec.decode(buf.subarray(q, q + nameLen)).trim().toLowerCase();
+      }
+    }
+    p += extLen;
+  }
+  return null;
 }
 
 function isKnownNonCfHost(host) {
   const h = String(host || '').trim().toLowerCase().replace(/\.$/, '');
   if (!h) return false;
-  if (NON_CF_HOST_CACHE.has(h)) return true;
+  if (NON_CF_HOST_CACHE.has(h) || isYoutubeMediaHost(h)) return true;
   if (
-    h.endsWith('.googlevideo.com') ||
-    h.endsWith('.googleusercontent.com') ||
-    h.endsWith('.gvt1.com') ||
     h.endsWith('.cdninstagram.com') ||
     h.endsWith('.fbcdn.net') ||
     h.endsWith('.whatsapp.net') ||
@@ -561,6 +649,33 @@ async function authorizeRequest(env, settings, request, cred) {
   return { ok: true, user };
 }
 
+function parseDnsQuestion(q) {
+  if (!q || q.byteLength < 17) return null;
+  const qdcount = (q[4] << 8) | q[5];
+  if (qdcount < 1) return null;
+  let off = 12;
+  const labels = [];
+  while (off < q.byteLength) {
+    const len = q[off++];
+    if (len === 0) break;
+    if ((len & 0xc0) !== 0 || off + len > q.byteLength) return null;
+    labels.push(dec.decode(q.subarray(off, off + len)));
+    off += len;
+  }
+  if (off + 4 > q.byteLength) return null;
+  const qtype = (q[off] << 8) | q[off + 1];
+  const qEnd = off + 4;
+  const emptyReply = new Uint8Array(qEnd);
+  emptyReply.set(q.subarray(0, qEnd));
+  emptyReply[2] = (q[2] & 0x79) | 0x80; // QR=1, Opcode=0, RD=copied
+  emptyReply[3] = 0x80; // RA=1, RCODE=0 (NOERROR)
+  emptyReply[4] = 0x00; emptyReply[5] = 0x01; // QDCOUNT=1
+  emptyReply[6] = 0x00; emptyReply[7] = 0x00; // ANCOUNT=0
+  emptyReply[8] = 0x00; emptyReply[9] = 0x00; // NSCOUNT=0
+  emptyReply[10] = 0x00; emptyReply[11] = 0x00; // ARCOUNT=0
+  return { name: labels.join('.').toLowerCase(), qtype, emptyReply };
+}
+
 async function handleUdpDns(ws, cred, dnsUpstream, stat) {
   let vlessHeaderSent = false;
   const upstream = dnsUpstream || 'https://1.1.1.1/dns-query';
@@ -594,6 +709,13 @@ async function handleUdpDns(ws, cred, dnsUpstream, stat) {
       const query = chunk.subarray(offset, offset + len);
       offset += len;
       try {
+        // حذف فوری پاسخ‌های AAAA (IPv6 - نوع ۲۸) و HTTPS/SVCB (نوع ۶۵) داخل تانل
+        // تا اپلیکیشن اندروید Google Gemini و کلاینت‌های v2rayNG/PattNG همیشه از IPv4 خالص استفاده کنند
+        const parsedQ = parseDnsQuestion(query);
+        if (parsedQ && (parsedQ.qtype === 28 || parsedQ.qtype === 65)) {
+          sendDnsReply(parsedQ.emptyReply);
+          continue;
+        }
         const res = await fetch(upstream, {
           method: 'POST',
           headers: {
@@ -617,7 +739,7 @@ async function handleUdpDns(ws, cred, dnsUpstream, stat) {
 }
 
 /* ─────────── ساخت لیست کاندیدهای اتصال خروجی (Direct / SOCKS5 / HTTP / ProxyIP / NAT64) ─────────── */
-async function buildDialCandidates(request, settings, user, hostname, port, reqUrl) {
+async function buildDialCandidates(request, settings, user, hostname, port, reqUrl, sniHost = null) {
   const candidates = [];
   const seen = new Set();
 
@@ -638,9 +760,15 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
     addRaw({ ...parsed, label });
   };
 
-  const cfTarget = isCloudflareTarget(hostname);
-  const geminiAi = isGeminiOrAiHost(hostname);
-  const nonCfKnown = isKnownNonCfHost(hostname);
+  const effectiveHost = sniHost || hostname;
+  const cfTarget = isCloudflareTarget(hostname) || isCloudflareTarget(effectiveHost);
+  const ytMedia = isYoutubeMediaHost(effectiveHost) || isYoutubeMediaHost(hostname);
+  const geminiAi = !ytMedia && (
+    isGeminiOrAiHost(effectiveHost) ||
+    isGeminiOrAiHost(hostname) ||
+    isGoogleIpLiteral(hostname)
+  );
+  const nonCfKnown = isKnownNonCfHost(effectiveHost) || isKnownNonCfHost(hostname);
 
   const reqMode = (reqUrl?.searchParams?.get('mode') || '').trim().toLowerCase();
   const reqProxy = reqUrl?.searchParams?.get('proxyip') || '';
@@ -648,29 +776,20 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
   const isDirectMode = reqMode === 'direct' || rawCc === 'DIRECT' || rawCc === 'NONE';
   const selCountry = (!isDirectMode && rawCc) ? findCountry(rawCc) : null;
 
-  // ۱) اگر مقصد Google Gemini یا سرویس‌های هوش مصنوعی (ChatGPT, Claude, AI Studio) است:
-  // همیشه اول از پروکسی‌های SOCKS5/HTTP تاییدشده آمریکا/کانادا/اروپا عبور بده تا خطای ریجن ندهد!
+  // ۱) اگر مقصد Google / Gemini (وب یا اپلیکیشن اندروید Google / Gemini) یا سرویس‌های AI است:
+  // همیشه از پروکسی‌های SOCKS5/HTTP تاییدشده آمریکا/کانادا/اروپا (IPv4 خالص) عبور بده
+  // و هرگز به اتصال مستقیم ورکر (که آی‌پی IPv6 ایران‌دار کلودفلر را لو می‌دهد) فالبک نزن!
   if (geminiAi) {
     const countryVips = selCountry?.vipProxies || COUNTRY_VIP_PROXIES[selCountry?.cc] || [];
-    for (const v of [...countryVips, ...GEMINI_VIP_PROXIES]) {
+    for (const v of [...GEMINI_VIP_PROXIES, ...countryVips]) {
       addEntry(v, 1080, 'gemini-vip');
     }
-    // فالبک دوم برای Gemini/Google: تبدیل دامنه به آی‌پی IPv4 از طریق DoH تا کلودفلر از IPv6 ایران (2a05:f480) استفاده نکند
-    const v4Ip = await resolveIPv4DoH(hostname);
-    if (v4Ip) {
-      addRaw({ type: 'direct', hostname: v4Ip, port, label: 'direct-ipv4' });
-    }
-    addRaw({ type: 'direct', hostname, port, label: 'direct' });
     return candidates;
   }
 
   // ۲) اگر حالت «اتصال مستقیم 🌐 بدون پروکسی خروجی» انتخاب شده و مقصد کلودفلر نیست:
   // مستقیماً به مقصد وصل شو (کم‌ترین پینگ و بالاترین سرعت دانلود روی اینستاگرام، یوتیوب و تلگرام)
   if (isDirectMode && !cfTarget) {
-    if (hostname.endsWith('.google.com') || hostname === 'google.com') {
-      const v4Ip = await resolveIPv4DoH(hostname);
-      if (v4Ip) addRaw({ type: 'direct', hostname: v4Ip, port, label: 'direct-ipv4' });
-    }
     addRaw({ type: 'direct', hostname, port, label: 'direct' });
     for (const raw of DEFAULT_PROXY_IPS) addEntry(raw, 443, 'pool-proxy');
     return candidates;
@@ -684,9 +803,9 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
     ...(!isDirectMode ? safeJsonArray(settings?.proxy_ips) : []),
   ].filter(Boolean);
 
-  // ۴) سایت‌های بررسی آی‌پی (IP Check): اگر کاربر کشور خاصی را انتخاب کرده،
-  // از پروکسی VIP (SOCKS5/HTTP) یا ProxyIP همان کشور عبور بده تا آی‌پی و پرچم همان کشور نمایش داده شود
-  const hLow = String(hostname || '').trim().toLowerCase();
+  // ۴) سایت‌های بررسی آی‌پی و تست اتصال کلاینت‌ها (PattNG / v2rayNG):
+  // اگر کاربر لوکیشن آمریکا (US) یا کشور دارای VIP را انتخاب کرده، ابتدا از پروکسی IPv4 خالص عبور بده
+  const hLow = String(effectiveHost || hostname || '').trim().toLowerCase();
   const isIpCheck = (
     hLow === 'api.ipify.org' ||
     hLow === 'ipinfo.io' ||
@@ -697,7 +816,8 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
     hLow === 'whoer.net' ||
     hLow === 'ipleak.net' ||
     hLow === 'myip.com' ||
-    hLow === 'checkip.amazonaws.com'
+    hLow === 'checkip.amazonaws.com' ||
+    (selCountry?.cc === 'US' && cfTarget)
   );
   if (isIpCheck && selCountry) {
     const countryVips = selCountry.vipProxies || COUNTRY_VIP_PROXIES[selCountry.cc] || [];
@@ -709,19 +829,14 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
     }
   }
 
-  // ۵) اگر مقصد در لیست دامنه‌های غیرکلودفلر شناخته شده است (مثل google.com، instagram.com، youtube.com)،
-  // برای google.com ابتدا به IPv4 مستقیم وصل شو تا خطای IPv6 ایران رخ ندهد.
+  // ۵) اگر مقصد در لیست دامنه‌های مدیا/استریم غیرکلودفلر است (مثل instagram.com، youtube.com، telegram.org)،
+  // مستقیماً بدون تاخیر وصل شو
   if (nonCfKnown && !cfTarget) {
-    if (hostname.endsWith('.google.com') || hostname === 'google.com') {
-      const v4Ip = await resolveIPv4DoH(hostname);
-      if (v4Ip) addRaw({ type: 'direct', hostname: v4Ip, port, label: 'direct-ipv4' });
-    }
     addRaw({ type: 'direct', hostname, port, label: 'direct' });
     return candidates;
   }
 
-  // ۶) مطابق معماری ZEUS v2.2.5:
-  // برای مقاصد غیرکلودفلر، ابتدا اتصال مستقیم (Direct) با پینگ ۲-۴ میلی‌ثانیه برقرار می‌شود
+  // ۶) برای مقاصد غیرکلودفلر، ابتدا اتصال مستقیم (Direct) با پینگ ۲-۴ میلی‌ثانیه برقرار می‌شود
   // و اگر سایت مقصد روی CDN کلودفلر باشد (خطای 1042 در اتصال مستقیم)، بلافاصله به ProxyIP کشور انتخابی فالبک می‌زند!
   if (!cfTarget) {
     addRaw({ type: 'direct', hostname, port, label: 'direct' });
@@ -934,8 +1049,23 @@ export async function handleProxy(request, env, ctx, url, settings) {
       }
     }
 
-    const candidates = await buildDialCandidates(request, settings, user, cred.hostname, cred.port, url);
+    // اگر مقصد روی پورت ۴۴۳ یک آی‌پی مستقیم است (IPv4 یا IPv6)، تا ۳۶ میلی‌ثانیه صبر کن تا قطعات TLS Fragment برسند
+    // و نام دامنه واقعی (SNI مانند gemini.google.com یا proactivebackend-pa.googleapis.com) استخراج شود
+    let sniHost = extractTlsSni(initialClientChunks);
+    const isIpTarget = /^\d{1,3}(\.\d{1,3}){3}$/.test(cred.hostname) || cred.hostname.includes(':');
+    if (!sniHost && cred.port === 443 && isIpTarget) {
+      for (let w = 0; w < 3 && !sniHost; w++) {
+        await new Promise((r) => setTimeout(r, 12));
+        sniHost = extractTlsSni(initialClientChunks);
+      }
+    }
+
+    const candidates = await buildDialCandidates(request, settings, user, cred.hostname, cred.port, url, sniHost);
     let skipProxyIp = false;
+    const dialHost = (cred.hostname.includes(':') && sniHost)
+      ? sniHost
+      : (sniHost && isGoogleIpLiteral(cred.hostname) ? sniHost : cred.hostname);
+    const finalDialHost = dialHost.includes(':') && isGoogleIpLiteral(dialHost) ? 'www.google.com' : dialHost;
 
     for (let i = 0; i < candidates.length; i++) {
       const cand = candidates[i];
@@ -945,9 +1075,9 @@ export async function handleProxy(request, env, ctx, url, settings) {
       let sock = null;
       try {
         if (cand.type === 'socks5') {
-          sock = await connectSocks5(cand, cred.hostname, cred.port, 2800);
+          sock = await connectSocks5(cand, finalDialHost, cred.port, 2800);
         } else if (cand.type === 'http') {
-          sock = await connectHttpTunnel(cand, cred.hostname, cred.port, 2800);
+          sock = await connectHttpTunnel(cand, finalDialHost, cred.port, 2800);
         } else {
           sock = connect({ hostname: cand.hostname, port: cand.port });
           if (sock.opened) {

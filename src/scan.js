@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Omni — src/scan.js
-   اسکنر واقعی آی‌پی تمیز (IPv4 + IPv6 + BYOIP زئوس + دامنه‌های .ir) + اسکن یکجای همه کشورها
+   اسکنر واقعی آی‌پی تمیز (QoS IPv4 + IPv6 + سایت‌های تمیز جهانی + دامنه‌های .ir) + تست واقعی سرورهای خروجی کشورها
    ══════════════════════════════════════════════════════════════════════════ */
 import { connect } from 'cloudflare:sockets';
 import {
@@ -9,6 +9,12 @@ import {
   findCountry,
   VERIFIED_COUNTRIES,
   PRIMARY_LOCATIONS,
+  OMNI_HYBRID_POOL,
+  OMNI_QOS_V4,
+  OMNI_CLEAN_SITES,
+  OMNI_CLEAN_V6,
+  OMNI_CLEAN_IR,
+  DEAD_BYOIP_BLACKLIST,
   VERIFIED_ZEUS_POOL,
   ZEUS_IR_DOMAINS,
   ZEUS_BYOIP_V4,
@@ -22,6 +28,12 @@ export {
   findCountry,
   VERIFIED_COUNTRIES,
   PRIMARY_LOCATIONS,
+  OMNI_HYBRID_POOL,
+  OMNI_QOS_V4,
+  OMNI_CLEAN_SITES,
+  OMNI_CLEAN_V6,
+  OMNI_CLEAN_IR,
+  DEAD_BYOIP_BLACKLIST,
   VERIFIED_ZEUS_POOL,
   ZEUS_IR_DOMAINS,
   ZEUS_BYOIP_V4,
@@ -41,8 +53,14 @@ for (const c of WORLD_COUNTRIES) {
   }
 }
 
-/** مجموعه آی‌پی‌ها و دامنه‌های تاییدشده با تست WebSocket 101 از مخزن زئوس */
-export const VERIFIED_BYOIP_SET = new Set(VERIFIED_ZEUS_POOL.map((x) => String(x || '').trim().toLowerCase()));
+/** مجموعه آی‌پی‌ها و دامنه‌های تاییدشده با تست WebSocket 101 */
+export const VERIFIED_BYOIP_SET = new Set([
+  ...OMNI_HYBRID_POOL,
+  ...OMNI_QOS_V4,
+  ...OMNI_CLEAN_SITES,
+  ...OMNI_CLEAN_IR,
+  '213.241.198.123',
+].map((x) => String(x || '').trim().toLowerCase()));
 
 /** رنج‌های رسمی IPv4 کلودفلر (ASN 13335 / 209242) */
 export const CF_OFFICIAL_V4_CIDRS = [
@@ -74,7 +92,7 @@ const CF_PARSED_V4 = CF_OFFICIAL_V4_CIDRS.map(([base, bits]) => {
   return { net: (ip4ToInt(base) & mask) >>> 0, mask };
 });
 
-/** بررسی تعلق آی‌پی به شبکه کلودفلر، مخزن BYOIP تاییدشده زئوس، یا سرورهای خروجی کشورها */
+/** بررسی تعلق آی‌پی به شبکه کلودفلر، مخزن BYOIP تاییدشده اومنی، یا سرورهای خروجی کشورها */
 export function isCloudflareIp(ip) {
   const s = String(ip || '').trim().replace(/^\[|\]$/g, '');
   if (!s) return false;
@@ -122,46 +140,41 @@ export const PORTS_PLAIN = [8080, 80, 8880, 2052, 2082, 2086, 2095];
 /** پورت‌های TLS کلودفلر */
 export const PORTS_TLS = [443, 2053, 8443, 2083, 2087, 2096];
 
-/** دامنه‌های پشت کلودفلر (شامل دامنه‌های .ir تاییدشده برای ایرانسل و مخابرات) */
+/** دامنه‌های پشت کلودفلر (سایت‌های جهانی Speedtest/Plato/Udemy + دامنه‌های .ir تاییدشده) */
 export const CF_DOMAINS = [
+  'www.speedtest.net',
+  'platoapp.com',
+  'www.udemy.com',
+  'www.fiverr.com',
+  'discord.com',
   '01d.ir',
   '0seo.ir',
   '18m.ir',
   '1car.ir',
   '0nlysms.ir',
-  '10az10.ir',
-  'www.speedtest.net',
-  'cdn.jsdelivr.net',
-  'www.visa.com',
-  'icook.tw',
 ];
 
-/** آی‌پی‌های تمیز پیش‌فرض (ترکیبی از ۳ آی‌پی طلایی پیش‌فرض زئوس + BYOIP تاییدشده برای همراه اول، ایرانسل و مخابرات) */
+/** آی‌پی‌های تمیز پیش‌فرض (نسل جدید QoS IPv4 برای همراه اول، ایرانسل و مخابرات) */
 export const CF_GOOD_IPS = [
-  '162.159.192.1',
-  '104.16.0.1',
-  '104.17.0.1',
   '172.67.181.32',
-  '213.241.198.123',
-  '94.247.142.1',
-  '57.128.178.36',
-  '188.114.96.1',
-  '31.185.108.22',
-  '185.207.196.148',
-  '94.140.0.10',
+  '104.17.147.119',
+  '104.18.3.91',
+  '172.67.163.24',
+  '104.16.142.53',
+  '162.159.137.74',
+  '104.17.148.77',
+  '172.67.217.91',
+  '104.18.2.237',
+  '104.16.142.237',
+  '172.67.181.77',
+  '104.18.113.47',
+  '162.159.192.1',
+  '104.17.148.22',
   '188.114.96.3',
   '172.64.80.1',
-  '104.17.148.22',
-  '188.42.145.155',
-  '45.85.118.1',
-  '89.117.112.10',
-  '185.18.184.181',
-  '172.67.181.14',
-  '104.18.32.115',
-  '104.21.32.115',
 ];
 
-export const SEED_IPS = [...IPV6_SEEDS, ...CF_GOOD_IPS, ...ZEUS_IR_DOMAINS.slice(0, 6)];
+export const SEED_IPS = [...OMNI_HYBRID_POOL];
 
 const BLOCKED_EXACT = new Set([
   '104.16.132.229',
@@ -271,7 +284,7 @@ export async function tcpProbe(host, { port = 443, timeoutMs = 2500 } = {}) {
 }
 
 /**
- * پروب HTTP/TLS روی کاندیدها (شامل سرورهای ProxyIP کشورها، آی‌پی‌های BYOIP زئوس و دامنه‌ها)
+ * پروب HTTP/TLS روی کاندیدها (شامل سرورهای ProxyIP کشورها، آی‌پی‌های BYOIP اومنی و دامنه‌ها)
  */
 export async function httpProbe(target, { timeoutMs = 2500 } = {}) {
   const clean = String(target || '').trim().replace(/^\[|\]$/g, '');
@@ -313,7 +326,7 @@ export async function httpProbe(target, { timeoutMs = 2500 } = {}) {
     };
   }
 
-  // ۳) اگر آی‌پی در مخزن تاییدشده BYOIP زئوس است، با tcpProbe یا trace زمان واقعی گرفته می‌شود
+  // ۳) اگر آی‌پی در مخزن تاییدشده BYOIP اومنی است، با tcpProbe یا trace زمان واقعی گرفته می‌شود
   const t0 = Date.now();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);

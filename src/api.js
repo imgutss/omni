@@ -28,6 +28,12 @@ import {
   findCountry,
   scanAllCountries,
   COUNTRY_PROXY_MAP,
+  OMNI_HYBRID_POOL,
+  OMNI_QOS_V4,
+  OMNI_CLEAN_SITES,
+  OMNI_CLEAN_V6,
+  OMNI_CLEAN_IR,
+  DEAD_BYOIP_BLACKLIST,
   ZEUS_BYOIP_V4,
   ZEUS_IR_DOMAINS,
   VERIFIED_ZEUS_POOL,
@@ -300,14 +306,16 @@ export async function handleApi(request, env, ctx, url) {
     const seenAddr = new Set();
     const pushCand = (addr, ms, colo) => {
       const a = normalizeAddr(addr);
-      if (!a || seenAddr.has(a) || COUNTRY_PROXY_MAP.has(a.toLowerCase())) return;
+      if (!a || seenAddr.has(a) || COUNTRY_PROXY_MAP.has(a.toLowerCase()) || DEAD_BYOIP_BLACKLIST.has(a.toLowerCase())) return;
       seenAddr.add(a);
       const validMs = (ms !== null && ms !== undefined && ms !== '' && Number(ms) >= 25) ? Number(ms) : null;
       cands.push({ addr: a, ms: validMs, colo: colo || null });
     };
+    OMNI_QOS_V4.slice(0, 5).forEach((ip) => pushCand(ip, null, null));
+    OMNI_CLEAN_SITES.slice(0, 3).forEach((d) => pushCand(d, null, null));
+    OMNI_CLEAN_V6.slice(0, 3).forEach((v) => pushCand(v, null, null));
+    OMNI_CLEAN_IR.slice(0, 2).forEach((d) => pushCand(d, null, null));
     (ipRows.results || []).forEach((r) => pushCand(r.ip, r.ms, r.colo));
-    ZEUS_BYOIP_V4.slice(0, 4).forEach((ip) => pushCand(ip, null, null));
-    ZEUS_IR_DOMAINS.slice(0, 3).forEach((d) => pushCand(d, null, null));
     safeArray(settings.address_domains).forEach((d) => pushCand(d, null, null));
     pushCand(String(settings.public_host || '').replace(/^https?:\/\//, '').replace(/\/.*$/, ''), null, null);
     safeArray(settings.ipv6_pool).forEach((v) => pushCand(v, null, null));
@@ -675,32 +683,40 @@ export async function handleApi(request, env, ctx, url) {
     return json({ ok: true, total: results.length, alive: aliveCount, results });
   }
 
-  /* ───────── چرخش فوری آی‌پی‌های تمیز از مخزن تاییدشده زئوس (BYOIP + دامنه‌های .ir) ───────── */
+  /* ───────── چرخش فوری مخزن ترکیبی آی‌پی و سایت‌های تمیز (QoS IPv4 + سایت‌های جهانی + IPv6 + .ir) ───────── */
   if (p === '/api/diag/rotate-ips' && method === 'POST') {
     const body = await request.json().catch(() => ({}));
-    const offset = Math.floor(Math.random() * Math.max(1, ZEUS_BYOIP_V4.length - 8));
-    const pickedByoip = [];
-    for (let i = 0; i < 8; i++) {
-      pickedByoip.push(ZEUS_BYOIP_V4[(offset + i) % ZEUS_BYOIP_V4.length]);
+    const offset = Math.floor(Math.random() * Math.max(1, OMNI_QOS_V4.length - 6));
+    const pickedV4 = [];
+    for (let i = 0; i < 6; i++) {
+      pickedV4.push(OMNI_QOS_V4[(offset + i) % OMNI_QOS_V4.length]);
     }
-    const pickedIr = ZEUS_IR_DOMAINS.slice(0, 3);
+    const pickedSites = OMNI_CLEAN_SITES.slice(0, 4);
+    const pickedV6 = OMNI_CLEAN_V6.slice(0, 3);
+    const pickedIr = OMNI_CLEAN_IR.slice(0, 2);
     const candidates = [
-      '172.67.181.32',
-      '188.114.96.1',
-      ...pickedByoip,
+      ...pickedV4,
+      ...pickedSites,
+      ...pickedV6,
       ...pickedIr,
     ];
     const probed = await rankIpsHttp(candidates, { concurrency: 10, timeoutMs: 2200 });
     const aliveIps = probed.filter((r) => r.alive).map((r) => r.ip);
-    const finalClean = [...new Set([...aliveIps, ...pickedByoip.slice(0, 5), '172.67.181.32', '188.114.96.1'])].slice(0, 12);
-    const finalPool = [...new Set([...finalClean, ...CF_GOOD_IPS.slice(0, 8), ...pickedIr])].join('\n');
+    const finalClean = [...new Set([
+      ...pickedV4.slice(0, 5),
+      ...pickedSites.slice(0, 3),
+      ...pickedV6.slice(0, 2),
+      ...pickedIr.slice(0, 2),
+      ...aliveIps,
+    ])].slice(0, 14);
+    const finalPool = finalClean.join('\n');
     if (body.apply !== false) {
       await putSettingsBulk(env, {
         clean_ips: JSON.stringify(finalClean),
         ip_pool: finalPool,
       });
     }
-    await logEvent(env, 'info', `چرخش مخزن آی‌پی زئوس: ${finalClean.length} آی‌پی تمیز جدید جایگزین شد`);
+    await logEvent(env, 'info', `چرخش مخزن ترکیبی آی‌پی اومنی: ${finalClean.length} آدرس تمیز جدید جایگزین شد`);
     return json({ ok: true, clean_ips: finalClean, ip_pool: finalPool, results: probed });
   }
 

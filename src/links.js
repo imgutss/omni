@@ -3,13 +3,19 @@
    ساخت لینک‌های VLESS/Trojan، ساب‌لینک (base64/clash/sing-box) و صفحه‌ی وضعیت
    - پشتیبانی از فرمت استاندارد فرگمنت Xray/v2rayNG/MahsaNG (fragment=10-20,10-20,tlshello)
    - دسته‌بندی هوشمند کانفیگ‌ها برای هر ۳ اپراتور (همراه اول، ایرانسل، مخابرات)
-   - پشتیبانی از آی‌پی چرخشی زئوس (BYOIP + دامنه‌های .ir) + کانفیگ مستقیم و تک‌لوکیشن
+   - پشتیبانی از آی‌پی چرخشی اومنی (BYOIP + دامنه‌های .ir) + کانفیگ مستقیم و تک‌لوکیشن
    ══════════════════════════════════════════════════════════════════════════ */
 
 import {
   IPV6_SEEDS,
   CF_DOMAINS,
   CF_GOOD_IPS,
+  OMNI_HYBRID_POOL,
+  OMNI_QOS_V4,
+  OMNI_CLEAN_SITES,
+  OMNI_CLEAN_V6,
+  OMNI_CLEAN_IR,
+  DEAD_BYOIP_BLACKLIST,
   ZEUS_BYOIP_V4,
   ZEUS_IR_DOMAINS,
   VERIFIED_ZEUS_POOL,
@@ -20,14 +26,14 @@ import {
 
 const enc = encodeURIComponent;
 
-/* پریست‌های واقعی فرگمنت (دقیقاً مطابق مقادیر تست‌شده ZEUS v2.2.5 — تابع applyFragPreset) */
+/* پریست‌های استاندارد فرگمنت برای اپراتورهای ایران */
 export const FRAGMENT_PRESETS = [
   { id: 'none', label: '— بدون فرگمنت سراسری (کانفیگ‌های ویژه هر اپراتور جداگانه ساخته می‌شوند)', size: '', interval: '', packets: '' },
-  { id: 'irancell', label: '💛 ویژه ایرانسل (فرگمنت استاندارد زئوس: 100-200 / 5-10 / tlshello)', size: '100-200', interval: '5-10', packets: 'tlshello' },
-  { id: 'tci', label: '☎️ ویژه مخابرات و اینترنت ثابت (فرگمنت زئوس: 50-200 / 1-3 / tlshello)', size: '50-200', interval: '1-3', packets: 'tlshello' },
-  { id: 'mci', label: '📱 ویژه همراه اول (فرگمنت زئوس: 10-30 / 2-5 / tlshello)', size: '10-30', interval: '2-5', packets: 'tlshello' },
-  { id: 'rightel', label: '💜 ویژه رایتل و شاتل (فرگمنت زئوس: 50-100 / 2-5 / tlshello)', size: '50-100', interval: '2-5', packets: 'tlshello' },
-  { id: 'gaming', label: '🚀 حالت فوق سریع زئوس (پینگ پایین: 200-3000 / 1-2 / tlshello)', size: '200-3000', interval: '1-2', packets: 'tlshello' },
+  { id: 'irancell', label: '💛 ویژه ایرانسل (فرگمنت استاندارد: 100-200 / 5-10 / tlshello)', size: '100-200', interval: '5-10', packets: 'tlshello' },
+  { id: 'tci', label: '☎️ ویژه مخابرات و اینترنت ثابت (فرگمنت: 50-200 / 1-3 / tlshello)', size: '50-200', interval: '1-3', packets: 'tlshello' },
+  { id: 'mci', label: '📱 ویژه همراه اول (فرگمنت: 10-30 / 2-5 / tlshello)', size: '10-30', interval: '2-5', packets: 'tlshello' },
+  { id: 'rightel', label: '💜 ویژه رایتل و شاتل (فرگمنت: 50-100 / 2-5 / tlshello)', size: '50-100', interval: '2-5', packets: 'tlshello' },
+  { id: 'gaming', label: '🚀 حالت گیمینگ فوق سریع (پینگ پایین: 200-3000 / 1-2 / tlshello)', size: '200-3000', interval: '1-2', packets: 'tlshello' },
   { id: 'aggressive', label: '🔥 ضد فیلتر تهاجمی (فرگمنت ریز: 10-20 / 10-20 / tlshello)', size: '10-20', interval: '10-20', packets: 'tlshello' },
 ];
 
@@ -77,12 +83,12 @@ export function choosePorts(settings, count = 5) {
   return [...new Set(out)].slice(0, Math.max(1, Math.min(13, count)));
 }
 
-/** انتخاب چرخشی آی‌پی‌های تمیز از مخزن تاییدشده زئوس بر اساس زمان (در صورت فعال بودن آی‌پی چرخشی) */
+/** انتخاب چرخشی آی‌پی‌های تمیز از مخزن ترکیبی اومنی بر اساس زمان (در صورت فعال بودن آی‌پی چرخشی) */
 export function getRotatedZeusIps(settings, count = 8) {
   const rotateMins = Math.max(1, Number(settings?.rotate_minutes || 15));
   const autoRotate = String(settings?.auto_rotate || '0') === '1';
   const slot = autoRotate ? Math.floor(Date.now() / (rotateMins * 60_000)) : 0;
-  const pool = ZEUS_BYOIP_V4;
+  const pool = OMNI_QOS_V4;
   const out = [];
   for (let i = 0; i < count && i < pool.length; i++) {
     out.push(pool[(slot * 3 + i) % pool.length]);
@@ -90,11 +96,14 @@ export function getRotatedZeusIps(settings, count = 8) {
   return out;
 }
 
-/** استخر آدرس‌ها در سه سبد (IPv6 / IPv4 تمیز / دامنه) با حذف کامل سرورهای خروجی ProxyIP از لیست ورودی */
+/** استخر آدرس‌ها در سه سبد (IPv6 / IPv4 تمیز / دامنه) با حذف کامل سرورهای خروجی ProxyIP و آی‌پی‌های مرده از لیست ورودی */
 export function configPool(user, settings, cleanIps = []) {
   const cleanAddr = (x) => String(x ?? '').trim().replace(/^\[|\]$/g, '');
-  // مهم: سرورهای خروجی کشورها (COUNTRY_PROXY_MAP) هرگز نباید به عنوان آی‌پی ورودی کلاینت استفاده شوند
-  const isIngressCandidate = (addr) => isValidCandidate(addr) && !COUNTRY_PROXY_MAP.has(addr.toLowerCase());
+  // مهم: سرورهای خروجی کشورها (COUNTRY_PROXY_MAP) و آی‌پی‌های ازکارافتاده (DEAD_BYOIP_BLACKLIST) هرگز نباید به عنوان آی‌پی ورودی کلاینت استفاده شوند
+  const isIngressCandidate = (addr) => {
+    const low = String(addr || '').toLowerCase();
+    return isValidCandidate(addr) && !COUNTRY_PROXY_MAP.has(low) && !DEAD_BYOIP_BLACKLIST.has(low);
+  };
 
   const norm = (cleanIps || [])
     .map((r) => (typeof r === 'string' ? { ip: cleanAddr(r), hits: 0, ms: null } : { ...r, ip: cleanAddr(r?.ip ?? r?.addr) }))
@@ -127,9 +136,10 @@ export function configPool(user, settings, cleanIps = []) {
 
   const domain = uniq([
     ...userDom,
+    ...OMNI_CLEAN_SITES.slice(0, 4),
     ...settingsCleanDom,
     ...verifiedDomains,
-    ...ZEUS_IR_DOMAINS.slice(0, 6),
+    ...OMNI_CLEAN_IR.slice(0, 4),
     ...safeArray(settings.address_domains).map(cleanAddr).filter(isIngressCandidate),
     ...CF_DOMAINS,
   ]).slice(0, 10);
@@ -137,6 +147,7 @@ export function configPool(user, settings, cleanIps = []) {
   const ipv6 = String(settings.ipv6_enabled || '1') === '1'
     ? uniq([
         ...userV6,
+        ...OMNI_CLEAN_V6.slice(0, 4),
         ...settingsCleanV6,
         ...(selCountry?.v6 || []),
         ...verifiedV6,
@@ -148,8 +159,8 @@ export function configPool(user, settings, cleanIps = []) {
 
   const ip = uniq([
     ...userV4,
-    ...settingsCleanV4,
     ...rotatedByoip.slice(0, 5),
+    ...settingsCleanV4,
     ...verifiedV4,
     ...CF_GOOD_IPS,
     ...rotatedByoip.slice(5),
@@ -314,7 +325,7 @@ export function verifiedPairs(settings) {
 
 /**
  * ساخت کانفیگ‌های جامع و منظم برای یک کاربر (پشتیبانی ۱۰۰٪ از همراه اول، ایرانسل و مخابرات با متد ZEUS v2.2.5):
- *  ۱) گروه ۱ — 💛 ویژه ایرانسل و مخابرات (۳ آی‌پی طلایی زئوس 162.159.192.1 / 104.16.0.1 / 104.17.0.1 + BYOIP و دامنه‌های .ir با فرگمنت استاندارد زئوس و fp=chrome)
+ *  ۱) گروه ۱ — 💛 ویژه ایرانسل و مخابرات (۳ آی‌پی طلایی اومنی 162.159.192.1 / 104.16.0.1 / 104.17.0.1 + BYOIP و دامنه‌های .ir با فرگمنت استاندارد اومنی و fp=chrome)
  *  ۲) گروه ۲ — ⚡ سریع‌ترین آی‌پی‌های تمیز TLS 443 (مناسب همراه اول، ایرانسل و وای‌فای)
  *  ۳) گروه ۳ — 🚀 ویژه همراه اول IPv6 (پینگ ~105ms روی پورت‌های 443، 2053 و 8080)
  *  ۴) گروه ۴ — 🌐 اتصال مستقیم (کم‌ترین پینگ) + 🌍 کانفیگ‌های تک‌لوکیشن آماده (آمریکا Gemini/AI، آلمان، هلند، بریتانیا، فرانسه)
@@ -337,26 +348,26 @@ export function buildConfigs(user, settings, cleanIps = []) {
     plan.push({ address: a, port: p, cat, ...opts });
   };
 
-  // مقادیر دقیق فرگمنت زئوس v2.2.5 (Source.js خط 6923)
+  // مقادیر استاندارد فرگمنت اپراتورها
   const irancellFrag = { size: '100-200', interval: '5-10', packets: 'tlshello' };
   const tciFrag = { size: '50-200', interval: '1-3', packets: 'tlshello' };
-  const zeusFastFrag = { size: '200-3000', interval: '1-2', packets: 'tlshello' };
-  const byoipList = pool.rotatedByoip?.length ? pool.rotatedByoip : ZEUS_BYOIP_V4;
-  const irDomList = ZEUS_IR_DOMAINS;
+  const fastFrag = { size: '200-3000', interval: '1-2', packets: 'tlshello' };
+  const qosV4List = pool.rotatedByoip?.length ? pool.rotatedByoip : OMNI_QOS_V4;
+  const irDomList = OMNI_CLEAN_IR;
 
-  // ۱) گروه اول: ویژه ایرانسل و مخابرات (۳ آی‌پی طلایی زئوس + BYOIP تاییدشده + دامنه .ir با فرگمنت استاندارد زئوس)
-  add('162.159.192.1', 443, '💛 ایرانسل/مخابرات', { forceFragment: irancellFrag });
-  add('104.16.0.1', 443, '💛 ایرانسل/مخابرات', { forceFragment: irancellFrag });
-  add('104.17.0.1', 2053, '☎️ مخابرات/ثابت', { forceFragment: tciFrag });
-  byoipList.slice(0, 2).forEach((ip, idx) => {
-    add(ip, idx === 1 ? 2053 : 443, '🛡️ ضد فیلتر BYOIP', { forceFragment: idx === 1 ? tciFrag : irancellFrag });
-  });
+  // ۱) گروه اول: آی‌پی‌های دست‌نخورده QoS IPv4 و سایت‌های جهانی تمیز (Speedtest / Plato / Udemy)
+  add('172.67.181.32', 443, '⚡ QoS تمیز', { forceFragment: irancellFrag });
+  add('104.17.147.119', 443, '⚡ QoS تمیز', { forceFragment: irancellFrag });
+  add('104.18.3.91', 2053, '☎️ مخابرات/ثابت', { forceFragment: tciFrag });
+  add('www.speedtest.net', 443, '🌐 Speedtest', { forceFragment: irancellFrag });
+  add('platoapp.com', 443, '🌐 Plato', { forceFragment: irancellFrag });
+  add('www.udemy.com', 2053, '🌐 Udemy', { forceFragment: tciFrag });
   irDomList.slice(0, 2).forEach((d, idx) => {
-    add(d, idx === 1 ? 2053 : 443, '🛡️ ضد فیلتر .ir', { forceFragment: irancellFrag });
+    add(d, idx === 1 ? 2053 : 443, '🇮🇷 دامنه تمیز', { forceFragment: irancellFrag });
   });
 
-  // ۲) گروه دوم: سریع‌ترین آی‌پی‌های تمیز TLS 443 (مناسب همراه اول، ایرانسل و وای‌فای)
-  pool.ip.slice(0, 3).forEach((ip) => add(ip, 443, '⚡ سریع TLS', { forceFragment: zeusFastFrag }));
+  // ۲) گروه دوم: سریع‌ترین آی‌پی‌های تمیز TLS 443
+  qosV4List.slice(2, 5).forEach((ip) => add(ip, 443, '⚡ سریع TLS', { forceFragment: fastFrag }));
 
   // ۳) گروه سوم: ویژه همراه اول و ایرانسل IPv6 (پینگ ~105ms)
   pool.ipv6.slice(0, 3).forEach((v6) => add(v6, 443, '🚀 همراه اول IPv6'));
@@ -364,7 +375,7 @@ export function buildConfigs(user, settings, cleanIps = []) {
   pool.ipv6.slice(0, 1).forEach((v6) => add(v6, 8080, '🚀 همراه اول IPv6'));
 
   // ۴) گروه چهارم: اتصال مستقیم (بدون پروکسی خروجی — کم‌ترین پینگ) + تک‌لوکیشن‌های آماده (Gemini/AI و اروپا)
-  const fastHost = '162.159.192.1';
+  const fastHost = '172.67.181.32';
   const fastIr = irDomList[0] || '01d.ir';
   add(fastHost, 443, '🌐 بدون پروکسی', { directMode: true, forceFragment: irancellFrag });
   add(fastIr, 443, '🌐 مستقیم .ir', { directMode: true, forceFragment: irancellFrag });
@@ -440,7 +451,7 @@ export function buildConfigs(user, settings, cleanIps = []) {
 
   if (uris.length < maxConfigs) {
     const extraPorts = [443, 2053, 8080, 80, 8443];
-    const addrs = [...new Set([...byoipList, ...pool.ip, ...pool.ipv6, ...pool.domain])];
+    const addrs = [...new Set([...qosV4List, ...pool.ip, ...pool.ipv6, ...pool.domain])];
     outer:
     for (const port of extraPorts) {
       for (const a of addrs) {
