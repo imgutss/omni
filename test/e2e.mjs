@@ -195,7 +195,7 @@ console.log('\n[6] دیاگ شبکه');
   const deUser = await req('GET', '/api/users/ali');
   const deUris = deUser.body?.configs?.uris || [];
   ok('انتخاب کشور (آلمان DE) آی‌پی و پرچم کشور را در کانفیگ اعمال می‌کند', deUris.some((u) => decodeURIComponent(u).includes('🇩🇪') && decodeURIComponent(u).includes('آلمان')), decodeURIComponent(deUris[0] || '').slice(0, 120));
-  ok('فرگمنت استاندارد Xray (fragment=10-20,10-20,tlshello) و تطابق عنوان با آدرس', deUris.some((u) => u.includes('fragment=10-20%2C10-20%2Ctlshello') && decodeURIComponent(u.split('#')[1] || '').includes(u.split('@')[1]?.split('?')[0] || '')), decodeURIComponent(deUris[0] || '').slice(0, 140));
+  ok('فرگمنت استاندارد زئوس (fragment=100-200,5-10,tlshello)، fp=chrome، بدون ?ed=2048 و تطابق عنوان با آدرس', deUris.some((u) => u.includes('fragment=100-200%2C5-10%2Ctlshello') && u.includes('fp=chrome') && !decodeURIComponent(u).includes('ed=2048') && decodeURIComponent(u.split('#')[1] || '').includes(u.split('@')[1]?.split('?')[0] || '')), decodeURIComponent(deUris[0] || '').slice(0, 140));
   await req('PUT', '/api/settings', { body: { selected_country: '' } });
 
   const customScan = await req('POST', '/api/diag/rank-ips', { body: { ips: ['213.241.198.123', '172.67.181.32'], timeout: 1200 } });

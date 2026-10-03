@@ -684,9 +684,33 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
     ...(!isDirectMode ? safeJsonArray(settings?.proxy_ips) : []),
   ].filter(Boolean);
 
-  // ۴) اگر مقصد در لیست دامنه‌های غیرکلودفلر شناخته شده است (مثل google.com، instagram.com، youtube.com)،
-  // ارسال آن به ProxyIP کلودفلر همیشه TLS Alert 0x15 برمی‌گرداند و باعث پرش پینگ می‌شود!
-  // پس برای این مقاصد مستقیماً به مقصد (یا برای google.com به IPv4 آن) وصل شو.
+  // ۴) سایت‌های بررسی آی‌پی (IP Check): اگر کاربر کشور خاصی را انتخاب کرده،
+  // از پروکسی VIP (SOCKS5/HTTP) یا ProxyIP همان کشور عبور بده تا آی‌پی و پرچم همان کشور نمایش داده شود
+  const hLow = String(hostname || '').trim().toLowerCase();
+  const isIpCheck = (
+    hLow === 'api.ipify.org' ||
+    hLow === 'ipinfo.io' ||
+    hLow === 'ifconfig.me' ||
+    hLow === 'icanhazip.com' ||
+    hLow === 'ident.me' ||
+    hLow === 'ip-api.com' ||
+    hLow === 'whoer.net' ||
+    hLow === 'ipleak.net' ||
+    hLow === 'myip.com' ||
+    hLow === 'checkip.amazonaws.com'
+  );
+  if (isIpCheck && selCountry) {
+    const countryVips = selCountry.vipProxies || COUNTRY_VIP_PROXIES[selCountry.cc] || [];
+    for (const v of countryVips.slice(0, 2)) {
+      addEntry(v, 1080, 'country-vip');
+    }
+    for (const raw of countryProxies.slice(0, 2)) {
+      addEntry(raw, 443, 'country-proxy');
+    }
+  }
+
+  // ۵) اگر مقصد در لیست دامنه‌های غیرکلودفلر شناخته شده است (مثل google.com، instagram.com، youtube.com)،
+  // برای google.com ابتدا به IPv4 مستقیم وصل شو تا خطای IPv6 ایران رخ ندهد.
   if (nonCfKnown && !cfTarget) {
     if (hostname.endsWith('.google.com') || hostname === 'google.com') {
       const v4Ip = await resolveIPv4DoH(hostname);
@@ -696,22 +720,18 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
     return candidates;
   }
 
-  // ۵) اگر کشور خاصی انتخاب شده و مقصد کلودفلر یا سایت عمومی ناشناخته است:
-  // حداکثر ۲ سرور خروجی اول کشور را امتحان کن؛ اگر 0x15 برگشت، بلافاصله در حلقه شکسته و مستقیم وصل می‌شود
-  if (countryProxies.length && (port === 443 || cfTarget)) {
-    for (const raw of countryProxies.slice(0, 2)) {
-      addEntry(raw, 443, 'country-proxy');
-    }
-  }
-
-  // ۶) اتصال مستقیم به عنوان فالبک فوری
+  // ۶) مطابق معماری ZEUS v2.2.5:
+  // برای مقاصد غیرکلودفلر، ابتدا اتصال مستقیم (Direct) با پینگ ۲-۴ میلی‌ثانیه برقرار می‌شود
+  // و اگر سایت مقصد روی CDN کلودفلر باشد (خطای 1042 در اتصال مستقیم)، بلافاصله به ProxyIP کشور انتخابی فالبک می‌زند!
   if (!cfTarget) {
     addRaw({ type: 'direct', hostname, port, label: 'direct' });
   }
 
-  // ۷) اگر پورت غیر 443 بود، پروکسی‌های اختصاصی را بعد از اتصال مستقیم بگذار
-  for (const raw of countryProxies.slice(0, 2)) {
-    addEntry(raw, port, 'user-proxy');
+  // ۷) سرورهای خروجی کشور انتخابی (مخصوص سایت‌های پشت کلودفلر و فالبک فوری)
+  if (countryProxies.length) {
+    for (const raw of countryProxies.slice(0, 2)) {
+      addEntry(raw, port === 443 || cfTarget ? 443 : port, 'country-proxy');
+    }
   }
 
   // ۸) NAT64 (اگر مقصد IPv4 است)
@@ -998,8 +1018,21 @@ export async function handleProxy(request, env, ctx, url, settings) {
       ctx.waitUntil(registerConnection(env, request, user).catch(() => {}));
     }
 
-    if (cred.cmd === 2 || (cred.port === 53 && cred.proto === 'vless' && cred.cmd !== 1)) {
-      udpHandler = await handleUdpDns(ws, cred, settings.dns_upstream, stat);
+    const isUdp = (cred.proto === 'vless' && cred.cmd === 2) || (cred.proto === 'trojan' && cred.cmd === 3);
+    if (isUdp) {
+      if (cred.port === 53) {
+        udpHandler = await handleUdpDns(ws, cred, settings.dns_upstream, stat);
+        return;
+      }
+      // مطابق ZEUS v2.2.5 (حل مشکل فریز شدن ریلز اینستاگرام و تماس تلگرام):
+      // بسته‌های UDP روی پورت 443 (QUIC) را بلافاصله با هدر پاسخ بسته و قطع کن تا کلاینت بدون مکث به TCP/TLS سوییچ کند.
+      if (cred.proto === 'vless' && !vlessHeaderSent) {
+        vlessHeaderSent = true;
+        try { ws.send(new Uint8Array([cred.version, 0])); } catch { /* ignore */ }
+      }
+      setTimeout(() => {
+        try { ws.close(1000, 'quic-fallback'); } catch { /* ignore */ }
+      }, 80);
       return;
     }
 

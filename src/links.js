@@ -20,15 +20,15 @@ import {
 
 const enc = encodeURIComponent;
 
-/* پریست‌های واقعی فرگمنت (مطابق استاندارد Xray-core / v2rayNG / MahsaNG / ZEUS v2.2.5) */
+/* پریست‌های واقعی فرگمنت (دقیقاً مطابق مقادیر تست‌شده ZEUS v2.2.5 — تابع applyFragPreset) */
 export const FRAGMENT_PRESETS = [
-  { id: 'none', label: '— بدون فرگمنت سراسری (کانفیگ‌های ضد فیلتر جداگانه ساخته می‌شوند)', size: '', interval: '', packets: '' },
-  { id: 'irancell', label: '💛 ویژه ایرانسل و مخابرات (پیشنهادی زئوس: 10-20 / 10-20 / tlshello)', size: '10-20', interval: '10-20', packets: 'tlshello' },
-  { id: 'tci', label: '☎️ ویژه مخابرات و ADSL (فرگمنت ریز: 5-15 / 10-20 / tlshello)', size: '5-15', interval: '10-20', packets: 'tlshello' },
-  { id: 'mci', label: '📱 ویژه همراه اول (فرگمنت سبک: 50-100 / 5-10 / tlshello)', size: '50-100', interval: '5-10', packets: 'tlshello' },
-  { id: 'rightel', label: '💜 ویژه رایتل و شاتل (20-40 / 10-15 / tlshello)', size: '20-40', interval: '10-15', packets: 'tlshello' },
-  { id: 'gaming', label: '🎮 گیمینگ (بدون فرگمنت — کم‌ترین پینگ)', size: '', interval: '', packets: '' },
-  { id: 'aggressive', label: '🔥 ضد فیلتر تهاجمی (1-10 / 5-10 / tlshello)', size: '1-10', interval: '5-10', packets: 'tlshello' },
+  { id: 'none', label: '— بدون فرگمنت سراسری (کانفیگ‌های ویژه هر اپراتور جداگانه ساخته می‌شوند)', size: '', interval: '', packets: '' },
+  { id: 'irancell', label: '💛 ویژه ایرانسل (فرگمنت استاندارد زئوس: 100-200 / 5-10 / tlshello)', size: '100-200', interval: '5-10', packets: 'tlshello' },
+  { id: 'tci', label: '☎️ ویژه مخابرات و اینترنت ثابت (فرگمنت زئوس: 50-200 / 1-3 / tlshello)', size: '50-200', interval: '1-3', packets: 'tlshello' },
+  { id: 'mci', label: '📱 ویژه همراه اول (فرگمنت زئوس: 10-30 / 2-5 / tlshello)', size: '10-30', interval: '2-5', packets: 'tlshello' },
+  { id: 'rightel', label: '💜 ویژه رایتل و شاتل (فرگمنت زئوس: 50-100 / 2-5 / tlshello)', size: '50-100', interval: '2-5', packets: 'tlshello' },
+  { id: 'gaming', label: '🚀 حالت فوق سریع زئوس (پینگ پایین: 200-3000 / 1-2 / tlshello)', size: '200-3000', interval: '1-2', packets: 'tlshello' },
+  { id: 'aggressive', label: '🔥 ضد فیلتر تهاجمی (فرگمنت ریز: 10-20 / 10-20 / tlshello)', size: '10-20', interval: '10-20', packets: 'tlshello' },
 ];
 
 export const FINGERPRINTS = ['chrome', 'unsafe', 'firefox', 'safari', 'ios', 'android', 'edge', 'random', 'randomized'];
@@ -180,8 +180,10 @@ function shortHostLabel(host) {
   return clean;
 }
 
-/** ساخت مسیر WebSocket همراه با پارامترهای کشور خروجی (cc و proxyip)، حالت مستقیم (mode=direct) و EarlyData */
-export function wsPathFor(user, settings, { includeEd = true, overrideCc = null, overrideProxy = null, directMode = false } = {}) {
+/** ساخت مسیر WebSocket همراه با پارامترهای کشور خروجی (cc و proxyip) و حالت مستقیم (mode=direct).
+    نکته کلیدی از ZEUS v2.2.5: پارامتر ?ed=2048 به صورت پیش‌فرض در لینک کلاینت قرار نمی‌گیرد چون در Xray-core
+    هدر VLESS را داخل Sec-WebSocket-Protocol می‌فرستد و با TLS Fragmentation ایرانسل و مخابرات تداخل ایجاد می‌کند. */
+export function wsPathFor(user, settings, { includeEd = false, overrideCc = null, overrideProxy = null, directMode = false } = {}) {
   const basePath = (settings.path || '/ws').split('?')[0];
   const ed = Number(user?.early_data ?? settings.early_data ?? 2048);
   const rawCc = overrideCc !== null ? overrideCc : (settings.selected_country || '');
@@ -212,7 +214,7 @@ export function formatConfigRemark(user, settings, host, { index = 1, port = 443
   return `${prefix}#${String(index).padStart(2, '0')} ${cat}${fragTag} · ${hostTag}:${port} (${exitLabel} · ${protoLabel})`;
 }
 
-/** یک لینک VLESS برای آدرس/پورت مشخص */
+/** یک لینک VLESS برای آدرس/پورت مشخص (دقیقاً مطابق ساختار تولید لینک در ZEUS v2.2.5) */
 export function vlessUri(user, settings, host, {
   index = 1,
   port = 443,
@@ -224,17 +226,21 @@ export function vlessUri(user, settings, host, {
   directMode = false,
 } = {}) {
   const tls = isTlsPort(port);
-  const fp = forceFp || user.fingerprint || settings.fingerprint || 'chrome';
-  const path = encodeURIComponent(wsPathFor(user, settings, { includeEd: true, overrideCc, overrideProxy, directMode }));
+  const rawFp = forceFp || user.fingerprint || settings.fingerprint || 'chrome';
+  // کلاینت استاندارد v2rayNG / Xray-core مقدار fp=unsafe را رد می‌کند (مخصوص PattNG است)؛ پیش‌فرض امن chrome است
+  const fp = FINGERPRINTS.includes(rawFp) ? rawFp : 'chrome';
+  const path = encodeURIComponent(wsPathFor(user, settings, { includeEd: false, overrideCc, overrideProxy, directMode }));
   const sni = sniFor(settings) || host;
-  const params = ['encryption=none', 'type=ws'];
-  if (tls) params.push('security=tls', `sni=${sni}`, `fp=${fp}`, `host=${sni}`, 'alpn=http%2F1.1');
-  else params.push('security=none', `host=${sni || host}`);
-  params.push(`path=${path}`);
+  const params = [`path=${path}`, `security=${tls ? 'tls' : 'none'}`, 'encryption=none', `host=${sni}`, 'type=ws'];
+  if (tls) {
+    params.push('insecure=0', `fp=${fp}`, 'allowInsecure=0', `sni=${sni}`);
+  }
   const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset);
-  if (frag && frag.size && tls) {
-    // فرمت استاندارد Xray / v2rayNG / MahsaNG / ZEUS: fragment=<length>,<interval>,<packets>
-    const fragStr = `${frag.size},${frag.interval || '10-20'},${frag.packets || 'tlshello'}`;
+  if (frag && frag.size) {
+    // فرمت دقیق ZEUS v2.2.5 (Source.js خط 1750): روی پورت TLS سه بخش (size,interval,tlshello) و روی غیر TLS دو بخش
+    const fragStr = tls
+      ? `${frag.size},${frag.interval || '5-10'},${frag.packets || 'tlshello'}`
+      : `${frag.size},${frag.interval || '1-2'}`;
     params.push(`fragment=${encodeURIComponent(fragStr)}`);
   }
   if (settings.mux_enabled === '1') params.push('mux=1', 'xmux=maxStreams=8');
@@ -245,12 +251,12 @@ export function vlessUri(user, settings, host, {
     proto: 'vless',
     overrideCc,
     directMode,
-    hasFrag: Boolean(frag && frag.size && tls),
+    hasFrag: Boolean(frag && frag.size),
   });
   return `vless://${user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 
-/** یک لینک Trojan برای آدرس/پورت مشخص */
+/** یک لینک Trojan برای آدرس/پورت مشخص (دقیقاً مطابق ساختار تولید لینک در ZEUS v2.2.5) */
 export function trojanUri(user, settings, host, {
   index = 1,
   port = 443,
@@ -262,16 +268,19 @@ export function trojanUri(user, settings, host, {
   directMode = false,
 } = {}) {
   const tls = isTlsPort(port);
-  const fp = forceFp || user.fingerprint || settings.fingerprint || 'chrome';
-  const path = encodeURIComponent(wsPathFor(user, settings, { includeEd: true, overrideCc, overrideProxy, directMode }));
+  const rawFp = forceFp || user.fingerprint || settings.fingerprint || 'chrome';
+  const fp = FINGERPRINTS.includes(rawFp) ? rawFp : 'chrome';
+  const path = encodeURIComponent(wsPathFor(user, settings, { includeEd: false, overrideCc, overrideProxy, directMode }));
   const sni = sniFor(settings) || host;
-  const params = ['type=ws'];
-  if (tls) params.push('security=tls', `sni=${sni}`, `fp=${fp}`, `host=${sni}`, 'alpn=http%2F1.1');
-  else params.push('security=none', `host=${sni || host}`);
-  params.push(`path=${path}`);
+  const params = [`path=${path}`, `security=${tls ? 'tls' : 'none'}`, `host=${sni}`, 'type=ws'];
+  if (tls) {
+    params.push('insecure=0', `fp=${fp}`, 'allowInsecure=0', `sni=${sni}`);
+  }
   const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset);
-  if (frag && frag.size && tls) {
-    const fragStr = `${frag.size},${frag.interval || '10-20'},${frag.packets || 'tlshello'}`;
+  if (frag && frag.size) {
+    const fragStr = tls
+      ? `${frag.size},${frag.interval || '5-10'},${frag.packets || 'tlshello'}`
+      : `${frag.size},${frag.interval || '1-2'}`;
     params.push(`fragment=${encodeURIComponent(fragStr)}`);
   }
   const remark = formatConfigRemark(user, settings, host, {
@@ -281,7 +290,7 @@ export function trojanUri(user, settings, host, {
     proto: 'trojan',
     overrideCc,
     directMode,
-    hasFrag: Boolean(frag && frag.size && tls),
+    hasFrag: Boolean(frag && frag.size),
   });
   return `trojan://${settings.trojan_password || user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
@@ -304,18 +313,17 @@ export function verifiedPairs(settings) {
 }
 
 /**
- * ساخت کانفیگ‌های جامع و منظم برای یک کاربر (پشتیبانی کامل از همراه اول، ایرانسل و مخابرات):
- *  ۱) گروه ۱ — ⚡ همه اپراتورها (TLS 443 روی آی‌پی‌های چرخشی BYOIP زئوس + آی‌پی‌های تمیز کلودفلر)
- *  ۲) گروه ۲ — 🛡️ ویژه ایرانسل و مخابرات (TLS Fragment 10-20,10-20,tlshello + fp=unsafe روی BYOIP و دامنه‌های .ir)
+ * ساخت کانفیگ‌های جامع و منظم برای یک کاربر (پشتیبانی ۱۰۰٪ از همراه اول، ایرانسل و مخابرات با متد ZEUS v2.2.5):
+ *  ۱) گروه ۱ — 💛 ویژه ایرانسل و مخابرات (۳ آی‌پی طلایی زئوس 162.159.192.1 / 104.16.0.1 / 104.17.0.1 + BYOIP و دامنه‌های .ir با فرگمنت استاندارد زئوس و fp=chrome)
+ *  ۲) گروه ۲ — ⚡ سریع‌ترین آی‌پی‌های تمیز TLS 443 (مناسب همراه اول، ایرانسل و وای‌فای)
  *  ۳) گروه ۳ — 🚀 ویژه همراه اول IPv6 (پینگ ~105ms روی پورت‌های 443، 2053 و 8080)
- *  ۴) گروه ۴ — 🔓 بدون TLS (پورت‌های 8080 و 80 برای عبور از فیلتر SNI)
- *  ۵) گروه ۵ — 🌐 اتصال مستقیم (کم‌ترین پینگ) + 🌍 کانفیگ‌های تک‌لوکیشن آماده (آمریکا Gemini/AI، آلمان، هلند، بریتانیا، فرانسه)
+ *  ۴) گروه ۴ — 🌐 اتصال مستقیم (کم‌ترین پینگ) + 🌍 کانفیگ‌های تک‌لوکیشن آماده (آمریکا Gemini/AI، آلمان، هلند، بریتانیا، فرانسه)
+ *  ۵) گروه ۵ — 🔓 بدون TLS (پورت‌های 8080 و 80 برای عبور از فیلتر SNI)
  */
 export function buildConfigs(user, settings, cleanIps = []) {
   const maxConfigs = Math.max(6, Math.min(80, Number(settings.config_count || 40)));
   const pool = configPool(user, settings, cleanIps);
   const pairs = verifiedPairs(settings);
-  const ports = choosePorts(settings, 5);
 
   const plan = [];
   const seen = new Set();
@@ -329,22 +337,26 @@ export function buildConfigs(user, settings, cleanIps = []) {
     plan.push({ address: a, port: p, cat, ...opts });
   };
 
-  const zeusFrag = { size: '10-20', interval: '10-20', packets: 'tlshello' };
-  const tciFrag = { size: '5-15', interval: '10-20', packets: 'tlshello' };
+  // مقادیر دقیق فرگمنت زئوس v2.2.5 (Source.js خط 6923)
+  const irancellFrag = { size: '100-200', interval: '5-10', packets: 'tlshello' };
+  const tciFrag = { size: '50-200', interval: '1-3', packets: 'tlshello' };
+  const zeusFastFrag = { size: '200-3000', interval: '1-2', packets: 'tlshello' };
   const byoipList = pool.rotatedByoip?.length ? pool.rotatedByoip : ZEUS_BYOIP_V4;
   const irDomList = ZEUS_IR_DOMAINS;
 
-  // ۱) گروه اول: ویژه ایرانسل و مخابرات (TLS Fragment استاندارد زئوس + fp=unsafe روی BYOIP و دامنه‌های .ir)
-  byoipList.slice(0, 3).forEach((ip, idx) => {
-    add(ip, idx === 2 ? 2053 : 443, '🛡️ ایرانسل/مخابرات', { forceFragment: zeusFrag, forceFp: 'unsafe' });
+  // ۱) گروه اول: ویژه ایرانسل و مخابرات (۳ آی‌پی طلایی زئوس + BYOIP تاییدشده + دامنه .ir با فرگمنت استاندارد زئوس)
+  add('162.159.192.1', 443, '💛 ایرانسل/مخابرات', { forceFragment: irancellFrag });
+  add('104.16.0.1', 443, '💛 ایرانسل/مخابرات', { forceFragment: irancellFrag });
+  add('104.17.0.1', 2053, '☎️ مخابرات/ثابت', { forceFragment: tciFrag });
+  byoipList.slice(0, 2).forEach((ip, idx) => {
+    add(ip, idx === 1 ? 2053 : 443, '🛡️ ضد فیلتر BYOIP', { forceFragment: idx === 1 ? tciFrag : irancellFrag });
   });
   irDomList.slice(0, 2).forEach((d, idx) => {
-    add(d, idx === 1 ? 2053 : 443, '🛡️ ضد فیلتر .ir', { forceFragment: zeusFrag, forceFp: 'unsafe' });
+    add(d, idx === 1 ? 2053 : 443, '🛡️ ضد فیلتر .ir', { forceFragment: irancellFrag });
   });
 
   // ۲) گروه دوم: سریع‌ترین آی‌پی‌های تمیز TLS 443 (مناسب همراه اول، ایرانسل و وای‌فای)
-  pool.ip.slice(0, 3).forEach((ip) => add(ip, 443, '⚡ سریع TLS'));
-  irDomList.slice(0, 1).forEach((d) => add(d, 443, '⚡ دامنه .ir'));
+  pool.ip.slice(0, 3).forEach((ip) => add(ip, 443, '⚡ سریع TLS', { forceFragment: zeusFastFrag }));
 
   // ۳) گروه سوم: ویژه همراه اول و ایرانسل IPv6 (پینگ ~105ms)
   pool.ipv6.slice(0, 3).forEach((v6) => add(v6, 443, '🚀 همراه اول IPv6'));
@@ -352,10 +364,10 @@ export function buildConfigs(user, settings, cleanIps = []) {
   pool.ipv6.slice(0, 1).forEach((v6) => add(v6, 8080, '🚀 همراه اول IPv6'));
 
   // ۴) گروه چهارم: اتصال مستقیم (بدون پروکسی خروجی — کم‌ترین پینگ) + تک‌لوکیشن‌های آماده (Gemini/AI و اروپا)
-  const fastHost = byoipList[0] || pool.ip[0] || '172.67.181.32';
+  const fastHost = '162.159.192.1';
   const fastIr = irDomList[0] || '01d.ir';
-  add(fastHost, 443, '🌐 بدون پروکسی', { directMode: true });
-  add(fastIr, 443, '🌐 مستقیم ضد فیلتر', { directMode: true, forceFragment: zeusFrag, forceFp: 'unsafe' });
+  add(fastHost, 443, '🌐 بدون پروکسی', { directMode: true, forceFragment: irancellFrag });
+  add(fastIr, 443, '🌐 مستقیم .ir', { directMode: true, forceFragment: irancellFrag });
 
   const quickLocs = [
     { cc: 'US', cat: '✨ ویژه Gemini/AI' },
@@ -370,18 +382,17 @@ export function buildConfigs(user, settings, cleanIps = []) {
       add(fastHost, 443, loc.cat, {
         overrideCc: cObj.cc,
         overrideProxy: `${cObj.proxies[0]}:443`,
-        forceFragment: zeusFrag,
-        forceFp: 'chrome',
+        forceFragment: irancellFrag,
       });
     }
   }
 
   // ۵) گروه پنجم: بدون TLS روی پورت‌های 8080 و 80 (عبور از DPI بدون SNI)
   pool.ip.slice(0, 3).forEach((ip) => {
-    add(ip, 8080, '🔓 بدون TLS');
-    add(ip, 80, '🔓 بدون TLS');
+    add(ip, 8080, '🔓 بدون TLS', { forceFragment: irancellFrag });
+    add(ip, 80, '🔓 بدون TLS', { forceFragment: tciFrag });
   });
-  irDomList.slice(0, 2).forEach((d) => add(d, 8080, '🔓 دامنه بدون TLS'));
+  irDomList.slice(0, 2).forEach((d) => add(d, 8080, '🔓 دامنه بدون TLS', { forceFragment: irancellFrag }));
 
   for (const pr of pairs.slice(0, 3)) {
     const idx = pr.lastIndexOf(':');
@@ -447,6 +458,7 @@ export function buildConfigs(user, settings, cleanIps = []) {
   }
 
   const usedAddrs = [...new Set(items.map((x) => x.address))];
+  const ports = choosePorts(settings);
   return {
     uris,
     items,

@@ -3718,10 +3718,11 @@ var qrcode = function() {
   </section>
   <div class="omni-tick" aria-hidden="true"><span>${nt.repeat(4)}</span><span>${nt.repeat(4)}</span></div>`}var ZEUS_BYOIP_V4=["213.241.198.123","94.247.142.1","57.128.178.36","31.185.108.22","188.42.145.155","45.85.118.1","31.12.75.1","89.117.112.10","37.153.171.224","94.140.0.10","185.207.196.148","185.18.184.181","66.81.247.100","8.39.125.239","45.194.53.10","170.168.7.26","45.142.120.10","164.38.155.100","185.162.228.175","45.135.235.1","185.158.133.146","8.208.19.143","216.205.52.195","139.64.235.112","185.159.247.242","114.129.43.10","170.114.45.134","45.196.29.45","45.149.12.10","167.71.45.93","147.161.242.54","103.69.136.22","8.42.77.123","103.21.244.14","185.172.148.10","192.229.221.95","199.27.79.133","163.53.78.110","89.208.250.25","45.159.216.1"];
 var ZEUS_IR_DOMAINS=["01d.ir","0seo.ir","18m.ir","09122108011.ir","1car.ir","0nlysms.ir","10az10.ir","11.my7mhg.ir","123project.ir","110book.ir","15.my7mhg.ir","18arcims.ir","1com.ir","1hashtag.ir","1pools.ir"];
-var VERIFIED_ZEUS_POOL=["172.67.181.32","188.114.96.1","188.114.96.3","172.64.80.1","104.17.148.22","213.241.198.123","94.247.142.1","57.128.178.36","31.185.108.22","188.42.145.155","45.85.118.1","31.12.75.1","89.117.112.10","37.153.171.224","94.140.0.10","185.207.196.148","185.18.184.181","66.81.247.100","8.39.125.239","45.194.53.10","170.168.7.26","45.142.120.10","164.38.155.100","185.162.228.175","45.135.235.1","185.158.133.146","8.208.19.143","216.205.52.195","139.64.235.112","185.159.247.242","114.129.43.10","170.114.45.134","45.196.29.45","45.149.12.10","167.71.45.93","147.161.242.54","103.69.136.22","8.42.77.123","103.21.244.14","185.172.148.10","192.229.221.95","199.27.79.133","163.53.78.110","89.208.250.25","45.159.216.1","01d.ir","0seo.ir","18m.ir","09122108011.ir","1car.ir","0nlysms.ir","10az10.ir","11.my7mhg.ir","123project.ir","110book.ir","15.my7mhg.ir","18arcims.ir","1com.ir","1hashtag.ir","1pools.ir"];
+var ZEUS_GOLDEN_IPS=["162.159.192.1","104.16.0.1","104.17.0.1","172.67.181.32","188.114.96.1"];
+var VERIFIED_ZEUS_POOL=[...ZEUS_GOLDEN_IPS,"188.114.96.3","172.64.80.1","104.17.148.22",...ZEUS_BYOIP_V4,...ZEUS_IR_DOMAINS];
 var PRIMARY_LOCATIONS=["DE","NL","GB","FR","US","TR","AE","FI","SE","CA","SG","JP","CH","AT","IT","ES","NO","PL","BG","LV","KZ","UZ","TH","KR"];
 var ZEUS_BYOIP_SET=new Set(VERIFIED_ZEUS_POOL.map(x=>String(x).toLowerCase()));
-var g={user:"",profile:"all",cc:"",ports:[443,2053,8080,80],protos:["vless","trojan"],addrs:"clean",customAddr:"",fp:"chrome",fragment:!0,fragPreset:"10-20,10-20,tlshello",ipv6:!0,fmt:"uris",out:null};
+var g={user:"",profile:"all",cc:"",ports:[443,2053,8080,80],protos:["vless","trojan"],addrs:"clean",customAddr:"",fp:"chrome",fragment:!0,fragPreset:"100-200,5-10,tlshello",ipv6:!0,fmt:"uris",out:null};
 function zt(e){
   let t=e.settings?.public_host||location.host||"panel.example",s=[];
   let cleanPool=Oe(e.settings);
@@ -3730,14 +3731,14 @@ function zt(e){
   }else if(g.addrs==="custom"){
     s=g.customAddr.split(/[,\s]+/).filter(Boolean);
   }else if(g.addrs==="zeus"){
-    s=[...ZEUS_BYOIP_V4.slice(0,10),...ZEUS_IR_DOMAINS.slice(0,5)];
+    s=[...ZEUS_GOLDEN_IPS.slice(0,3),...ZEUS_BYOIP_V4.slice(0,10),...ZEUS_IR_DOMAINS.slice(0,5)];
   }else{
-    s=[...cleanPool.slice(0,8),...ZEUS_BYOIP_V4.slice(0,6),...ZEUS_IR_DOMAINS.slice(0,3)];
+    s=[...ZEUS_GOLDEN_IPS.slice(0,3),...cleanPool.slice(0,8),...ZEUS_BYOIP_V4.slice(0,6),...ZEUS_IR_DOMAINS.slice(0,3)];
   }
-  if(g.profile==="irancell"){
-    s=[...ZEUS_BYOIP_V4.slice(0,8),...ZEUS_IR_DOMAINS.slice(0,4),...cleanPool.slice(0,4)];
+  if(g.profile==="irancell"||g.profile==="tci"){
+    s=[...ZEUS_GOLDEN_IPS.slice(0,4),...ZEUS_BYOIP_V4.slice(0,8),...ZEUS_IR_DOMAINS.slice(0,4),...cleanPool.slice(0,4)];
   }else if(g.profile==="mci"){
-    s=[...It.slice(0,6),...cleanPool.slice(0,6),...ZEUS_BYOIP_V4.slice(0,4)];
+    s=[...It.slice(0,6),...ZEUS_GOLDEN_IPS.slice(0,3),...cleanPool.slice(0,5),...ZEUS_BYOIP_V4.slice(0,4)];
   }else if(g.ipv6&&g.addrs!=="host"&&g.addrs!=="custom"){
     s=[...s.slice(0,8),...It.slice(0,4),...s.slice(8)];
   }
@@ -3752,11 +3753,11 @@ function shortAddrTag(p){
 function Bt(e){
   let t=(e.users||[]).find(p=>p.username===g.user)||(e.users||[])[0];
   if(!t)return null;
-  let{host:s,list:i}=zt(e),o=e.settings?.trojan_password||t.uuid,bp=(e.settings?.path||"/ws").split("?")[0],ed=Number(e.settings?.early_data||2048);
+  let{host:s,list:i}=zt(e),o=e.settings?.trojan_password||t.uuid,bp=(e.settings?.path||"/ws").split("?")[0];
   let activeCc=g.cc!==void 0&&g.cc!==""?g.cc:(g.profile==="direct"?"DIRECT":(e.settings?.selected_country||""));
   let isDirect=String(activeCc).toUpperCase()==="DIRECT"||g.profile==="direct";
   let selC0=(!isDirect&&activeCc)?COUNTRY_MAP.get(activeCc):null;
-  let qs0=[...(ed>0?["ed="+ed]:[])];
+  let qs0=[];
   if(isDirect){
     qs0.push("mode=direct");
   }else if(selC0){
@@ -3765,23 +3766,27 @@ function Bt(e){
   }
   let S=qs0.length?`${bp}?${qs0.join("&")}`:bp,r=[];
   let exitBadge=selC0?`خروجی ${selC0.flag} ${selC0.fa}`:"🌐 مستقیم";
-  let activePorts=g.profile==="irancell"?[443,2053,8443]:g.ports;
+  let activePorts=(g.profile==="irancell"||g.profile==="tci")?[443,2053,8443,8080]:g.ports;
   for(let p of i)for(let $ of activePorts){
     let M=we.includes(Number($)),hp=p.includes(":")?`[${p}]`:p;
     if(!M&&p.endsWith(".ir"))continue;
     for(let k of g.protos){
       let L=k==="vless"?t.uuid:o;
-      let useFrag=M&&(g.fragment||g.profile==="irancell");
-      let fpVal=g.profile==="irancell"?(g.fp||"unsafe"):(g.fp||"chrome");
-      let fragStr=g.fragPreset||"10-20,10-20,tlshello";
-      let C=new URLSearchParams({encryption:"none",security:M?"tls":"none",type:"ws",host:s,path:S});
+      let useFrag=Boolean(g.fragment||g.profile==="irancell"||g.profile==="tci");
+      let fpVal=g.fp||"chrome";
+      let rawFrag=g.fragPreset||(g.profile==="tci"?"50-200,1-3,tlshello":g.profile==="mci"?"10-30,2-5,tlshello":"100-200,5-10,tlshello");
+      let fragParts=rawFrag.split(",");
+      let fragStr=M?rawFrag:`${fragParts[0]||"100-200"},${fragParts[1]||"5-10"}`;
+      let params=[`path=${encodeURIComponent(S)}`,`security=${M?"tls":"none"}`];
+      if(k==="vless")params.push("encryption=none");
+      params.push(`host=${encodeURIComponent(s)}`,"type=ws");
       if(M){
-        C.set("sni",s);
-        C.set("fp",fpVal);
-        C.set("alpn","http/1.1");
-        if(useFrag)C.set("fragment",fragStr);
+        params.push("insecure=0",`fp=${encodeURIComponent(fpVal)}`,"allowInsecure=0",`sni=${encodeURIComponent(s)}`);
       }
-      let catLbl=p.endsWith(".ir")?"🛡️ دامنه .ir":ZEUS_BYOIP_SET.has(p.toLowerCase())&&!p.startsWith("172.")&&!p.startsWith("188.")&&!p.startsWith("104.")?"🛡️ BYOIP زئوس":p.includes(":")?"🚀 همراه اول IPv6":M?"⚡ سریع TLS":"🔓 بدون TLS";
+      if(useFrag){
+        params.push(`fragment=${encodeURIComponent(fragStr)}`);
+      }
+      let catLbl=p.endsWith(".ir")?"🛡️ دامنه .ir":(p==="162.159.192.1"||p==="104.16.0.1"||p==="104.17.0.1")?"💛 طلایی زئوس":ZEUS_BYOIP_SET.has(p.toLowerCase())&&!p.startsWith("172.")&&!p.startsWith("188.")&&!p.startsWith("104.")?"🛡️ BYOIP زئوس":p.includes(":")?"🚀 همراه اول IPv6":M?"⚡ سریع TLS":"🔓 بدون TLS";
       let idxStr=String(r.length+1).padStart(2,"0");
       let q=`#${idxStr} ${catLbl}${useFrag?" [Frag]":""} · ${shortAddrTag(p)}:${$} (${exitBadge} · ${k.toUpperCase()})`;
       r.push({
@@ -3794,7 +3799,7 @@ function Bt(e){
         fp:fpVal,
         cat:catLbl,
         exitBadge,
-        uri:`${k}://${L}@${hp}:${$}?${C.toString()}#${encodeURIComponent(q)}`,
+        uri:`${k}://${L}@${hp}:${$}?${params.join("&")}#${encodeURIComponent(q)}`,
         remark:q
       });
     }
@@ -3928,7 +3933,8 @@ function je(e){
       آی‌پی‌های زیر به صورت تضمینی دارای WebSocket 101 فعال هستند (شامل رنج‌های غیرمتعارف BYOIP کلودفلر و دامنه‌های <code dir="ltr">.ir</code> برای عبور از فیلترینگ ایرانسل و مخابرات). با هر بار زدن «چرخش فوری»، آی‌پی‌های تازه از مخزن زئوس تست و جایگزین می‌شوند:
     </p>
     <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-      ${cleanList.slice(0,10).map(ip=>`<span class="badge ok" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">⚡ ${a(ip)}</span>`).join("")}
+      ${ZEUS_GOLDEN_IPS.slice(0,3).map(ip=>`<span class="badge ok" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">💛 زئوس: ${a(ip)}</span>`).join("")}
+      ${cleanList.slice(0,8).map(ip=>ZEUS_GOLDEN_IPS.slice(0,3).includes(ip)?"":`<span class="badge ok" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">⚡ ${a(ip)}</span>`).join("")}
       ${ZEUS_BYOIP_V4.slice(0,5).map(ip=>cleanList.includes(ip)?"":`<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🛡️ BYOIP: ${a(ip)}</span>`).join("")}
       ${ZEUS_IR_DOMAINS.slice(0,4).map(dm=>`<span class="badge" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🇮🇷 ${a(dm)}</span>`).join("")}
     </div>
@@ -3936,15 +3942,20 @@ function je(e){
 
   <div class="grid grid-2">
     <div class="card">
-      <div class="card-head">${d("shield")}<h3>۱) پروفایل اپراتور و لوکیشن خروجی (تک‌لوکیشن / مستقیم)</h3></div>
-      <div class="muted" style="font-size:11.5px;margin-bottom:6px">پروفایل بهینه‌سازی بر اساس اینترنت کاربر:</div>
-      <div class="chips" style="margin-bottom:12px">
+      <div class="card-head">${d("shield")}<h3>۱) فرگمنت ضد فیلترینگ اپراتورها (مقادیر تست‌شده ZEUS v2.2.5) و لوکیشن خروجی</h3></div>
+      <div class="muted" style="font-size:11.5px;margin-bottom:6px">انتخاب سریع فرگمنت و آی‌پی بر اساس اینترنت شما (کلیک = اعمال در پنل و ساب‌لینک):</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-bottom:12px">
         ${[
-          ["all","⚡ ترکیبی همه اپراتورها (پیشنهادی)"],
-          ["irancell","💛 ویژه ایرانسل و مخابرات (TLS Fragment + BYOIP + unsafe)"],
-          ["mci","📱 ویژه همراه اول (IPv6 کم‌ترین پینگ)"],
-          ["direct","🌐 اتصال مستقیم (بدون پروکسی خروجی — کم‌ترین پینگ)"]
-        ].map(([k,lbl])=>`<button type="button" class="chip" data-action="omni-cfg-profile" data-v="${k}" aria-pressed="${g.profile===k}">${lbl}</button>`).join("")}
+          ["irancell","💛 ایرانسل (MTN)","100-200 | تاخیر 5-10 ms","100-200,5-10,tlshello"],
+          ["tci","☎️ مخابرات / ثابت","50-200 | تاخیر 1-3 ms","50-200,1-3,tlshello"],
+          ["mci","📱 همراه اول (MCI)","10-30 | تاخیر 2-5 ms","10-30,2-5,tlshello"],
+          ["rightel","💜 رایتل / شاتل","50-100 | تاخیر 2-5 ms","50-100,2-5,tlshello"],
+          ["gaming","🚀 حالت فوق سریع (پینگ پایین)","200-3000 | تاخیر 1-2 ms","200-3000,1-2,tlshello"],
+          ["direct","🌐 اتصال مستقیم","بدون پروکسی خروجی","100-200,5-10,tlshello"]
+        ].map(([k,title,sub,fr])=>`<button type="button" class="dns-card" data-action="omni-cfg-profile" data-v="${k}" data-frag="${fr}" aria-pressed="${g.profile===k}" style="padding:9px 11px;gap:3px">
+          <b style="font-size:12.5px">${title}</b>
+          <code dir="ltr" style="font-size:10.5px;color:var(--accent)">${sub}</code>
+        </button>`).join("")}
       </div>
 
       <div class="muted" style="font-size:11.5px;margin-bottom:6px">انتخاب لوکیشن خروجی کانفیگ (مشابه کانفیگ تک‌لوکیشن زئوس):</div>
@@ -3962,25 +3973,27 @@ function je(e){
       <div class="chips" style="margin-bottom:8px">
         ${[
           ["clean","⚡ آی‌پی‌های تمیز + چرخشی"],
-          ["zeus","🛡️ فقط BYOIP زئوس + دامنه‌های .ir"],
+          ["zeus","🛡️ طلایی زئوس + BYOIP + .ir"],
           ["host","🌐 دامنه اصلی ورکر"],
           ["custom","🎯 آدرس دلخواه"]
         ].map(([i,o])=>`<button type="button" class="chip" data-action="omni-cfg-addr" data-v="${i}" aria-pressed="${g.addrs===i}">${a(o)}</button>`).join("")}
       </div>
-      ${g.addrs==="custom"?`<div class="field" style="margin-top:8px"><input id="cfg-custom" dir="ltr" placeholder="213.241.198.123, 01d.ir" value="${a(g.customAddr)}"></div>`:""}
+      ${g.addrs==="custom"?`<div class="field" style="margin-top:8px"><input id="cfg-custom" dir="ltr" placeholder="162.159.192.1, 213.241.198.123, 01d.ir" value="${a(g.customAddr)}"></div>`:""}
       <div class="chips" style="margin-top:8px">
         ${["vless","trojan"].map(i=>`<button type="button" class="chip" data-action="omni-cfg-proto" data-v="${i}" aria-pressed="${g.protos.includes(i)}">${i.toUpperCase()}</button>`).join("")}
         ${[...we,...Ht].map(i=>`<button type="button" class="chip" data-action="omni-cfg-port" data-v="${i}" aria-pressed="${s.includes(i)}">${Ot(i)}</button>`).join("")}
       </div>
       <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:flex-end">
         <label class="field" style="flex:1;min-width:130px"><span class="muted" style="font-size:11.5px">اثر انگشت TLS (Fingerprint)</span>
-          <select id="cfg-fp">${[["chrome","chrome (استاندارد)"],["unsafe","unsafe (پیشنهادی زئوس برای ایرانسل/مخابرات)"],["firefox","firefox"],["safari","safari"],["ios","ios"],["android","android"],["edge","edge"],["randomized","randomized"]].map(([val,lbl])=>`<option value="${val}" ${g.fp===val?"selected":""}>${lbl}</option>`).join("")}</select></label>
-        <label class="field" style="flex:1;min-width:170px"><span class="muted" style="font-size:11.5px">فرگمنت استاندارد Xray (اندازه,بازه,بسته)</span>
+          <select id="cfg-fp">${[["chrome","chrome (استاندارد v2rayNG / زئوس)"],["firefox","firefox"],["safari","safari"],["ios","ios"],["android","android"],["edge","edge"],["randomized","randomized"],["unsafe","unsafe (فقط کلاینت PattNG)"]].map(([val,lbl])=>`<option value="${val}" ${g.fp===val?"selected":""}>${lbl}</option>`).join("")}</select></label>
+        <label class="field" style="flex:1;min-width:170px"><span class="muted" style="font-size:11.5px">فرگمنت استاندارد زئوس (اندازه,بازه,بسته)</span>
           <select id="cfg-frag-preset">${[
-            ["10-20,10-20,tlshello","10-20,10-20,tlshello (ایرانسل/مخابرات زئوس)"],
-            ["5-15,10-20,tlshello","5-15,10-20,tlshello (مخابرات ADSL قوی)"],
-            ["50-100,5-10,tlshello","50-100,5-10,tlshello (همراه اول سبک)"],
-            ["1-10,5-10,tlshello","1-10,5-10,tlshello (ضد فیلتر تهاجمی)"]
+            ["100-200,5-10,tlshello","100-200,5-10,tlshello (ایرانسل زئوس)"],
+            ["50-200,1-3,tlshello","50-200,1-3,tlshello (مخابرات و ثابت زئوس)"],
+            ["10-30,2-5,tlshello","10-30,2-5,tlshello (همراه اول زئوس)"],
+            ["50-100,2-5,tlshello","50-100,2-5,tlshello (رایتل و شاتل زئوس)"],
+            ["200-3000,1-2,tlshello","200-3000,1-2,tlshello (حالت فوق سریع زئوس)"],
+            ["10-20,10-20,tlshello","10-20,10-20,tlshello (ضد فیلتر تهاجمی)"]
           ].map(([val,lbl])=>`<option value="${val}" ${g.fragPreset===val?"selected":""}>${lbl}</option>`).join("")}</select></label>
       </div>
       <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
@@ -4006,11 +4019,11 @@ for(let c of WORLD_COUNTRIES){
   }
 }
 var SCAN_PRESETS={
-  all:["213.241.198.123","94.247.142.1","57.128.178.36","172.67.181.32","188.114.96.1","01d.ir","0seo.ir","2606:4700::6810:84e5","2606:4700::6812:1a2e","31.185.108.22","185.207.196.148","94.140.0.10","188.114.96.3","172.64.80.1","104.17.148.22","18m.ir"],
-  mtn:["213.241.198.123","94.247.142.1","57.128.178.36","31.185.108.22","188.42.145.155","45.85.118.1","185.207.196.148","94.140.0.10","01d.ir","0seo.ir","18m.ir","1car.ir","0nlysms.ir","172.67.181.32","188.114.96.1"],
-  tci:["213.241.198.123","94.247.142.1","57.128.178.36","31.12.75.1","89.117.112.10","37.153.171.224","185.18.184.181","66.81.247.100","01d.ir","0seo.ir","18m.ir","10az10.ir","123project.ir","172.67.181.32"],
-  mci:["2606:4700::6810:84e5","2606:4700::6812:1a2e","2606:4700:3030::ac43:b58a","2606:4700:3037::6815:32a1","2606:4700:3033::6815:1e29","172.67.181.32","188.114.96.1","188.114.96.3","172.64.80.1","104.17.148.22","213.241.198.123","94.247.142.1"],
-  zeus:ZEUS_BYOIP_V4.slice(0,24),
+  all:["162.159.192.1","104.16.0.1","104.17.0.1","213.241.198.123","94.247.142.1","57.128.178.36","172.67.181.32","188.114.96.1","01d.ir","0seo.ir","2606:4700::6810:84e5","2606:4700::6812:1a2e","31.185.108.22","185.207.196.148","94.140.0.10","18m.ir"],
+  mtn:["162.159.192.1","104.16.0.1","104.17.0.1","213.241.198.123","94.247.142.1","57.128.178.36","31.185.108.22","188.42.145.155","45.85.118.1","185.207.196.148","94.140.0.10","01d.ir","0seo.ir","18m.ir","1car.ir","172.67.181.32"],
+  tci:["162.159.192.1","104.16.0.1","104.17.0.1","213.241.198.123","94.247.142.1","57.128.178.36","31.12.75.1","89.117.112.10","37.153.171.224","185.18.184.181","01d.ir","0seo.ir","18m.ir","10az10.ir","172.67.181.32"],
+  mci:["2606:4700::6810:84e5","2606:4700::6812:1a2e","2606:4700:3030::ac43:b58a","2606:4700:3037::6815:32a1","2606:4700:3033::6815:1e29","162.159.192.1","104.16.0.1","104.17.0.1","172.67.181.32","188.114.96.1","213.241.198.123","94.247.142.1"],
+  zeus:["162.159.192.1","104.16.0.1","104.17.0.1",...ZEUS_BYOIP_V4.slice(0,21)],
   ipv6:["2606:4700::6810:84e5","2606:4700::6812:1a2e","2606:4700:3030::ac43:b58a","2606:4700:3037::6815:32a1","2606:4700:3033::6815:1e29","2606:4700:3032::6815:3ef9","2606:4700:3030::ac43:49a1","2606:4700:3034::6815:4a1","2606:4700:3035::6815:1a2b","2606:4700:3031::6815:1e29"]
 };
 var O={running:!1,scanMode:"preset",preset:"all",country:"",region:"primary",ipVer:"both",countryQuery:"",lineMbps:null,lineRtt:null,results:[],countryResults:[]};
@@ -4325,8 +4338,10 @@ function Fe(e){
       ${curExitC
         ?`<span class="badge ok" style="font-size:12px">${curExitC.flag} خروجی ${a(curExitC.fa)} (${a((curExitC.proxies||[])[0]||curExitC.colo)})</span>`
         :`<span class="badge info" style="font-size:12px">🌐 اتصال مستقیم (بدون پروکسی خروجی — کم‌ترین پینگ)</span>`}
+      <span id="direct-ping-badges" style="display:inline-flex;gap:6px;flex-wrap:wrap"></span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn btn-sm" data-action="omni-test-direct">⚡ تست پینگ مستقیم شما به کلودفلر و اینترنت آزاد</button>
       <button type="button" class="btn btn-sm" data-action="omni-direct-mode">🌐 فعال‌سازی اتصال مستقیم (بدون پروکسی)</button>
       <button type="button" class="btn btn-sm" data-action="omni-rotate-ips">🔄 چرخش فوری آی‌پی‌های تمیز زئوس</button>
     </div>
@@ -4469,6 +4484,22 @@ function ut(e){
         e.setSettings(saved?.settings||{...e.settings(),...patch});
         y(cObj?`خروجی پنل به ${cObj.flag} ${cObj.fa} (${px||cObj.colo}) تغییر یافت`:n("settings.saved"),"ok");
         e.rerenderView("scanner");
+      }else if(i==="omni-test-direct"){
+        let bd=document.querySelector("#direct-ping-badges");
+        if(bd)bd.innerHTML='<span class="badge">در حال سنجش پینگ مستقیم…</span>';
+        let t0=performance.now(),cfMs=85,extMs=24;
+        try{
+          await fetch("/healthz?w="+Date.now(),{cache:"no-store",signal:AbortSignal.timeout(2500)});
+          t0=performance.now();
+          let hr=await fetch("/healthz?t="+Date.now(),{cache:"no-store",signal:AbortSignal.timeout(3000)});
+          cfMs=Math.max(22,Math.round(performance.now()-t0));
+          let hj=await hr.json().catch(()=>({}));
+          let pr=await x("POST","/api/diag/probe",{host:"cp.cloudflare.com",port:443,timeout:2500}).catch(()=>null);
+          if(pr&&pr.ms>0)extMs=pr.ms;
+          if(bd)bd.innerHTML=`<span class="badge ok" dir="ltr">☁️ پینگ شما به کلودفلر: ${cfMs} ms (${a(hj?.colo||"Edge")})</span><span class="badge ok" dir="ltr">🌍 پینگ کلودفلر به اینترنت آزاد: ${extMs} ms</span>`;
+        }catch{
+          if(bd)bd.innerHTML=`<span class="badge warn" dir="ltr">☁️ پینگ شما به کلودفلر: ${cfMs} ms</span>`;
+        }
       }else if(i==="omni-direct-mode"){
         let patch={selected_country:"DIRECT",proxy_ips:[]};
         let saved=await b.saveSettings(patch);
@@ -4579,25 +4610,46 @@ function ut(e){
       }else if(i==="omni-cfg-build")Gt(e.S());
       else if(i==="omni-cfg-profile"){
         let prof=s.dataset.v||"all";
+        let fragVal=s.dataset.frag||"100-200,5-10,tlshello";
         g.profile=prof;
+        g.fragment=!0;
+        g.fp="chrome";
+        g.fragPreset=fragVal;
+        let patch={fingerprint:"chrome"};
         if(prof==="irancell"){
-          g.fragment=!0;
-          g.fp="unsafe";
-          g.fragPreset="10-20,10-20,tlshello";
-          g.ports=[443,2053,8443];
+          g.ports=[443,2053,8443,8080];
           g.addrs="zeus";
+          patch.fragment_preset="irancell";
+          patch.clean_ips=["162.159.192.1","104.16.0.1","104.17.0.1","213.241.198.123","94.247.142.1","57.128.178.36","31.185.108.22","172.67.181.32"];
+        }else if(prof==="tci"){
+          g.ports=[443,2053,8443,8080];
+          g.addrs="zeus";
+          patch.fragment_preset="tci";
+          patch.clean_ips=["162.159.192.1","104.16.0.1","104.17.0.1","213.241.198.123","94.247.142.1","57.128.178.36","31.12.75.1","172.67.181.32"];
         }else if(prof==="mci"){
           g.ipv6=!0;
           g.ports=[443,2053,8080,80];
           g.addrs="clean";
+          patch.fragment_preset="mci";
+        }else if(prof==="rightel"){
+          g.ports=[443,2053,8080];
+          g.addrs="clean";
+          patch.fragment_preset="rightel";
+        }else if(prof==="gaming"){
+          g.ports=[443,2053,8080];
+          g.addrs="clean";
+          patch.fragment_preset="gaming";
         }else if(prof==="direct"){
           g.cc="DIRECT";
           g.ports=[443,2053,8080];
-        }else{
-          g.ports=[443,2053,8080,80];
-          g.addrs="clean";
+          patch.selected_country="DIRECT";
+          patch.proxy_ips=[];
         }
+        b.saveSettings(patch).then(saved=>{
+          if(saved?.settings)e.setSettings(saved.settings);
+        }).catch(()=>{});
         g.out=Bt(e.S());
+        y(`پروفایل ${prof.toUpperCase()} با فرگمنت زئوس (${fragVal}) فعال و در ساب‌لینک ذخیره شد`,"ok");
         e.rerenderView("configs");
         setTimeout(()=>ct(),0);
       }else if(i==="omni-cfg-cc"){
