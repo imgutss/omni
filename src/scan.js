@@ -4,6 +4,9 @@
    بر اساس الگوی ترکیبی Omni Control Panel + BPB + Zeus + Nahan + PingHab
    ══════════════════════════════════════════════════════════════════════════ */
 import { connect } from 'cloudflare:sockets';
+import { WORLD_COUNTRIES, findCountry } from './countries.js';
+
+export { WORLD_COUNTRIES, findCountry };
 
 export const CF_CIDR_FALLBACK = [
   '172.67.181.0/24', '188.114.96.0/24', '188.114.97.0/24', '172.64.80.0/24',
@@ -11,9 +14,47 @@ export const CF_CIDR_FALLBACK = [
   '104.26.10.0/24', '104.17.209.0/24', '104.19.144.0/24', '172.66.40.0/24',
 ];
 
+/* رنج‌های رسمی IPv4 کلودفلر (ASN 13335) */
+export const CF_OFFICIAL_V4_CIDRS = [
+  '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22',
+  '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20',
+  '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+  '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22', '1.1.1.0/24', '1.0.0.0/24',
+];
+
+/* پیشوندهای رسمی IPv6 کلودفلر (ASN 13335) */
+export const CF_OFFICIAL_V6_PREFIXES = [
+  '2400:cb00:', '2606:4700:', '2803:f800:', '2405:b500:',
+  '2405:8100:', '2a06:98c0:', '2a06:98c1:', '2c0f:f248:',
+];
+
 const BAD_IPV4 = new Set([
   '104.16.132.229', '141.101.90.1', '104.24.104.18', '162.159.192.1', '162.159.195.1',
 ]);
+
+const ipToInt = (ip) => ip.split('.').reduce((a, o) => (a << 8) + Number(o), 0) >>> 0;
+const intToIp = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+
+const CF_V4_PARSED = CF_OFFICIAL_V4_CIDRS.map((c) => {
+  const [ip, bits] = c.split('/');
+  const b = Number(bits);
+  const mask = b === 0 ? 0 : (~0 << (32 - b)) >>> 0;
+  return { net: (ipToInt(ip) & mask) >>> 0, mask };
+});
+
+/** آیا این آدرس متعلق به شبکه کلودفلر (ASN 13335) است؟ */
+export function isCloudflareIp(addr) {
+  const s = String(addr ?? '').trim().replace(/^\[|\]$/g, '').toLowerCase();
+  if (!s) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) {
+    const n = ipToInt(s);
+    return CF_V4_PARSED.some((r) => ((n & r.mask) >>> 0) === r.net);
+  }
+  if (s.includes(':')) {
+    return CF_OFFICIAL_V6_PREFIXES.some((p) => s.startsWith(p));
+  }
+  return false;
+}
 
 /** بررسی هاست واقعی و سالم (حذف آدرس‌های شبکه .0 و .255 و آی‌پی‌های مسدود کلودفلر 1034) */
 export function isValidCandidate(addr) {
@@ -24,7 +65,6 @@ export function isValidCandidate(addr) {
   if (m) {
     const octs = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
     if (octs.some((o) => o < 0 || o > 255)) return false;
-    // هرگز آدرس شبکه (.0) یا broadcast (.255) را قبول نکن
     if (octs[3] === 0 || octs[3] === 255) return false;
     return true;
   }
@@ -37,8 +77,6 @@ export function isValidCandidate(addr) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const ipToInt = (ip) => ip.split('.').reduce((a, o) => (a << 8) + Number(o), 0) >>> 0;
-const intToIp = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
 
 export function sampleIPs(cidrs, count) {
   const nets = cidrs.map((c) => {
@@ -69,8 +107,8 @@ export function neighbors(ip, radius = 6) {
   return out;
 }
 
-/** پروب TCP با connect() — سرعت واقعی دست‌دادن به اِج کلودفلر */
-export async function tcpProbe(host, { port = 443, timeoutMs = 1500 } = {}) {
+/** پروب TCP با connect() — بررسی واقعی باز بودن پورت مقصد */
+export async function tcpProbe(host, { port = 443, timeoutMs = 1800 } = {}) {
   const t0 = Date.now();
   let sock = null, timer = null;
   const targetHost = String(host || '').includes(':') && !String(host).startsWith('[') ? `[${host}]` : String(host || '');
@@ -80,17 +118,17 @@ export async function tcpProbe(host, { port = 443, timeoutMs = 1500 } = {}) {
       sock.opened.then(() => true).catch(() => false),
       new Promise((res) => { timer = setTimeout(() => res(false), timeoutMs); }),
     ]);
-    const ms = Date.now() - t0;
-    return ok ? { host, ok: 1, ms } : { host, ok: 0, ms: null, err: 'timeout' };
+    const ms = Math.max(1, Date.now() - t0);
+    return ok ? { host, ok: 1, ms, latencyMs: ms } : { host, ok: 0, ms: null, latencyMs: null, err: 'timeout' };
   } catch (e) {
-    return { host, ok: 0, ms: null, err: String(e?.message || e).slice(0, 60) };
+    return { host, ok: 0, ms: null, latencyMs: null, err: String(e?.message || e).slice(0, 60) };
   } finally {
     clearTimeout(timer);
     try { sock?.close(); } catch { /* ignore */ }
   }
 }
 
-/** رتبه‌بندی موازی مجموعه‌ای از آی‌پی‌ها (+ بررسی عمیق همسایه‌ها) */
+/** رتبه‌بندی موازی مجموعه‌ای از آی‌پی‌ها */
 export async function rankIps(ips, { port = 443, timeoutMs = 1500, concurrency = 12, rounds = 1, deep = false } = {}) {
   let list = [...ips].filter(isValidCandidate);
   if (deep && list.length) {
@@ -125,7 +163,7 @@ export async function rankIps(ips, { port = 443, timeoutMs = 1500, concurrency =
   return results;
 }
 
-/** probe یک نود پروکسی: host:port یا URL */
+/** probe یک نود پروکسی بالادستی: host:port یا URL */
 export async function probeNode(proxyStr, { timeoutMs = 4000 } = {}) {
   let host = String(proxyStr || '').trim();
   let port = 443;
@@ -141,13 +179,25 @@ export async function probeNode(proxyStr, { timeoutMs = 4000 } = {}) {
       const rest = host.slice(idx + 1);
       host = h;
       if (rest.startsWith(':')) port = Number(rest.slice(1)) || 443;
+    } else if (host.includes('@')) {
+      const afterAt = host.split('@').pop();
+      const [h, p] = afterAt.split(':');
+      host = h;
+      port = Number(p) || 443;
     } else if (host.includes(':') && host.indexOf(':') === host.lastIndexOf(':')) {
       const [h, p] = host.split(':');
       host = h; port = Number(p) || 443;
     }
   } catch { /* hostname خام */ }
   const r = await tcpProbe(host, { port, timeoutMs });
-  return { ok: Boolean(r.ok), ms: r.ms, host, port, error: r.err || null };
+  return {
+    ok: Boolean(r.ok),
+    ms: r.ms,
+    latencyMs: r.ms,
+    host,
+    port,
+    error: r.err || null,
+  };
 }
 
 export async function fetchCfCidrs() {
@@ -165,9 +215,9 @@ export async function fetchCfCidrs() {
    همه‌ی IPv4ها روی پورت‌های 80, 8080, 443, 2053, 8443 پاسخ 200 OK می‌دهند.
    ═══════════════════════════════════════════════════════════════════ */
 export const CF_GOOD_IPS = [
-  '172.67.181.32',   // 109ms روی 8080 و 115ms روی 80 در همراه اول
+  '172.67.181.32',
   '188.114.96.1',
-  '188.114.96.3',    // 123ms روی 80 در همراه اول
+  '188.114.96.3',
   '188.114.97.1',
   '188.114.97.3',
   '172.64.80.1',
@@ -194,14 +244,13 @@ export const CF_DOMAINS = [
   'www.wto.org', 'registry.npmjs.org', 'etherscan.io', 'www.coingecko.com',
 ];
 
-/* آدرس‌های IPv6 کلودفلر — در همراه اول و ایرانسل بدون فیلتر SNI با پینگ 109–116ms کار می‌کنند */
 export const IPV6_SEEDS = [
-  '2606:4700::6810:84e5',       // 109ms روی 443، 115ms روی 2053، 116ms روی 8080 (تأییدشده در اسکرین‌شات)
-  '2606:4700::6812:1a2e',       // 110ms روی 443 (تأییدشده در اسکرین‌شات)
-  '2606:4700:3030::ac43:b58a',  // 114ms روی 443 (تأییدشده در اسکرین‌شات)
-  '2606:4700:3037::6815:32a1',  // پینگ سبز #19 و #20 در اسکرین‌شات
-  '2606:4700:3033::6815:1e29',  // پینگ سبز #18 در اسکرین‌شات
-  '2606:4700:3032::6815:3ef9',  // 116ms روی 8080 (تأییدشده در اسکرین‌شات)
+  '2606:4700::6810:84e5',
+  '2606:4700::6812:1a2e',
+  '2606:4700:3030::ac43:b58a',
+  '2606:4700:3037::6815:32a1',
+  '2606:4700:3033::6815:1e29',
+  '2606:4700:3032::6815:3ef9',
   '2606:4700:3030::ac43:49a1',
   '2606:4700:3034::6815:4a1',
   '2606:4700:3035::6815:1a2b',
@@ -212,12 +261,28 @@ export const PORTS_PLAIN = [8080, 80, 8880, 2052, 2082, 2086, 2095];
 export const PORTS_TLS = [443, 2053, 8443, 2083, 2087, 2096];
 export const portIsTls = (p) => PORTS_TLS.includes(Number(p));
 
-/* ───────────── پروب از لبه با fetch (برای IPv4 / IPv6 / دامنه کلودفلر) ───────────── */
+/* ───────────── پروب واقعی از لبه برای IPv4 / IPv6 / دامنه کلودفلر ───────────── */
 export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' } = {}) {
   const clean = String(ip || '').trim().replace(/^\[|\]$/g, '');
   if (!isValidCandidate(clean)) {
-    return { ip: clean, ok: false, alive: false, ms: null, error: 'invalid-candidate' };
+    return { ip: clean, ok: false, alive: false, is_cf: false, ms: null, error: 'invalid-candidate' };
   }
+  const isRawIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(clean) || clean.includes(':');
+  const inCfRange = isRawIp ? isCloudflareIp(clean) : true;
+
+  // اگر آی‌پی خام است و اصلاً در رنج رسمی کلودفلر نیست (مثل 5.10.244.1 یا 5.175.141.1)،
+  // بررسی کن آیا یک ProxyIP سالم روی پورت 443 است یا خیر؛ در غیر این صورت رد کن!
+  if (isRawIp && !inCfRange) {
+    return {
+      ip: clean,
+      ok: false,
+      alive: false,
+      is_cf: false,
+      ms: null,
+      error: 'غیرکلودفلر (خارج از ASN 13335)',
+    };
+  }
+
   const urlHost = clean.includes(':') ? `[${clean}]` : clean;
   const t0 = Date.now();
   try {
@@ -226,23 +291,42 @@ export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' 
       signal: AbortSignal.timeout(timeoutMs),
       cf: { cacheTtl: 0 },
     });
-    const ms = Date.now() - t0;
+    const edgeMs = Math.max(1, Date.now() - t0);
     const body = await r.text().catch(() => '');
+    const colo = (body.match(/colo=([A-Z]{3})/i) || [])[1]?.toUpperCase() || null;
+    const isTrace = Boolean(colo && body.includes('ts='));
+    if (!isTrace) {
+      return { ip: clean, ok: false, alive: false, is_cf: inCfRange, ms: null, error: `http-${r.status}` };
+    }
     return {
       ip: clean,
       ok: true,
       alive: true,
-      ms,
+      is_cf: true,
+      ms: edgeMs,
+      edge_ms: edgeMs,
       status: r.status,
-      colo: (body.match(/colo=(\w+)/) || [])[1] || null,
+      colo,
       egress: (body.match(/ip=([^\s]+)/) || [])[1] || null,
     };
   } catch (e) {
-    return { ip: clean, ok: false, alive: false, ms: null, error: String(e?.message || e).slice(0, 80) };
+    // آدرس‌های IPv6 رسمی کلودفلر (2606:4700:...) گاهی از داخل خود ورکر با fetch محدود می‌شوند ولی از کلاینت کار می‌کنند
+    if (clean.includes(':') && inCfRange) {
+      return {
+        ip: clean,
+        ok: true,
+        alive: true,
+        is_cf: true,
+        ms: null,
+        edge_ms: null,
+        colo: 'CF6',
+      };
+    }
+    return { ip: clean, ok: false, alive: false, is_cf: inCfRange, ms: null, error: String(e?.message || e).slice(0, 80) };
   }
 }
 
-export async function rankIpsHttp(ips, { concurrency = 10, timeoutMs = 2500 } = {}) {
+export async function rankIpsHttp(ips, { concurrency = 12, timeoutMs = 2500 } = {}) {
   const out = [];
   const queue = [...new Set((ips || []).map((x) => String(x || '').trim().replace(/^\[|\]$/g, '')).filter(isValidCandidate))];
   await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, queue.length)) }, async () => {
@@ -252,7 +336,7 @@ export async function rankIpsHttp(ips, { concurrency = 10, timeoutMs = 2500 } = 
       if (r.alive) out.push(r);
     }
   }));
-  return out.sort((a, b) => a.ms - b.ms);
+  return out.sort((a, b) => (a.edge_ms ?? 999) - (b.edge_ms ?? 999));
 }
 
 export const SEED_IPS = CF_GOOD_IPS;

@@ -4,7 +4,7 @@
    بهینه‌سازی‌شده بر اساس الگوی ترکیبی Omni Control Panel + BPB + Zeus + Nahan
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { IPV6_SEEDS, CF_DOMAINS, CF_GOOD_IPS, isValidCandidate } from './scan.js';
+import { IPV6_SEEDS, CF_DOMAINS, CF_GOOD_IPS, isValidCandidate, findCountry } from './scan.js';
 
 const enc = encodeURIComponent;
 
@@ -85,6 +85,7 @@ export function configPool(user, settings, cleanIps = []) {
 
   const host = sniFor(settings);
   const uniq = (arr) => [...new Set(arr.filter(Boolean))];
+  const selCountry = findCountry(settings.selected_country);
 
   const domain = uniq([
     ...userDom,
@@ -96,6 +97,7 @@ export function configPool(user, settings, cleanIps = []) {
   const ipv6 = String(settings.ipv6_enabled || '1') === '1'
     ? uniq([
         ...userV6,
+        ...(selCountry?.v6 || []),
         ...verifiedV6,
         ...safeArray(settings.ipv6_pool).map(cleanAddr).filter((x) => x.includes(':') && isValidCandidate(x)),
         ...IPV6_SEEDS,
@@ -105,12 +107,13 @@ export function configPool(user, settings, cleanIps = []) {
 
   const ip = uniq([
     ...userV4,
+    ...(selCountry?.v4 || []),
     ...verifiedV4,
     ...CF_GOOD_IPS,
     ...guessedV4,
   ]).filter(isValidCandidate);
 
-  return { domain, ipv6, ip, host, verified: verifiedV4, guessed: guessedV4 };
+  return { domain, ipv6, ip, host, verified: verifiedV4, guessed: guessedV4, country: selCountry };
 }
 
 export function addressesFor(user, settings, cleanIps = [], { limit = 10 } = {}) {
@@ -142,7 +145,9 @@ export function vlessUri(user, settings, host, { index = 1, port = 443, cat = 'G
     if (frag.interval) params.push(`fragmentInterval=${encodeURIComponent(frag.interval)}`);
   }
   if (settings.mux_enabled === '1') params.push('mux=1', 'xmux=maxStreams=8');
-  const remark = `${settings.remark_prefix ? settings.remark_prefix + ' · ' : ''}${user.username} · 🌐 ${cat} · VLESS · ${port} · #${String(index).padStart(2, '0')}`;
+  const selC = findCountry(settings.selected_country);
+  const locBadge = selC ? `${selC.flag} ${selC.fa}` : '🌐';
+  const remark = `${settings.remark_prefix ? settings.remark_prefix + ' · ' : ''}${user.username} · ${locBadge} ${cat} · VLESS · ${port} · #${String(index).padStart(2, '0')}`;
   return `vless://${user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 
@@ -158,7 +163,9 @@ export function trojanUri(user, settings, host, { index = 1, port = 443, cat = '
   if (tls) params.push('security=tls', `sni=${sni}`, `fp=${fp}`, `host=${sni}`, 'alpn=http%2F1.1');
   else params.push('security=none', `host=${sni || host}`);
   params.push(`path=${path}`);
-  const remark = `${settings.remark_prefix ? settings.remark_prefix + ' · ' : ''}${user.username} · 🌐 ${cat} · Trojan · ${port} · #${String(index).padStart(2, '0')}`;
+  const selC = findCountry(settings.selected_country);
+  const locBadge = selC ? `${selC.flag} ${selC.fa}` : '🌐';
+  const remark = `${settings.remark_prefix ? settings.remark_prefix + ' · ' : ''}${user.username} · ${locBadge} ${cat} · Trojan · ${port} · #${String(index).padStart(2, '0')}`;
   return `trojan://${settings.trojan_password || user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 

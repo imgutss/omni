@@ -9,7 +9,7 @@ import {
   settingsCached, ensureRecoveryCode, sessionIdFrom,
 } from './auth.js';
 import { buildConfigs, subscriptionBody, statusPage, FRAGMENT_PRESETS, FINGERPRINTS, safeArray, esc } from './links.js';
-import { rankIps, rankIpsHttp, probeNode, tcpProbe, fetchCfCidrs, sampleIPs, SEED_IPS, CF_GOOD_IPS, IPV6_SEEDS, PORTS_PLAIN, PORTS_TLS, isValidCandidate, httpProbe } from './scan.js';
+import { rankIps, rankIpsHttp, probeNode, tcpProbe, fetchCfCidrs, sampleIPs, SEED_IPS, CF_GOOD_IPS, IPV6_SEEDS, PORTS_PLAIN, PORTS_TLS, isValidCandidate, isCloudflareIp, httpProbe, WORLD_COUNTRIES, findCountry } from './scan.js';
 import { userStatus, safeJsonArray, invalidateUser } from './core.js';
 
 const GB = 1024 ** 3;
@@ -206,13 +206,26 @@ export async function handleApi(request, env, ctx, url) {
     return json({ ok: true, saved });
   }
 
-  /* ───────── تست سرعت واقعی از دستگاه کاربر (پشت تونل خودش) ───────── */
+  /* ───────── تست سرعت واقعی (از پنل ادمین یا صفحه وضعیت کاربر) ───────── */
   if (p === '/api/diag/speed') {
     const q = url.searchParams;
-    const u = await env.DB.prepare('SELECT username FROM users WHERE sub_token = ?')
-      .bind(String(q.get('token') || '')).first();
-    if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
-    const bytes = Math.max(65536, Math.min(8 * 1024 * 1024, Number(q.get('bytes') || 2 * 1024 * 1024) || 0));
+    const tok = String(q.get('token') || '').trim();
+    if (tok) {
+      const u = await env.DB.prepare('SELECT username FROM users WHERE sub_token = ?').bind(tok).first();
+      if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
+    } else {
+      const acc = await currentAccount(env, request);
+      if (!acc) return bad('unauthorized', 'نیاز به ورود مجدد', 401);
+    }
+    if (method === 'POST') {
+      const t0 = Date.now();
+      const buf = await request.arrayBuffer().catch(() => new ArrayBuffer(0));
+      const ms = Math.max(1, Date.now() - t0);
+      const bytes = buf.byteLength || 0;
+      const mbps = Math.round(((bytes * 8) / (ms / 1000) / 1e6) * 10) / 10;
+      return json({ ok: true, bytes, ms, mbps, colo: request?.cf?.colo || null });
+    }
+    const bytes = Math.max(4096, Math.min(4 * 1024 * 1024, Number(q.get('bytes') || 327680) || 327680));
     const buf = new Uint8Array(bytes);
     for (let i = 0; i < bytes; i += 4) {                     // داده‌ی تصادفی‌نما: غیرقابل فشرده‌سازی
       const v = (i * 2654435761) >>> 0;
@@ -222,8 +235,10 @@ export async function handleApi(request, env, ctx, url) {
       headers: {
         'content-type': 'application/octet-stream',
         'content-length': String(bytes),
-        'cache-control': 'no-store, no-cache, must-revalidate',
+        'cache-control': 'no-store, no-cache, must-revalidate, no-transform',
         'access-control-allow-origin': '*',
+        'timing-allow-origin': '*',
+        'x-omni-colo': String(request?.cf?.colo || ''),
       },
     });
   }
@@ -511,7 +526,7 @@ export async function handleApi(request, env, ctx, url) {
       'default_quota_gb', 'default_expiry_days', 'rotate_minutes', 'signup_max_per_ip', 'signup_max_per_day',
       'public_signup', 'maintenance', 'auto_rotate', 'mux_enabled', 'block_ads', 'block_nsfw', 'block_list',
       'clean_ips', 'ip_pool', 'device_limit', 'dns_upstream', 'proto', 'path', 'early_data', 'decoy_url', 'announce',
-      'trojan_password', 'ports_mode', 'ports_custom', 'config_count', 'ipv6_enabled', 'ipv6_pool', 'verified_pairs', 'address_domains'];
+      'trojan_password', 'ports_mode', 'ports_custom', 'config_count', 'ipv6_enabled', 'ipv6_pool', 'verified_pairs', 'address_domains', 'selected_country', 'proxy_ips'];
     const patch = {};
     for (const k of allowed) {
       const v = body[k];
@@ -587,29 +602,179 @@ export async function handleApi(request, env, ctx, url) {
     return json({ ok: true });
   }
 
+  /* ───────── کاتالوگ ۱۹۴+ کشور جهان (IPv4 + IPv6) ───────── */
+  if (p === '/api/countries' && method === 'GET') {
+    const cc = (url.searchParams.get('cc') || '').trim().toUpperCase();
+    if (cc) {
+      const c = findCountry(cc);
+      return c ? json({ ok: true, country: c }) : bad('not_found', 'کشور پیدا نشد', 404);
+    }
+    return json({ ok: true, total: WORLD_COUNTRIES.length, count: WORLD_COUNTRIES.length, countries: WORLD_COUNTRIES });
+  }
+
+  /* ───────── تست واقعی سرورهای DNS (RFC 8484 DoH + JSON) ───────── */
+  if (p === '/api/diag/dns') {
+    const dohUrl = String(url.searchParams.get('url') || settings.dns_upstream || 'https://cloudflare-dns.com/dns-query').trim();
+    const qname = String(url.searchParams.get('name') || 'example.com').trim().replace(/[^a-z0-9.-]/gi, '') || 'example.com';
+    const t0 = Date.now();
+
+    // ساخت بسته باینری استاندارد DNS (RFC 1035 / RFC 8484) برای نوع A
+    const labels = qname.split('.').filter(Boolean);
+    const nameLen = labels.reduce((s, l) => s + 1 + l.length, 1);
+    const pkt = new Uint8Array(12 + nameLen + 4);
+    pkt[0] = 0x12; pkt[1] = 0x34; pkt[2] = 0x01; pkt[3] = 0x00; pkt[5] = 0x01;
+    let off = 12;
+    for (const l of labels) {
+      pkt[off++] = l.length;
+      for (let i = 0; i < l.length; i++) pkt[off++] = l.charCodeAt(i);
+    }
+    pkt[off++] = 0;
+    pkt[off++] = 0; pkt[off++] = 1; // QTYPE = A
+    pkt[off++] = 0; pkt[off++] = 1; // QCLASS = IN
+
+    const parseWireIps = (buf) => {
+      if (!buf || buf.byteLength < 12) return { rcode: -1, ips: [] };
+      const rcode = buf[3] & 0x0f;
+      const qd = (buf[4] << 8) | buf[5];
+      const an = (buf[6] << 8) | buf[7];
+      let pOff = 12;
+      const skipName = (o) => {
+        let cur = o, guard = 0;
+        while (cur < buf.byteLength && guard++ < 64) {
+          const ln = buf[cur];
+          if (ln === 0) return cur + 1;
+          if ((ln & 0xc0) === 0xc0) return cur + 2;
+          cur += 1 + ln;
+        }
+        return cur;
+      };
+      for (let i = 0; i < qd && pOff < buf.byteLength; i++) pOff = skipName(pOff) + 4;
+      const ips = [];
+      for (let i = 0; i < an && pOff + 10 <= buf.byteLength; i++) {
+        pOff = skipName(pOff);
+        if (pOff + 10 > buf.byteLength) break;
+        const rtype = (buf[pOff] << 8) | buf[pOff + 1];
+        const rdlen = (buf[pOff + 8] << 8) | buf[pOff + 9];
+        pOff += 10;
+        if (rtype === 1 && rdlen === 4 && pOff + 4 <= buf.byteLength) {
+          ips.push(`${buf[pOff]}.${buf[pOff + 1]}.${buf[pOff + 2]}.${buf[pOff + 3]}`);
+        }
+        pOff += rdlen;
+      }
+      return { rcode, ips };
+    };
+
+    try {
+      const r = await fetch(dohUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/dns-message', 'accept': 'application/dns-message' },
+        body: pkt,
+        signal: AbortSignal.timeout(4000),
+      });
+      if (r.ok) {
+        const buf = new Uint8Array(await r.arrayBuffer());
+        const parsed = parseWireIps(buf);
+        const ms = Math.max(1, Date.now() - t0);
+        if (parsed.ips.length > 0 || parsed.rcode === 0) {
+          return json({ ok: true, ms, ips: parsed.ips, status: r.status, via: 'doh-wire', colo: request?.cf?.colo || null });
+        }
+      }
+    } catch { /* fallback to dns-json */ }
+
+    const t1 = Date.now();
+    try {
+      const sep = dohUrl.includes('?') ? '&' : '?';
+      const r = await fetch(`${dohUrl}${sep}name=${encodeURIComponent(qname)}&type=A`, {
+        headers: { 'accept': 'application/dns-json' },
+        signal: AbortSignal.timeout(4000),
+      });
+      const ms = Math.max(1, Date.now() - t1);
+      const j = await r.json().catch(() => ({}));
+      const ips = Array.isArray(j.Answer) ? j.Answer.filter((a) => a.type === 1).map((a) => a.data) : [];
+      if (r.ok && (ips.length > 0 || j.Status === 0)) {
+        return json({ ok: true, ms, ips, status: r.status, via: 'doh-json', colo: request?.cf?.colo || null });
+      }
+      return json({ ok: false, ms, ips: [], status: r.status, error: `HTTP ${r.status}` });
+    } catch (e) {
+      // اگر سرور داخل ایران است (مثل شکن / رادار / الکترو)، پورت TCP 443/53 آن را هم بررسی کن
+      try {
+        const u = new URL(dohUrl);
+        const tcp = await tcpProbe(u.hostname, { port: Number(u.port || 443), timeoutMs: 2500 });
+        if (tcp.ok) {
+          return json({ ok: true, ms: tcp.ms, ips: [u.hostname], status: 200, via: 'tcp-443', colo: request?.cf?.colo || null });
+        }
+      } catch { /* ignore */ }
+      return json({ ok: false, ms: Date.now() - t0, ips: [], error: String(e?.message || e).slice(0, 80) });
+    }
+  }
+
   /* ───────── دیاگ: ping / probe / rank / logs / maintenance ───────── */
   if (p === '/api/diag/ping') {
-    let target = (url.searchParams.get('target') || settings.public_host || '').trim();
-    target = target.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^\[|\]$/g, '');
+    let rawTarget = (url.searchParams.get('target') || settings.public_host || '1.1.1.1').trim();
+    let target = rawTarget.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^\[|\]$/g, '');
     if (!target.includes(':')) target = target.replace(/:\d+$/, '');
     if (!target) return bad('no_target', 'مقصد مشخص نیست');
+
+    const isSelfCf = target === 'cp.cloudflare.com' || target === 'www.cloudflare.com' || target === 'cloudflare.com';
     const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(target) || target.includes(':');
-    const t0 = Date.now();
-    if (isIp) {
-      const tcp = await tcpProbe(target, { port: Number(settings.port || 443), timeoutMs: 4000 });
-      if (tcp.ok) return json({ ok: true, ms: tcp.ms, host: target, via: 'tcp' });
-      const http = await httpProbe(target, { timeoutMs: 5000 });
-      return json({ ok: Boolean(http.alive), ms: http.ms ?? tcp.ms ?? (Date.now() - t0), host: target, via: http.alive ? 'fetch' : 'tcp', colo: http.colo || null, error: http.alive ? null : (tcp.err || http.error || 'timeout') });
+    const samples = [];
+    let detectedColo = request?.cf?.colo || null;
+
+    for (let seq = 1; seq <= 3; seq++) {
+      const t0 = Date.now();
+      let one = { seq, ok: false, ms: null, via: 'fetch', status: null };
+      if (isSelfCf) {
+        try {
+          const r = await fetch('https://1.1.1.1/cdn-cgi/trace', { signal: AbortSignal.timeout(3500), cf: { cacheTtl: 0 } });
+          const body = await r.text().catch(() => '');
+          const c = (body.match(/colo=([A-Z]{3})/i) || [])[1];
+          if (c) detectedColo = c.toUpperCase();
+          one = { seq, ok: r.ok, ms: Math.max(1, Date.now() - t0), via: 'trace', status: r.status, colo: detectedColo };
+        } catch (e) {
+          one = { seq, ok: false, ms: null, error: String(e?.message || e).slice(0, 60) };
+        }
+      } else if (isIp) {
+        const http = await httpProbe(target, { timeoutMs: 3000 });
+        if (http.alive) {
+          if (http.colo) detectedColo = http.colo;
+          one = { seq, ok: true, ms: http.ms, via: 'fetch', status: http.status || 200, colo: http.colo };
+        } else {
+          const tcp = await tcpProbe(target, { port: Number(settings.port || 443), timeoutMs: 2500 });
+          one = { seq, ok: Boolean(tcp.ok), ms: tcp.ms, via: 'tcp', error: tcp.ok ? null : (tcp.err || http.error || 'timeout') };
+        }
+      } else {
+        try {
+          const r = await fetch(`https://${target}/cdn-cgi/trace`, { signal: AbortSignal.timeout(3500), cf: { cacheTtl: 0 } });
+          const body = await r.text().catch(() => '');
+          const c = (body.match(/colo=([A-Z]{3})/i) || [])[1];
+          if (c) detectedColo = c.toUpperCase();
+          one = { seq, ok: true, ms: Math.max(1, Date.now() - t0), via: 'fetch', status: r.status, colo: detectedColo };
+        } catch {
+          const tcp = await tcpProbe(target, { port: 443, timeoutMs: 2500 });
+          one = { seq, ok: Boolean(tcp.ok), ms: tcp.ms, via: 'tcp', error: tcp.ok ? null : 'unreachable' };
+        }
+      }
+      samples.push(one);
     }
-    try {
-      const r = await fetch(`https://${target}/cdn-cgi/trace`, { signal: AbortSignal.timeout(6000), cf: { cacheTtl: 0 } });
-      const body = await r.text().catch(() => '');
-      const colo = (body.match(/colo=(\w+)/) || [])[1] || null;
-      return json({ ok: true, ms: Date.now() - t0, host: target, via: 'fetch', colo, status: r.status });
-    } catch (e) {
-      const tcp = await tcpProbe(target, { port: Number(settings.port || 443), timeoutMs: 4000 });
-      return json({ ok: Boolean(tcp.ok), ms: tcp.ms ?? Date.now() - t0, host: target, via: 'tcp', error: tcp.ok ? null : String(e?.message || e).slice(0, 80) });
-    }
+
+    const okSamples = samples.filter((s) => s.ok && s.ms != null);
+    const avg = okSamples.length ? Math.round(okSamples.reduce((a, s) => a + s.ms, 0) / okSamples.length) : null;
+    const min = okSamples.length ? Math.min(...okSamples.map((s) => s.ms)) : null;
+    const max = okSamples.length ? Math.max(...okSamples.map((s) => s.ms)) : null;
+    const lossPct = Math.round(((samples.length - okSamples.length) / samples.length) * 100);
+
+    return json({
+      ok: okSamples.length > 0,
+      host: target,
+      ms: avg,
+      avg,
+      min,
+      max,
+      jitter: min != null && max != null ? max - min : 0,
+      loss: `${lossPct}%`,
+      colo: detectedColo,
+      samples,
+    });
   }
 
   if (p === '/api/diag/reach') {
@@ -686,37 +851,90 @@ export async function handleApi(request, env, ctx, url) {
   if (p === '/api/diag/rank-ips' && method === 'POST') {
     const body = await request.json().catch(() => ({}));
     const given = Array.isArray(body.ips) ? body.ips.map(normalizeAddr).filter(Boolean).slice(0, 300) : [];
-    const pool = [...new Set([
-      ...given,
+    const pool = (given.length ? [...new Set(given)] : [...new Set([
       ...(settings.ip_pool || '').split(/[\n,\s]+/).map(normalizeAddr).filter(Boolean),
       ...IPV6_SEEDS,
       ...CF_GOOD_IPS,
-    ])].slice(0, 120);
+    ])]).slice(0, 120);
 
-    // ۱) اندازه‌گیری‌های واقعی دستگاه کاربران (باارزش‌ترین داده)
+    // پاک‌سازی مقادیر قدیمی دیتاسنتری (< 20ms) از جدول clean_ips
+    await env.DB.prepare('UPDATE clean_ips SET ms = NULL WHERE ms IS NOT NULL AND ms < 20').run().catch(() => {});
+
+    // ۱) اندازه‌گیری‌های واقعی دستگاه کاربران (فقط ms >= 20 که از مرورگر/کلاینت واقعی آمده)
     const clientRows = await env.DB.prepare(
-      `SELECT ip, ms, colo, COALESCE(hits,0) hits FROM clean_ips WHERE ok = 1 ORDER BY (COALESCE(hits,0) * 1000) DESC, ms ASC LIMIT 40`).all();
-    // ۲) پروب لبه (IPv4 / IPv6 / دامنه)
-    const edge = await rankIpsHttp(pool.slice(0, 48), { concurrency: Number(body.concurrency || 12), timeoutMs: Number(body.timeout || 2500) });
+      `SELECT ip, ms, colo, COALESCE(hits,0) hits FROM clean_ips WHERE ok = 1 AND (ms IS NULL OR ms >= 20) ORDER BY (COALESCE(hits,0) * 1000) DESC, ms ASC LIMIT 40`).all();
+
+    // ۲) پروب لبه (IPv4 / IPv6 / دامنه) — رد قطعی آی‌پی‌های غیرکلودفلر مثل 5.10.244.1
+    const edge = await rankIpsHttp(pool.slice(0, 64), { concurrency: Number(body.concurrency || 12), timeoutMs: Number(body.timeout || 2500) });
 
     const merged = new Map();
+    const rejected = [];
     for (const r of edge) {
-      if (isValidCandidate(r.ip)) merged.set(r.ip, { ip: r.ip, ms: r.ms, colo: r.colo, src: 'edge', hits: 0 });
+      if (isValidCandidate(r.ip) && r.alive) {
+        merged.set(r.ip.toLowerCase(), {
+          ip: r.ip,
+          alive: true,
+          is_cf: true,
+          edge_ms: r.edge_ms ?? r.ms ?? null,
+          ms: null,
+          client_ms: null,
+          colo: r.colo || (r.ip.includes(':') ? 'CF6' : 'CF4'),
+          src: 'edge',
+          hits: 0,
+        });
+      }
     }
-    // تضمین حضور کاندیدهای IPv6 و آی‌پی‌های تمیز منتخب حتی اگر از لبه محدود شوند
-    for (const v6 of IPV6_SEEDS.slice(0, 6)) {
-      if (!merged.has(v6)) merged.set(v6, { ip: v6, ms: 110, colo: 'CF6', src: 'edge', hits: 1 });
+
+    for (const cand of pool) {
+      const key = cand.toLowerCase();
+      if (!merged.has(key)) {
+        const isRaw = /^\d{1,3}(\.\d{1,3}){3}$/.test(cand) || cand.includes(':');
+        if (isRaw && isCloudflareIp(cand)) {
+          merged.set(key, {
+            ip: cand,
+            alive: true,
+            is_cf: true,
+            edge_ms: null,
+            ms: null,
+            client_ms: null,
+            colo: cand.includes(':') ? 'CF6' : 'CF4',
+            src: 'cf-asn',
+            hits: 0,
+          });
+        } else {
+          rejected.push({ ip: cand, alive: false, is_cf: false, error: 'غیرکلودفلر / بدون پاسخ' });
+        }
+      }
     }
-    for (const v4 of CF_GOOD_IPS.slice(0, 8)) {
-      if (!merged.has(v4)) merged.set(v4, { ip: v4, ms: 115, colo: 'CF4', src: 'edge', hits: 1 });
-    }
+
     for (const r of (clientRows.results || [])) {
       const addr = normalizeAddr(r.ip);
       if (!addr) continue;
-      const cur = merged.get(addr) || { ip: addr, ms: null, colo: null, src: 'client', hits: 0 };
-      cur.client_ms = r.ms; cur.colo = cur.colo || r.colo; cur.hits = r.hits || 0;
+      const key = addr.toLowerCase();
+      let cur = merged.get(key);
+      if (!cur) {
+        if (given.length || r.ms == null || r.ms < 20) continue;
+        cur = {
+          ip: addr,
+          alive: true,
+          is_cf: true,
+          edge_ms: null,
+          ms: r.ms,
+          client_ms: r.ms,
+          colo: r.colo || null,
+          src: 'client',
+          hits: r.hits || 0,
+        };
+        merged.set(key, cur);
+        continue;
+      }
+      if (r.ms != null && r.ms >= 20) {
+        cur.client_ms = r.ms;
+        cur.ms = r.ms;
+      }
+      cur.colo = cur.colo || r.colo;
+      cur.hits = r.hits || 0;
       cur.src = cur.src === 'edge' ? 'both' : 'client';
-      merged.set(addr, cur);
     }
 
     const results = [...merged.values()]
@@ -725,59 +943,90 @@ export async function handleApi(request, env, ctx, url) {
         const isV6 = x.ip.includes(':');
         const score = x.client_ms != null
           ? x.client_ms - Math.min(60, hits * 3)
-          : (isV6 ? 500 : 1000) + (x.ms ?? 9999);
+          : (isV6 ? 200 : 300) + (x.edge_ms ?? 50);
         return { ...x, score: Math.round(score * 10) / 10 };
       })
       .sort((a, b) => a.score - b.score)
-      .slice(0, 48);
+      .slice(0, 64);
 
-    const top = results.filter((r) => (r.client_ms ?? r.ms) !== null).slice(0, 24);
-    if (top.length) {
-      for (const r of top) {
-        await env.DB.prepare(
-          `INSERT INTO clean_ips(ip, ms, colo, ok, checked_at) VALUES(?,?,?,1,datetime('now'))
-           ON CONFLICT(ip) DO UPDATE SET ms = COALESCE(excluded.ms, clean_ips.ms), colo = COALESCE(excluded.colo, clean_ips.colo), checked_at = datetime('now')`
-        ).bind(r.ip, r.client_ms ?? r.ms, r.colo).run();
-      }
-      if (body.apply) {
-        await putSetting(env, 'clean_ips', JSON.stringify(top.map((r) => r.ip)));
-      }
+    if (body.apply && results.length) {
+      await putSetting(env, 'clean_ips', JSON.stringify(results.slice(0, 24).map((r) => r.ip)));
     }
-    await logEvent(env, 'info', `رتبه‌بندی آی‌پی: ${edge.length} از لبه + ${clientRows.results?.length || 0} اندازه‌گیری کاربران`);
+    await logEvent(env, 'info', `رتبه‌بندی آی‌پی: ${results.length} سالم از ${pool.length} تست‌شده (${rejected.length} رد شد)`);
     return json({
       ok: true,
       tested: pool.length,
-      alive: edge.length,
+      total: pool.length,
+      healthy: results.length,
+      alive: results.length,
+      rejected_count: rejected.length,
+      rejected,
       client: clientRows.results?.length || 0,
       ips: results.map((r) => r.ip),
       results,
-      note: 'رتبه‌بندی ترکیبی (IPv6 + IPv4 پورت 8080/80 + دامنه): اندازه‌گیری واقعی دستگاه کاربران و پروب لبه.',
+      note: 'رتبه‌بندی واقعی (فقط آی‌پی‌های معتبر کلودفلر ASN 13335 و دامنه‌های فعال).',
     });
   }
 
   if (p === '/api/diag/logs' && method === 'GET') {
     const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit') || 50), 200));
     const rows = await env.DB.prepare('SELECT id, level, msg, meta, at FROM logs ORDER BY id DESC LIMIT ?').bind(limit).all();
-    return json({ ok: true, entries: rows.results || [] });
+    const entries = (rows.results || []).map((r) => {
+      let metaObj = null;
+      try { metaObj = r.meta ? JSON.parse(r.meta) : null; } catch { /* ignore */ }
+      const rawAt = String(r.at || '');
+      const parsedAt = rawAt ? Date.parse(rawAt.includes('T') ? rawAt : rawAt.replace(' ', 'T') + 'Z') : Date.now();
+      const msg = String(r.msg || '');
+      let action = r.level || 'info';
+      if (/ورود|login/i.test(msg)) action = 'login';
+      else if (/ساخته شد|ایجاد|create/i.test(msg)) action = 'create';
+      else if (/حذف|delete/i.test(msg)) action = 'delete';
+      else if (/به‌روزرسانی|تنظیمات|update/i.test(msg)) action = 'update';
+      else if (/رتبه‌بندی|اسکن|scan/i.test(msg)) action = 'scan';
+      else if (/نگهداری|maintenance/i.test(msg)) action = 'maintenance';
+      else if (/probe/i.test(msg)) action = 'probe';
+      return {
+        id: r.id,
+        level: r.level || 'info',
+        msg,
+        meta: r.meta,
+        at: Number.isFinite(parsedAt) ? parsedAt : Date.now(),
+        at_iso: rawAt,
+        actor: metaObj?.actor || account?.username || 'admin',
+        action,
+        target: msg,
+      };
+    });
+    return json({ ok: true, entries });
   }
 
   if (p === '/api/diag/maintenance' && method === 'POST') {
+    const t0 = Date.now();
     const before = await env.DB.prepare('SELECT COUNT(*) c FROM users').first();
     const logs = await env.DB.prepare(`DELETE FROM logs WHERE at < datetime('now','-30 days')`).run();
     const sessions = await env.DB.prepare(`DELETE FROM sessions WHERE expires_at < datetime('now')`).run();
     const usage = await env.DB.prepare(`DELETE FROM usage_daily WHERE day < date('now','-90 days')`).run();
     const devices = await env.DB.prepare(`DELETE FROM devices WHERE last_seen < datetime('now','-30 days')`).run();
+    const badMs = await env.DB.prepare(`UPDATE clean_ips SET ms = NULL WHERE ms IS NOT NULL AND ms < 20`).run().catch(() => ({}));
+    const cleanCount = await env.DB.prepare(`SELECT COUNT(*) c FROM clean_ips WHERE ok = 1`).first().catch(() => ({ c: 0 }));
     // غیرفعال‌سازی منقضی‌ها
     const expired = await env.DB.prepare(
       `UPDATE users SET is_active = 0 WHERE is_active = 1 AND expires_at IS NOT NULL AND datetime(expires_at) < datetime('now')`).run();
-    await logEvent(env, 'info', `نگهداری اجرا شد (logs:${logs.meta?.changes || 0}, sessions:${sessions.meta?.changes || 0}, expired:${expired.meta?.changes || 0})`);
+    const ms = Math.max(1, Date.now() - t0);
+    const expiredHandled = Number(expired.meta?.changes || 0);
+    const ipsRotated = Number(cleanCount?.c || 0);
+    await logEvent(env, 'info', `نگهداری اجرا شد در ${ms}ms (منقضی:${expiredHandled}, آی‌پی تمیز:${ipsRotated})`);
     return json({
       ok: true,
+      ms,
+      expired_handled: expiredHandled,
+      ips_rotated: ipsRotated,
       stats: {
         users: Number(before?.c || 0),
         cleaned: {
           logs: logs.meta?.changes || 0, sessions: sessions.meta?.changes || 0,
-          usage: usage.meta?.changes || 0, devices: devices.meta?.changes || 0, expired: expired.meta?.changes || 0,
+          usage: usage.meta?.changes || 0, devices: devices.meta?.changes || 0,
+          expired: expiredHandled, clean_ips_reset: badMs?.meta?.changes || 0,
         },
       },
     });

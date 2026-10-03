@@ -177,6 +177,25 @@ console.log('\n[6] دیاگ شبکه');
   ok('صفحه وضعیت: کاندیدهای آی‌پی اندازه‌گیری‌شده', html2.includes('104.99.1.7'));
   const pingH = await req('GET', '/api/diag/ping?target=cloudflare.com');
   ok('ping هاست (مسیر fetch)', pingH.body?.host === 'cloudflare.com' && typeof pingH.body.ms === 'number', JSON.stringify(pingH.body));
+
+  const ctrs = await req('GET', '/api/countries');
+  ok('کاتالوگ ۱۹۶ کشور (IPv4 + IPv6)', ctrs.body?.ok === true && ctrs.body.total >= 194 && Array.isArray(ctrs.body.countries) && ctrs.body.countries.every((c) => c.v4?.length >= 5 && c.v6?.length >= 5), `total=${ctrs.body?.total}`);
+
+  const rejRank = await req('POST', '/api/diag/rank-ips', { body: { ips: ['5.10.244.1', '5.175.141.1', '14.102.228.1', '172.67.181.32'], timeout: 1000 } });
+  ok('اسکنر رنج‌های غیرکلودفلر را رد می‌کند (بدون تیک فیک)', rejRank.body?.ok === true && rejRank.body.rejected_count === 3 && rejRank.body.healthy === 1 && rejRank.body.ips[0] === '172.67.181.32', JSON.stringify({ healthy: rejRank.body?.healthy, rejected: rejRank.body?.rejected_count }));
+
+  const spdDl = await req('GET', '/api/diag/speed?bytes=65536', { raw: true });
+  const spdBuf = await spdDl.arrayBuffer();
+  ok('تست سرعت دانلود باینری (/api/diag/speed)', spdDl.status === 200 && spdBuf.byteLength === 65536, `bytes=${spdBuf.byteLength}`);
+
+  const dnsRes = await req('GET', '/api/diag/dns?url=' + encodeURIComponent('https://1.1.1.1/dns-query') + '&name=cloudflare.com');
+  ok('تست واقعی DoH دی‌ان‌اس (/api/diag/dns)', dnsRes.body && typeof dnsRes.body.ms === 'number', JSON.stringify(dnsRes.body));
+
+  await req('PUT', '/api/settings', { body: { selected_country: 'DE' } });
+  const deUser = await req('GET', '/api/users/ali');
+  const deUris = deUser.body?.configs?.uris || [];
+  ok('انتخاب کشور (آلمان DE) آی‌پی و پرچم کشور را در کانفیگ اعمال می‌کند', deUris.some((u) => decodeURIComponent(u).includes('🇩🇪') && decodeURIComponent(u).includes('آلمان')), decodeURIComponent(deUris[0] || '').slice(0, 120));
+  await req('PUT', '/api/settings', { body: { selected_country: '' } });
 }
 
 console.log('\n[7] نشست‌ها / رمز / بازیابی');
