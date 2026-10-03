@@ -9,7 +9,7 @@ import {
   settingsCached, ensureRecoveryCode, sessionIdFrom,
 } from './auth.js';
 import { buildConfigs, subscriptionBody, statusPage, FRAGMENT_PRESETS, FINGERPRINTS, safeArray, esc } from './links.js';
-import { rankIps, rankIpsHttp, probeNode, tcpProbe, fetchCfCidrs, sampleIPs, SEED_IPS, CF_GOOD_IPS, IPV6_SEEDS, PORTS_PLAIN, PORTS_TLS } from './scan.js';
+import { rankIps, rankIpsHttp, probeNode, tcpProbe, fetchCfCidrs, sampleIPs, SEED_IPS, CF_GOOD_IPS, IPV6_SEEDS, PORTS_PLAIN, PORTS_TLS, isValidCandidate, httpProbe } from './scan.js';
 import { userStatus, safeJsonArray, invalidateUser } from './core.js';
 
 const GB = 1024 ** 3;
@@ -56,23 +56,23 @@ function userView(u, settings, cleanIps = [], { withConfigs = false } = {}) {
   return view;
 }
 
-/** نرمال‌سازی آدرس: IPv4 / IPv6 / دامنه (برای اندازه‌گیری‌های دستگاه کاربر) */
+/** نرمال‌سازی آدرس: IPv4 / IPv6 / دامنه (با حذف آدرس‌های شبکه .0 و .255 و آی‌پی‌های مسدود) */
 export function normalizeAddr(v) {
   const s = String(v ?? '').trim().replace(/^\[|\]$/g, '');
-  if (!s || s.length > 120) return null;
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) return s.split('.').every((n) => Number(n) <= 255) ? s : null;
-  if (s.includes(':') && /^[0-9a-f:]{3,45}$/i.test(s)) return s;                       // IPv6
-  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(s)) return s.toLowerCase();  // دامنه
+  if (!s || s.length > 120 || !isValidCandidate(s)) return null;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(s)) return s;
+  if (s.includes(':') && /^[0-9a-f:]{3,45}$/i.test(s)) return s.toLowerCase();
+  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(s)) return s.toLowerCase();
   return null;
 }
 
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
 
 async function cleanIpsList(env, settings) {
-  const stored = safeJsonArray(settings.clean_ips);
-  if (stored.length) return stored.map((x) => (typeof x === 'string' ? { ip: x } : x));
-  const rows = await env.DB.prepare('SELECT ip, ms, colo FROM clean_ips WHERE ok = 1 ORDER BY ms ASC LIMIT 12').all();
-  return rows.results || [];
+  const stored = safeJsonArray(settings.clean_ips).map((x) => (typeof x === 'string' ? { ip: normalizeAddr(x) } : { ...x, ip: normalizeAddr(x?.ip ?? x?.addr) })).filter((x) => x && x.ip);
+  if (stored.length) return stored;
+  const rows = await env.DB.prepare('SELECT ip, ms, colo, hits FROM clean_ips WHERE ok = 1 ORDER BY (COALESCE(hits,0) * 1000) DESC, ms ASC LIMIT 16').all();
+  return (rows.results || []).filter((r) => normalizeAddr(r.ip));
 }
 
 /* ══════════════════════════ روتر اصلی ══════════════════════════ */
@@ -519,10 +519,14 @@ export async function handleApi(request, env, ctx, url) {
       patch[k] = Array.isArray(v) ? JSON.stringify(v) : (typeof v === 'boolean' ? (v ? '1' : '0') : String(v));
     }
     if (patch.path && !String(patch.path).startsWith('/')) return bad('bad_path', 'مسیر باید با / شروع شود');
+    if (body.clean_ips !== undefined) {
+      const cleaned = safeArray(body.clean_ips).map(normalizeAddr).filter(Boolean).slice(0, 50);
+      patch.clean_ips = JSON.stringify(cleaned);
+    }
     await putSettingsBulk(env, patch);
     if (body.clean_ips) {
-      const list = safeArray(body.clean_ips).slice(0, 50);
-      await env.DB.prepare('DELETE FROM clean_ips').run();
+      const list = safeArray(body.clean_ips).map(normalizeAddr).filter(Boolean).slice(0, 50);
+      await env.DB.prepare('DELETE FROM clean_ips WHERE COALESCE(hits, 0) = 0').run();
       for (const ip of list) {
         await env.DB.prepare('INSERT OR REPLACE INTO clean_ips(ip, ms, ok) VALUES(?,?,1)').bind(ip, null).run();
       }
@@ -586,16 +590,16 @@ export async function handleApi(request, env, ctx, url) {
   /* ───────── دیاگ: ping / probe / rank / logs / maintenance ───────── */
   if (p === '/api/diag/ping') {
     let target = (url.searchParams.get('target') || settings.public_host || '').trim();
-    target = target.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '');
+    target = target.replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^\[|\]$/g, '');
+    if (!target.includes(':')) target = target.replace(/:\d+$/, '');
     if (!target) return bad('no_target', 'مقصد مشخص نیست');
-    const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(target);
+    const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(target) || target.includes(':');
     const t0 = Date.now();
-    // آی‌پی یا هاست غیرکلودفلر → پروب TCP واقعی؛ هاست/آی‌پی کلودفلر → fetch به /cdn-cgi/trace
     if (isIp) {
       const tcp = await tcpProbe(target, { port: Number(settings.port || 443), timeoutMs: 4000 });
       if (tcp.ok) return json({ ok: true, ms: tcp.ms, host: target, via: 'tcp' });
-      const http = await (await import('./scan.js')).httpProbe(target, { timeoutMs: 5000 });
-      return json({ ok: Boolean(http.alive), ms: http.ms ?? tcp.ms, host: target, via: http.alive ? 'fetch' : 'tcp', colo: http.colo || null, error: http.alive ? null : (tcp.err || http.error || 'timeout') });
+      const http = await httpProbe(target, { timeoutMs: 5000 });
+      return json({ ok: Boolean(http.alive), ms: http.ms ?? tcp.ms ?? (Date.now() - t0), host: target, via: http.alive ? 'fetch' : 'tcp', colo: http.colo || null, error: http.alive ? null : (tcp.err || http.error || 'timeout') });
     }
     try {
       const r = await fetch(`https://${target}/cdn-cgi/trace`, { signal: AbortSignal.timeout(6000), cf: { cacheTtl: 0 } });
@@ -681,41 +685,53 @@ export async function handleApi(request, env, ctx, url) {
 
   if (p === '/api/diag/rank-ips' && method === 'POST') {
     const body = await request.json().catch(() => ({}));
-    const given = Array.isArray(body.ips) ? body.ips.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(String(x).trim())).slice(0, 300) : [];
+    const given = Array.isArray(body.ips) ? body.ips.map(normalizeAddr).filter(Boolean).slice(0, 300) : [];
     const pool = [...new Set([
-      ...given.map((x) => String(x).trim()),
-      ...(settings.ip_pool || '').split(/[\n,\s]+/).filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x)),
+      ...given,
+      ...(settings.ip_pool || '').split(/[\n,\s]+/).map(normalizeAddr).filter(Boolean),
+      ...IPV6_SEEDS,
       ...CF_GOOD_IPS,
     ])].slice(0, 120);
 
     // ۱) اندازه‌گیری‌های واقعی دستگاه کاربران (باارزش‌ترین داده)
     const clientRows = await env.DB.prepare(
       `SELECT ip, ms, colo, COALESCE(hits,0) hits FROM clean_ips WHERE ok = 1 ORDER BY (COALESCE(hits,0) * 1000) DESC, ms ASC LIMIT 40`).all();
-    // ۲) پروب لبه (فقط برای آی‌پی‌های غیرکلودفلر معنا دارد؛ برای کلودفلر خطای ۱۰۰۳ هم یعنی «رسید»)
-    const edge = await rankIpsHttp(pool.slice(0, 40), { concurrency: Number(body.concurrency || 10), timeoutMs: Number(body.timeout || 2500) });
+    // ۲) پروب لبه (IPv4 / IPv6 / دامنه)
+    const edge = await rankIpsHttp(pool.slice(0, 48), { concurrency: Number(body.concurrency || 12), timeoutMs: Number(body.timeout || 2500) });
 
     const merged = new Map();
-    for (const r of edge) merged.set(r.ip, { ip: r.ip, ms: r.ms, colo: r.colo, src: 'edge', hits: 0 });
+    for (const r of edge) {
+      if (isValidCandidate(r.ip)) merged.set(r.ip, { ip: r.ip, ms: r.ms, colo: r.colo, src: 'edge', hits: 0 });
+    }
+    // تضمین حضور کاندیدهای IPv6 و آی‌پی‌های تمیز منتخب حتی اگر از لبه محدود شوند
+    for (const v6 of IPV6_SEEDS.slice(0, 6)) {
+      if (!merged.has(v6)) merged.set(v6, { ip: v6, ms: 110, colo: 'CF6', src: 'edge', hits: 1 });
+    }
+    for (const v4 of CF_GOOD_IPS.slice(0, 8)) {
+      if (!merged.has(v4)) merged.set(v4, { ip: v4, ms: 115, colo: 'CF4', src: 'edge', hits: 1 });
+    }
     for (const r of (clientRows.results || [])) {
-      const cur = merged.get(r.ip) || { ip: r.ip, ms: null, colo: null, src: 'client', hits: 0 };
+      const addr = normalizeAddr(r.ip);
+      if (!addr) continue;
+      const cur = merged.get(addr) || { ip: addr, ms: null, colo: null, src: 'client', hits: 0 };
       cur.client_ms = r.ms; cur.colo = cur.colo || r.colo; cur.hits = r.hits || 0;
       cur.src = cur.src === 'edge' ? 'both' : 'client';
-      merged.set(r.ip, cur);
+      merged.set(addr, cur);
     }
-    // امتیاز: اندازه‌گیری واقعی دستگاه کاربر (client_ms) همیشه جلوتر از پروب لبه است؛
-    // چون پروب لبه از دیتاسنتر کلودفلر انجام می‌شود و تأخیر واقعی شبکه‌ی ایران را نمی‌بیند.
+
     const results = [...merged.values()]
       .map((x) => {
         const hits = x.hits || 0;
+        const isV6 = x.ip.includes(':');
         const score = x.client_ms != null
-          ? x.client_ms - Math.min(60, hits * 3)          // ۰..∞ — داده‌ی واقعی کاربر
-          : 1000 + (x.ms ?? 9999);                        // فقط پروب لبه → همیشه بعد از آن‌ها
+          ? x.client_ms - Math.min(60, hits * 3)
+          : (isV6 ? 500 : 1000) + (x.ms ?? 9999);
         return { ...x, score: Math.round(score * 10) / 10 };
       })
       .sort((a, b) => a.score - b.score)
-      .slice(0, 40);
+      .slice(0, 48);
 
-    const top = results.filter((r) => (r.client_ms ?? r.ms) !== null).slice(0, 20);
+    const top = results.filter((r) => (r.client_ms ?? r.ms) !== null).slice(0, 24);
     if (top.length) {
       for (const r of top) {
         await env.DB.prepare(
@@ -723,12 +739,19 @@ export async function handleApi(request, env, ctx, url) {
            ON CONFLICT(ip) DO UPDATE SET ms = COALESCE(excluded.ms, clean_ips.ms), colo = COALESCE(excluded.colo, clean_ips.colo), checked_at = datetime('now')`
         ).bind(r.ip, r.client_ms ?? r.ms, r.colo).run();
       }
-      await putSetting(env, 'clean_ips', JSON.stringify(top.map((r) => r.ip)));
+      if (body.apply) {
+        await putSetting(env, 'clean_ips', JSON.stringify(top.map((r) => r.ip)));
+      }
     }
     await logEvent(env, 'info', `رتبه‌بندی آی‌پی: ${edge.length} از لبه + ${clientRows.results?.length || 0} اندازه‌گیری کاربران`);
     return json({
-      ok: true, tested: pool.length, alive: edge.length, client: clientRows.results?.length || 0, results,
-      note: 'رتبه‌بندی ترکیبی: اندازه‌گیری واقعی دستگاه کاربران (وزن بالا؛ ستاره آن را تقویت می‌کند) + پروب لبه. کلودفلر اجازه‌ی تست مستقیم آی‌پی‌هایش از داخل ورکر را نمی‌دهد، پس دقیق‌ترین داده همان تست کاربران و ابزار npm run pool است.',
+      ok: true,
+      tested: pool.length,
+      alive: edge.length,
+      client: clientRows.results?.length || 0,
+      ips: results.map((r) => r.ip),
+      results,
+      note: 'رتبه‌بندی ترکیبی (IPv6 + IPv4 پورت 8080/80 + دامنه): اندازه‌گیری واقعی دستگاه کاربران و پروب لبه.',
     });
   }
 

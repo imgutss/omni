@@ -30,7 +30,8 @@ function loadEnv(path) {
 const env = { ...loadEnv(ENV_PATH), ...process.env };
 const CF_TOKEN = env.CF_API_TOKEN || env.CLOUDFLARE_API_TOKEN;
 const BOT_TOKEN = env.BOT_TOKEN || env.TELEGRAM_BOT_TOKEN;
-const ADMIN_CHAT_ID = env.ADMIN_CHAT_ID || env.ADMIN_TG_IDS || '';
+const rawChatId = env.ADMIN_CHAT_ID || env.ADMIN_TG_IDS || '';
+const ADMIN_CHAT_ID = (rawChatId === '123456789' || rawChatId === '8883603563') ? '' : rawChatId;
 if (!CF_TOKEN) { console.error('✖ CF_API_TOKEN پیدا نشد (در ' + ENV_PATH + ')'); process.exit(1); }
 
 const log = (...a) => console.log('▸', ...a);

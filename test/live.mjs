@@ -50,7 +50,7 @@ let settingsPath = '/ws', userUuid = '', subToken = '', trojanPw = '';
     trojanPw = st.body.settings.trojan_password || '';
     ok('settings: دامنه عمومی خودکار', st.body.settings.public_host?.includes('workers.dev'), st.body.settings.public_host);
     ok('settings: کد بازیابی موجود', typeof st.body.recovery_code === 'string' && st.body.recovery_code.length > 3);
-    await req('PUT', '/api/settings', { body: { proto: 'both', fragment_preset: 'mci' } });
+    await req('PUT', '/api/settings', { body: { proto: 'both', fragment_preset: 'none' } });
   } else {
     ok('settings (نیاز به ورود)', false, JSON.stringify(st.body));
   }
@@ -140,16 +140,17 @@ await new Promise((r) => setTimeout(r, 3000));
   ok('diag/ping روی آی‌پی کلودفلر', pingIp.body?.ok === true, JSON.stringify(pingIp.body));
   const rank = await req('POST', '/api/diag/rank-ips', { body: { ips: [], timeout: 2500 } });
   ok('rank-ips زنده: ساختار + یادداشت محدودیت', rank.body?.ok === true && Array.isArray(rank.body.results) && rank.body.note?.length > 10, JSON.stringify(rank.body).slice(0, 200));
-  const rep = await req('POST', '/api/report-ip', { body: { token: subToken, results: [{ ip: '104.16.20.7', ms: 61, colo: 'FRA' }] } });
+  const rep = await req('POST', '/api/report-ip', { body: { token: subToken, results: [{ ip: '172.67.181.32', ms: 61, colo: 'FRA' }] } });
   ok('گزارش اندازه‌گیری از دستگاه کاربر', rep.body?.ok === true && rep.body.saved === 1, JSON.stringify(rep.body));
   const rank2 = await req('POST', '/api/diag/rank-ips', { body: { ips: [], timeout: 800 } });
-  ok('rank-ips اندازه‌گیری کاربران را بالا می‌آورد', (rank2.body?.results || []).some((r) => r.ip === '104.16.20.7'), JSON.stringify(rank2.body?.results || []).slice(0, 200));
+  ok('rank-ips اندازه‌گیری کاربران را بالا می‌آورد', (rank2.body?.results || []).some((r) => r.ip === '172.67.181.32'), JSON.stringify(rank2.body?.results || []).slice(0, 200));
   const stp = await req('GET', `/status/${subToken}`, { raw: true });
   const sthtml = await stp.text();
   ok('صفحه وضعیت + تستر دستگاه', stp.status === 200 && sthtml.includes('ip-test') && sthtml.includes('/api/report-ip'));
   const ov = await req('GET', '/api/overview?days=7');
   ok('overview', ov.body?.ok === true && Array.isArray(ov.body.series), JSON.stringify(ov.body).slice(0, 120));
   console.log(`     ℹ️ IPv4 ورکر برای اتصال کاربران: ${u.body?.user?.last_ip || '—'}`);
+  await req('DELETE', '/api/users/omni-live');
 }
 
 console.log('\n[وب‌هوک ربات تلگرام]');

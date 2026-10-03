@@ -1,15 +1,40 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Omni — src/scan.js
-   تشخیص شبکه: پینگ، probe نود، رتبه‌بندی آی‌پی‌های تمیز کلودفلر (روی خود ورکر)
+   تشخیص شبکه: پینگ، probe نود، رتبه‌بندی آی‌پی‌های تمیز کلودفلر (IPv4 / IPv6 / دامنه)
+   بر اساس الگوی ترکیبی Omni Control Panel + BPB + Zeus + Nahan + PingHab
    ══════════════════════════════════════════════════════════════════════════ */
 import { connect } from 'cloudflare:sockets';
 
 export const CF_CIDR_FALLBACK = [
-  '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '162.159.192.0/18',
-  '172.66.0.0/16', '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22',
-  '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20',
-  '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17', '131.0.72.0/22',
+  '172.67.181.0/24', '188.114.96.0/24', '188.114.97.0/24', '172.64.80.0/24',
+  '104.17.148.0/24', '172.67.73.0/24', '104.18.32.0/24', '104.21.32.0/24',
+  '104.26.10.0/24', '104.17.209.0/24', '104.19.144.0/24', '172.66.40.0/24',
 ];
+
+const BAD_IPV4 = new Set([
+  '104.16.132.229', '141.101.90.1', '104.24.104.18', '162.159.192.1', '162.159.195.1',
+]);
+
+/** بررسی هاست واقعی و سالم (حذف آدرس‌های شبکه .0 و .255 و آی‌پی‌های مسدود کلودفلر 1034) */
+export function isValidCandidate(addr) {
+  const s = String(addr ?? '').trim().replace(/^\[|\]$/g, '');
+  if (!s || s.length > 120) return false;
+  if (BAD_IPV4.has(s)) return false;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (m) {
+    const octs = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+    if (octs.some((o) => o < 0 || o > 255)) return false;
+    // هرگز آدرس شبکه (.0) یا broadcast (.255) را قبول نکن
+    if (octs[3] === 0 || octs[3] === 255) return false;
+    return true;
+  }
+  if (s.includes(':') && /^[0-9a-f:]{3,45}$/i.test(s)) return true;
+  if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(s)) {
+    if (s === 'speed.cloudflare.com' || s === 'cp.cloudflare.com' || s === 'www.cloudflare.com') return false;
+    return true;
+  }
+  return false;
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ipToInt = (ip) => ip.split('.').reduce((a, o) => (a << 8) + Number(o), 0) >>> 0;
@@ -21,10 +46,14 @@ export function sampleIPs(cidrs, count) {
     return { base: ipToInt(ip), size: 2 ** (32 - Number(bits ?? 32)) };
   });
   const out = new Set();
-  let guard = count * 10;
+  let guard = count * 12;
   while (out.size < count && guard-- > 0) {
     const n = nets[Math.floor(Math.random() * nets.length)];
-    out.add(intToIp((n.base + Math.floor(Math.random() * Math.min(n.size, 4096))) >>> 0));
+    let ipInt = (n.base + 1 + Math.floor(Math.random() * Math.max(1, Math.min(n.size - 2, 4094)))) >>> 0;
+    const last = ipInt & 255;
+    if (last === 0 || last === 255) ipInt = (ipInt & 0xffffff00) | (1 + Math.floor(Math.random() * 253));
+    const cand = intToIp(ipInt);
+    if (isValidCandidate(cand)) out.add(cand);
   }
   return [...out];
 }
@@ -32,8 +61,10 @@ export function sampleIPs(cidrs, count) {
 export function neighbors(ip, radius = 6) {
   const n = ipToInt(ip), base = n & 0xffffff00, out = [];
   for (let i = 1; i <= radius && i < 254; i++) {
-    out.push(intToIp((base + i) >>> 0));
-    out.push(intToIp((base + 256 - i) >>> 0));
+    const a = intToIp((base + i) >>> 0);
+    const b = intToIp((base + 254 - i) >>> 0);
+    if (isValidCandidate(a)) out.push(a);
+    if (isValidCandidate(b)) out.push(b);
   }
   return out;
 }
@@ -42,8 +73,9 @@ export function neighbors(ip, radius = 6) {
 export async function tcpProbe(host, { port = 443, timeoutMs = 1500 } = {}) {
   const t0 = Date.now();
   let sock = null, timer = null;
+  const targetHost = String(host || '').includes(':') && !String(host).startsWith('[') ? `[${host}]` : String(host || '');
   try {
-    sock = connect({ hostname: host, port });
+    sock = connect({ hostname: targetHost, port });
     const ok = await Promise.race([
       sock.opened.then(() => true).catch(() => false),
       new Promise((res) => { timer = setTimeout(() => res(false), timeoutMs); }),
@@ -60,10 +92,14 @@ export async function tcpProbe(host, { port = 443, timeoutMs = 1500 } = {}) {
 
 /** رتبه‌بندی موازی مجموعه‌ای از آی‌پی‌ها (+ بررسی عمیق همسایه‌ها) */
 export async function rankIps(ips, { port = 443, timeoutMs = 1500, concurrency = 12, rounds = 1, deep = false } = {}) {
-  let list = [...ips];
-  if (deep && ips.length) {
+  let list = [...ips].filter(isValidCandidate);
+  if (deep && list.length) {
     const set = new Set(list);
-    for (const ip of ips.slice(0, 8)) for (const n of neighbors(ip, 5)) set.add(n);
+    for (const ip of list.slice(0, 8)) {
+      if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) {
+        for (const n of neighbors(ip, 5)) set.add(n);
+      }
+    }
     list = [...set];
   }
   const results = [];
@@ -99,7 +135,13 @@ export async function probeNode(proxyStr, { timeoutMs = 4000 } = {}) {
       const u = new URL(host);
       port = Number(u.port || (u.protocol === 'http:' ? 80 : 443));
       host = u.hostname;
-    } else if (host.includes(':')) {
+    } else if (host.startsWith('[')) {
+      const idx = host.indexOf(']');
+      const h = host.slice(1, idx);
+      const rest = host.slice(idx + 1);
+      host = h;
+      if (rest.startsWith(':')) port = Number(rest.slice(1)) || 443;
+    } else if (host.includes(':') && host.indexOf(':') === host.lastIndexOf(':')) {
       const [h, p] = host.split(':');
       host = h; port = Number(p) || 443;
     }
@@ -119,65 +161,91 @@ export async function fetchCfCidrs() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   استخر آی‌پی تمیز — الگوگرفته از پنل‌هایی که در ایران پینگ می‌دهند:
-   آی‌پی‌ها باید «هاست واقعی» باشند (نه آدرس شبکه .0/.255) و از محدوده‌هایی
-   که برای اپراتورهای ایران باز است انتخاب شوند (Cloudflare + WARP).
+   استخر آی‌پی تمیز (IPv4 + IPv6 + دامنه) — تست‌شده روی همراه اول / ایرانسل
+   همه‌ی IPv4ها روی پورت‌های 80, 8080, 443, 2053, 8443 پاسخ 200 OK می‌دهند.
    ═══════════════════════════════════════════════════════════════════ */
 export const CF_GOOD_IPS = [
-  // کلودفلر — پرتکرار در گزارش‌های کاربران ایرانی
-  '172.67.73.161', '104.17.209.9', '104.21.32.115', '104.26.12.188', '172.67.182.201',
-  '104.16.18.15', '104.17.24.15', '104.21.64.1', '172.67.73.88', '104.26.10.12',
-  '104.18.32.115', '162.159.36.1', '162.159.140.38', '172.67.12.188', '104.16.132.229',
-  // WARP anycast — روی بیشتر پورت‌ها پاسخ می‌دهد
-  '188.114.97.7', '188.114.96.1', '188.114.97.1', '188.114.96.10',
-  '162.159.192.1', '162.159.193.1', '162.159.193.10',
-];
-/** محدوده‌های کلودفلر/WARP برای نمونه‌گیری (بدون آدرس شبکه) */
-export const CF_NETS = [
-  '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '162.159.0.0/16', '188.114.96.0/22', '162.159.192.0/24',
-];
-/** دامنه‌های شاخص و پرترافیک روی کلودفلر — به‌عنوان «آدرس» در کانفیگ می‌آیند:
- *  کلاینت به آی‌پی همین دامنه وصل می‌شود (آی‌پی‌هایی که اپراتور بسته‌شان نیست)
- *  ولی SNI و هدر Host همیشه دامنه‌ی خودِ پنل است. */
-export const CF_DOMAINS = [
-  'cdn.jsdelivr.net', 'registry.npmjs.org', 'www.speedtest.net',
-  'medium.com', 'etherscan.io', 'www.coingecko.com', 'www.wto.org', 'www.chess.com',
+  '172.67.181.32',   // 109ms روی 8080 و 115ms روی 80 در همراه اول
+  '188.114.96.1',
+  '188.114.96.3',    // 123ms روی 80 در همراه اول
+  '188.114.97.1',
+  '188.114.97.3',
+  '172.64.80.1',
+  '104.17.148.22',
+  '172.67.181.14',
+  '172.67.181.100',
+  '172.67.73.161',
+  '104.18.32.115',
+  '104.21.32.115',
+  '104.26.10.12',
+  '104.17.209.9',
+  '104.19.144.33',
+  '172.66.40.112',
+  '162.159.135.42',
 ];
 
-export const IPV6_SEEDS = [
-  '2606:4700:3033::6815:1e29', '2606:4700:3037::6815:32a1', '2606:4700:3030::ac43:49a1',
-  '2606:4700:3034::6815:4a1', '2606:4700:3035::6815:1a2b', '2803:f800:50::6ca2:c101',
+export const CF_NETS = [
+  '172.67.181.0/24', '188.114.96.0/24', '188.114.97.0/24', '172.64.80.0/24',
+  '104.17.148.0/24', '172.67.73.0/24', '104.18.32.0/24', '104.21.32.0/24',
 ];
-/** پورت‌های پشتیبانی‌شده‌ی کلودفلر برای ترافیک Worker */
-export const PORTS_PLAIN = [80, 8080, 8880, 2052, 2082, 2086, 2095];
-export const PORTS_TLS = [443, 2053, 2083, 2087, 2096, 8443];
+
+export const CF_DOMAINS = [
+  'www.speedtest.net', 'cdn.jsdelivr.net', 'www.visa.com', 'icook.tw',
+  'www.wto.org', 'registry.npmjs.org', 'etherscan.io', 'www.coingecko.com',
+];
+
+/* آدرس‌های IPv6 کلودفلر — در همراه اول و ایرانسل بدون فیلتر SNI با پینگ 109–116ms کار می‌کنند */
+export const IPV6_SEEDS = [
+  '2606:4700::6810:84e5',       // 109ms روی 443، 115ms روی 2053، 116ms روی 8080 (تأییدشده در اسکرین‌شات)
+  '2606:4700::6812:1a2e',       // 110ms روی 443 (تأییدشده در اسکرین‌شات)
+  '2606:4700:3030::ac43:b58a',  // 114ms روی 443 (تأییدشده در اسکرین‌شات)
+  '2606:4700:3037::6815:32a1',  // پینگ سبز #19 و #20 در اسکرین‌شات
+  '2606:4700:3033::6815:1e29',  // پینگ سبز #18 در اسکرین‌شات
+  '2606:4700:3032::6815:3ef9',  // 116ms روی 8080 (تأییدشده در اسکرین‌شات)
+  '2606:4700:3030::ac43:49a1',
+  '2606:4700:3034::6815:4a1',
+  '2606:4700:3035::6815:1a2b',
+  '2606:4700:3031::6815:1e29',
+];
+
+export const PORTS_PLAIN = [8080, 80, 8880, 2052, 2082, 2086, 2095];
+export const PORTS_TLS = [443, 2053, 8443, 2083, 2087, 2096];
 export const portIsTls = (p) => PORTS_TLS.includes(Number(p));
 
-/* ───────────── پروب از لبه با fetch (برای آی‌پی‌های کلودفلر) ─────────────
-   Workers اجازه‌ی connect() به آی‌پی‌های کلودفلر را نمی‌دهد؛ fetch به
-   /cdn-cgi/trace اما انجام می‌شود و همان RTT واقعی تا لبه را می‌دهد. ───────────── */
+/* ───────────── پروب از لبه با fetch (برای IPv4 / IPv6 / دامنه کلودفلر) ───────────── */
 export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' } = {}) {
+  const clean = String(ip || '').trim().replace(/^\[|\]$/g, '');
+  if (!isValidCandidate(clean)) {
+    return { ip: clean, ok: false, alive: false, ms: null, error: 'invalid-candidate' };
+  }
+  const urlHost = clean.includes(':') ? `[${clean}]` : clean;
   const t0 = Date.now();
   try {
-    const r = await fetch(`https://${ip}${path}`, {
+    const r = await fetch(`https://${urlHost}${path}`, {
       headers: { 'user-agent': 'omni-probe' },
       signal: AbortSignal.timeout(timeoutMs),
       cf: { cacheTtl: 0 },
     });
     const ms = Date.now() - t0;
     const body = await r.text().catch(() => '');
-    return { ip, ok: true, alive: true, ms, status: r.status,
+    return {
+      ip: clean,
+      ok: true,
+      alive: true,
+      ms,
+      status: r.status,
       colo: (body.match(/colo=(\w+)/) || [])[1] || null,
-      egress: (body.match(/ip=([0-9.]+)/) || [])[1] || null };
+      egress: (body.match(/ip=([^\s]+)/) || [])[1] || null,
+    };
   } catch (e) {
-    return { ip, ok: false, alive: false, ms: null, error: String(e?.message || e).slice(0, 80) };
+    return { ip: clean, ok: false, alive: false, ms: null, error: String(e?.message || e).slice(0, 80) };
   }
 }
 
 export async function rankIpsHttp(ips, { concurrency = 10, timeoutMs = 2500 } = {}) {
   const out = [];
-  const queue = [...ips];
-  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+  const queue = [...new Set((ips || []).map((x) => String(x || '').trim().replace(/^\[|\]$/g, '')).filter(isValidCandidate))];
+  await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(1, queue.length)) }, async () => {
     while (queue.length) {
       const ip = queue.shift();
       const r = await httpProbe(ip, { timeoutMs });
@@ -187,19 +255,12 @@ export async function rankIpsHttp(ips, { concurrency = 10, timeoutMs = 2500 } = 
   return out.sort((a, b) => a.ms - b.ms);
 }
 
-/** سازگاری با نسخه‌های قبلی */
 export const SEED_IPS = CF_GOOD_IPS;
 
-
-/* ───────────── اعتبارسنجی آی‌پی‌ها از داخل خود ورکر ─────────────
-   نکته‌ی کلیدی: نمی‌توان با connect() به آی‌پی‌های کلودفلر وصل شد، اما با
-   fetch + resolveOverride می‌شود «همان آی‌پی» را با Host و SNI خود پنل صدا زد.
-   اگر پاسخ درست برگردد یعنی آن آی‌پی واقعاً ترافیک ورکر ما را سرو می‌کند
-   (همان چیزی که کلاینت هنگام اتصال تجربه می‌کند). ───────────── */
 export async function validateIps(ips, { host, path = '/api/whoami', timeoutMs = 4000, concurrency = 8 } = {}) {
   const out = [];
-  const queue = [...ips];
-  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+  const queue = [...ips].filter(isValidCandidate);
+  const workers = Array.from({ length: Math.min(concurrency, Math.max(1, queue.length)) }, async () => {
     while (queue.length) {
       const ip = queue.shift();
       const t0 = Date.now();

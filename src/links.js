@@ -1,15 +1,16 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Omni — src/links.js
    ساخت لینک‌های VLESS/Trojan، ساب‌لینک (base64/clash/sing-box) و صفحه‌ی وضعیت
+   بهینه‌سازی‌شده بر اساس الگوی ترکیبی Omni Control Panel + BPB + Zeus + Nahan
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { IPV6_SEEDS, CF_DOMAINS } from './scan.js';
+import { IPV6_SEEDS, CF_DOMAINS, CF_GOOD_IPS, isValidCandidate } from './scan.js';
 
 const enc = encodeURIComponent;
 
-/* پریست‌های فرگمنت (همان مقادیری که پنل‌های کارکرده در ایران استفاده می‌کنند) */
+/* پریست‌های فرگمنت (فقط در صورت انتخاب صریح کاربر/ادمین اعمال می‌شود؛ پیش‌فرض: بدون فرگمنت) */
 export const FRAGMENT_PRESETS = [
-  { id: 'none', label: '— بدون فرگمنت', size: '', interval: '', packets: '' },
+  { id: 'none', label: '— بدون فرگمنت (پیش‌فرض — کم‌ترین پینگ)', size: '', interval: '', packets: '' },
   { id: 'mci', label: 'همراه اول (MCI)', size: '100-200', interval: '1-1', packets: 'tlshello' },
   { id: 'irancell', label: 'ایرانسل', size: '1-3', interval: '1-1', packets: 'tlshello' },
   { id: 'rightel', label: 'رایتل', size: '100-200', interval: '5-10', packets: 'tlshello' },
@@ -21,7 +22,6 @@ export const FRAGMENT_PRESETS = [
 export const FINGERPRINTS = ['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random', 'randomized'];
 
 export const fragmentPreset = (id) => FRAGMENT_PRESETS.find((p) => p.id === id) || FRAGMENT_PRESETS[0];
-/** مقادیر فرگمنت برای پارامترهای URI؛ null یعنی بدون فرگمنت */
 export const fragmentValue = (id) => {
   const p = fragmentPreset(id);
   return p.size ? p : null;
@@ -39,19 +39,16 @@ export function safeArray(v) {
   return [];
 }
 
-/** نام سرور برای TLS (SNI) و هدر Host — همیشه دامنه‌ی خود پنل است،
- *  حتی وقتی آدرس یک آی‌پی تمیز باشد (کلید اصلی سالم‌بودن کانفیگ). */
+/** نام سرور برای TLS (SNI) و هدر Host — همیشه دامنه‌ی خود پنل است */
 export const sniFor = (settings) => String(settings.public_host || '')
   .replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/:\d+$/, '').trim();
 
 /* پورت‌هایی که کلودفلر برای ترافیک Worker قبول می‌کند */
-const PORTS_PLAIN = [80, 8080, 8880, 2052, 2082, 2086, 2095];
-const PORTS_TLS = [443, 2053, 2083, 2087, 2096, 8443];
+const PORTS_PLAIN = [8080, 80, 8880, 2052, 2082, 2086, 2095];
+const PORTS_TLS = [443, 2053, 8443, 2083, 2087, 2096];
 export const isTlsPort = (p) => PORTS_TLS.includes(Number(p));
 
-/** پورت‌های تولید کانفیگ. «auto» پنجره‌ای روی همه‌ی پورت‌های سالم کلودفلر
- *  می‌سازد — در ایران بعضی پورت‌ها باز و بعضی بسته‌اند، پس این مهم است. */
-export function choosePorts(settings, count = 4) {
+export function choosePorts(settings, count = 5) {
   const primary = Number(settings.port || 443);
   const mode = String(settings.ports_mode || 'auto');
   if (mode === 'single') return [primary];
@@ -59,51 +56,72 @@ export function choosePorts(settings, count = 4) {
     const list = String(settings.ports_custom).split(/[\s,]+/).map(Number).filter((n) => n > 0 && n < 65536);
     if (list.length) return [...new Set(list)].slice(0, 8);
   }
-  // ترتیب: اول پورت ۸۰ (بدون TLS، بدون SNI — مقاوم‌ترین حالت در ایران)، بعد ۴۴۳ و بقیه
-  // الگوی پنل کارکرده: ۴۴۳ (TLS) اول — کمترین احتمال throttle؛ پورت‌های بدون TLS فقط در انتها
-  const rotation = [443, 2053, 8443, 2087, 2096, 2083, 80, 8080, 8880, 2052, 2082, 2086, 2095];
+  const rotation = [443, 2053, 8080, 80, 8443, 8880, 2052, 2087, 2096, 2083];
   const out = rotation.includes(primary) ? rotation : [primary, ...rotation];
   return [...new Set(out)].slice(0, Math.max(1, Math.min(13, count)));
 }
 
-/** آدرس‌های کانفیگ به ترتیب اولویت:
- *  ۱) آی‌پی‌های اختصاصی کاربر  ۲) آی‌پی‌های تأییدشده توسط کاربران واقعی
- *  ۳) استخر آماده‌ی کلودفلر/WARP  ۴) دامنه‌ی پنل  ۵) IPv6 */
-/** استخر آدرس‌ها در سه سبد، مثل پنل کارکرده: دامنه / IPv6 / آی‌پی.
- *  دامنه = دامنه‌ی معروف کلودفلر (آی‌پی‌اش معمولاً باز است)
- *  IPv6 = آدرس‌های IPv6 کلودفلر (در ایران اغلب تمیزترین راه)
- *  آی‌پی = آی‌پی‌های سفارشی کاربر، تأییدشده‌ها، دامنه‌ی پنل و در آخر حدس‌ها */
+/** استخر آدرس‌ها در سه سبد (IPv6 / IPv4 تمیز / دامنه) با فیلتر کامل آدرس‌های .0 و معیوب */
 export function configPool(user, settings, cleanIps = []) {
+  const cleanAddr = (x) => String(x ?? '').trim().replace(/^\[|\]$/g, '');
   const norm = (cleanIps || [])
-    .map((r) => (typeof r === 'string' ? { ip: r, hits: 0, ms: null } : r))
-    .filter((r) => r && r.ip);
+    .map((r) => (typeof r === 'string' ? { ip: cleanAddr(r), hits: 0, ms: null } : { ...r, ip: cleanAddr(r?.ip ?? r?.addr) }))
+    .filter((r) => r && r.ip && isValidCandidate(r.ip));
   const byMs = (a, b) => (a.ms ?? 9999) - (b.ms ?? 9999);
+
   const verifiedAll = norm.filter((r) => Number(r.hits || 0) > 0).sort(byMs).map((r) => r.ip);
-  const verified = verifiedAll.filter((x) => !/[a-z]/i.test(x));          // آی‌پی‌های تأییدشده
-  const verifiedDomains = verifiedAll.filter((x) => /[a-z]/i.test(x));    // دامنه‌های تأییدشده از دستگاه کاربران
-  const guessed = norm.filter((r) => !(Number(r.hits || 0) > 0)).sort(byMs).map((r) => r.ip);
+  const verifiedV6 = verifiedAll.filter((x) => x.includes(':'));
+  const verifiedV4 = verifiedAll.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x));
+  const verifiedDomains = verifiedAll.filter((x) => !x.includes(':') && /[a-z]/i.test(x));
+
+  const guessedAll = norm.filter((r) => !(Number(r.hits || 0) > 0)).sort(byMs).map((r) => r.ip);
+  const guessedV4 = guessedAll.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x));
+  const guessedV6 = guessedAll.filter((x) => x.includes(':'));
+
+  const userList = safeArray(user?.ips).map(cleanAddr).filter(isValidCandidate);
+  const userV6 = userList.filter((x) => x.includes(':'));
+  const userV4 = userList.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x));
+  const userDom = userList.filter((x) => !x.includes(':') && /[a-z]/i.test(x));
+
   const host = sniFor(settings);
   const uniq = (arr) => [...new Set(arr.filter(Boolean))];
 
   const domain = uniq([
-    ...verifiedDomains,                                        // آن‌هایی که از شبکه‌ی کاربران جواب داده‌اند
-    ...(safeArray(settings.address_domains).length ? safeArray(settings.address_domains) : CF_DOMAINS),
-  ]).slice(0, 6);
+    ...userDom,
+    ...verifiedDomains,
+    ...safeArray(settings.address_domains).map(cleanAddr).filter(isValidCandidate),
+    ...CF_DOMAINS,
+  ]).slice(0, 8);
+
   const ipv6 = String(settings.ipv6_enabled || '1') === '1'
-    ? (safeArray(settings.ipv6_pool).length ? safeArray(settings.ipv6_pool) : IPV6_SEEDS).slice(0, 3)
+    ? uniq([
+        ...userV6,
+        ...verifiedV6,
+        ...safeArray(settings.ipv6_pool).map(cleanAddr).filter((x) => x.includes(':') && isValidCandidate(x)),
+        ...IPV6_SEEDS,
+        ...guessedV6,
+      ]).slice(0, 12)
     : [];
-  const ip = uniq([...safeArray(user?.ips), ...verified, host, ...guessed]);
 
-  return { domain, ipv6, ip, host, verified, guessed };
+  const ip = uniq([
+    ...userV4,
+    ...verifiedV4,
+    ...CF_GOOD_IPS,
+    ...guessedV4,
+  ]).filter(isValidCandidate);
+
+  return { domain, ipv6, ip, host, verified: verifiedV4, guessed: guessedV4 };
 }
 
-/** آدرس‌ها به ترتیب اولویت (برای sing-box/clash و فهرست‌های ساده) */
-export function addressesFor(user, settings, cleanIps = [], { limit = 8 } = {}) {
+export function addressesFor(user, settings, cleanIps = [], { limit = 10 } = {}) {
   const p = configPool(user, settings, cleanIps);
-  return [...new Set([...p.domain.slice(0, 2), ...p.ipv6.slice(0, 2), ...p.ip.slice(0, 5)])].slice(0, limit);
+  return [...new Set([...p.ipv6.slice(0, 4), ...p.ip.slice(0, 4), ...p.domain.slice(0, 2)])].slice(0, limit);
 }
 
-const encHost = (h) => (String(h).includes(':') ? `[${h}]` : h);
+const encHost = (h) => {
+  const clean = String(h || '').trim().replace(/^\[|\]$/g, '');
+  return clean.includes(':') ? `[${clean}]` : clean;
+};
 
 /** یک لینک VLESS برای آدرس/پورت مشخص */
 export function vlessUri(user, settings, host, { index = 1, port = 443, cat = 'Global' } = {}) {
@@ -118,13 +136,13 @@ export function vlessUri(user, settings, host, { index = 1, port = 443, cat = 'G
   else params.push('security=none', `host=${sni || host}`);
   params.push(`path=${path}`);
   const frag = fragmentValue(user.fragment || settings.fragment_preset);
-  if (frag) {
+  if (frag && tls) {
     params.push(`fragment=${encodeURIComponent(frag.size)}`);
     if (frag.packets) params.push(`fragmentPackets=${encodeURIComponent(frag.packets)}`);
     if (frag.interval) params.push(`fragmentInterval=${encodeURIComponent(frag.interval)}`);
   }
   if (settings.mux_enabled === '1') params.push('mux=1', 'xmux=maxStreams=8');
-  const remark = `${settings.remark_prefix || ''}${user.username} · 🌐 ${cat} · VLESS · ${port} · #${String(index).padStart(2, '0')}`;
+  const remark = `${settings.remark_prefix ? settings.remark_prefix + ' · ' : ''}${user.username} · 🌐 ${cat} · VLESS · ${port} · #${String(index).padStart(2, '0')}`;
   return `vless://${user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 
@@ -140,65 +158,83 @@ export function trojanUri(user, settings, host, { index = 1, port = 443, cat = '
   if (tls) params.push('security=tls', `sni=${sni}`, `fp=${fp}`, `host=${sni}`, 'alpn=http%2F1.1');
   else params.push('security=none', `host=${sni || host}`);
   params.push(`path=${path}`);
-  const remark = `${settings.remark_prefix || ''}${user.username} · 🌐 ${cat} · TROJAN · ${port} · #${String(index).padStart(2, '0')}`;
-  return `trojan://${settings.trojan_password || ''}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
+  const remark = `${settings.remark_prefix ? settings.remark_prefix + ' · ' : ''}${user.username} · 🌐 ${cat} · Trojan · ${port} · #${String(index).padStart(2, '0')}`;
+  return `trojan://${settings.trojan_password || user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 
-/** جفت‌های تأییدشده‌ی (آی‌پی:پورت) که با اتصال واقعی تست شده‌اند
- *  (از ابزار `npm run pool` یا گزارش کاربران) — بهترین گزینه‌ها. */
 export function verifiedPairs(settings) {
   try {
     const arr = JSON.parse(String(settings.verified_pairs || '[]'));
-    if (Array.isArray(arr)) return arr.filter((x) => /^[0-9a-fA-F:.]+:\d+$/.test(String(x)));
+    if (Array.isArray(arr)) {
+      return arr.filter((x) => {
+        const s = String(x || '');
+        const idx = s.lastIndexOf(':');
+        if (idx <= 0) return false;
+        const addr = s.slice(0, idx).replace(/^\[|\]$/g, '');
+        const port = Number(s.slice(idx + 1));
+        return isValidCandidate(addr) && port > 0 && port < 65536;
+      });
+    }
   } catch { /* ignore */ }
   return [];
 }
 
-/** کانفیگ‌های یک کاربر.
- *  اگر جفت‌های تأییدشده داشته باشیم، همان‌ها اول می‌آیند (چون واقعاً تست شده‌اند)؛
- *  بعد ماتریس آدرس × پورت به‌عنوان گزینه‌های بیشتر. */
+/** ساخت کانفیگ‌های یک کاربر:
+ *  الگوی اثبات‌شده روی همراه اول / ایرانسل (مبتنی بر Omni Control Panel + BPB + Zeus):
+ *  ۱) آدرس‌های IPv6 کلودفلر (`2606:4700:...`) روی پورت‌های 443، 2053، 8080، 8443، 80 (پینگ 109–116ms)
+ *  ۲) آدرس‌های IPv4 تمیز (`172.67.181.32`، `188.114.96.1`، `188.114.96.3`، `172.64.80.1`، `104.17.148.22`)
+ *     روی پورت‌های بدون TLS (`8080` و `80`) که از فیلترینگ SNI روی IPv4 عبور می‌کنند (پینگ 109–123ms)
+ *  ۳) دامنه‌ها و آی‌پی‌های تمیز روی پورت‌های 8080/80 و 443/2053 برای وای‌فای و سایر اپراتورها */
 export function buildConfigs(user, settings, cleanIps = []) {
-  const maxConfigs = Math.max(6, Math.min(60, Number(settings.config_count || 30)));
+  const maxConfigs = Math.max(6, Math.min(80, Number(settings.config_count || 40)));
   const pool = configPool(user, settings, cleanIps);
-  const pairs = verifiedPairs(settings);                       // «ip:port» اثبات‌شده با هندشیک واقعی
-  const pairAddr = (pr) => pr.slice(0, pr.lastIndexOf(':'));
-  const pairPort = (pr) => Number(pr.slice(pr.lastIndexOf(':') + 1));
-  const tlsPairs = pairs.filter((pr) => isTlsPort(pairPort(pr)));
-  const plainPairs = pairs.filter((pr) => !isTlsPort(pairPort(pr)));
-  const ports = choosePorts(settings, 4);
-  /** پورت همزاد: اگر ۴۴۳ باز بود ولی ۸۰ بسته (یا برعکس) کاربر یک کانفیگ سالم از دست می‌دهد.
-   *  در ایران بسته به اپراتور یکی از این دو کار می‌کند، پس هر دو را می‌فرستیم. */
-  const sibling = (p) => (p === 443 ? 80 : p === 80 ? 443 : p === 8443 ? 2096 : p === 2096 ? 8443 : null);
+  const pairs = verifiedPairs(settings);
+  const ports = choosePorts(settings, 5);
 
   const plan = [];
   const seen = new Set();
   const add = (address, port, cat) => {
-    const a = String(address || '').trim();
-    if (!a || seen.has(`${a}:${port}`)) return;
-    seen.add(`${a}:${port}`);
-    plan.push({ address: a, port: Number(port), cat });
-  };
-  const addPair = (pr, cat, withSibling = true) => {
-    const a = pairAddr(pr), p = pairPort(pr);
-    add(a, p, cat);
-    const sib = sibling(p);
-    if (withSibling && sib) add(a, sib, 'Alt');   // پورت همزادِ تأییدنشده → گروه Alt
+    const a = String(address || '').trim().replace(/^\[|\]$/g, '');
+    if (!a || !isValidCandidate(a)) return;
+    const p = Number(port) || 443;
+    const key = `${a}:${p}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    plan.push({ address: a, port: p, cat });
   };
 
-  // ترتیب = ترتیب احتمال کار کردن روی موبایل ایرانی
-  tlsPairs.slice(0, 2).forEach((pr) => addPair(pr, 'Clean'));            // ۴۴۳ تأییدشده + همزاد ۸۰
-  plainPairs.slice(0, 2).forEach((pr) => addPair(pr, 'Clean'));          // ۸۰ تأییدشده (همراه اول) + همزاد ۴۴۳
-  pool.ipv6.slice(0, 2).forEach((v) => add(v, 443, 'IPv6'));             // IPv6 کلودفلر — اغلب تمیز
-  pool.domain.slice(0, 3).forEach((d) => add(d, 443, 'Domain'));         // دامنه‌های معروف کلودفلر
-  if (pool.host) add(pool.host, 443, 'Panel');                           // دامنه‌ی خود پنل
-  tlsPairs.slice(2, 6).forEach((pr) => addPair(pr, 'Clean'));
-  plainPairs.slice(2, 5).forEach((pr) => addPair(pr, 'Clean'));
-  pool.domain.slice(3, 5).forEach((d) => add(d, 443, 'Domain'));
-  pool.ip.slice(0, 3).forEach((ip) => add(ip, 443, 'IPv4'));
-  ports.filter((p) => p !== 443).forEach((p, i) => {
-    const a = [pool.ipv6[0], pool.ip[0], pool.domain[0], pool.ipv6[1]][i % 4];
-    if (a) add(a, p, isTlsPort(p) ? 'Alt' : 'Plain');
+  // ۱) ستون اول: آدرس‌های IPv6 کلودفلر روی پورت 443 (سریع‌ترین و پایدارترین روی همراه اول و ایرانسل — 109..114ms)
+  pool.ipv6.slice(0, 5).forEach((v6) => add(v6, 443, 'IPv6'));
+
+  // ۲) ستون دوم: آی‌پی‌های تمیز IPv4 روی پورت‌های 8080 و 80 (عبور از DPI بدون SNI — 109..116ms روی همراه اول)
+  pool.ip.slice(0, 3).forEach((ip) => {
+    add(ip, 8080, 'Plain');
+    add(ip, 80, 'Plain');
   });
+
+  // ۳) ستون سوم: آدرس‌های IPv6 روی پورت‌های جایگزین (2053، 8080، 8443، 80 — 115..116ms در اسکرین‌شات‌ها)
+  pool.ipv6.slice(0, 3).forEach((v6) => add(v6, 2053, 'IPv6'));
+  pool.ipv6.slice(0, 4).forEach((v6) => add(v6, 8080, 'IPv6'));
+  pool.ipv6.slice(5, 8).forEach((v6) => add(v6, 443, 'IPv6'));
+
+  // ۴) ستون چهارم: سایر آی‌پی‌های تمیز و دامنه‌ها روی پورت‌های 8080 و 80
+  pool.ip.slice(3, 7).forEach((ip, idx) => add(ip, idx % 2 === 0 ? 80 : 8080, 'Plain'));
+  pool.domain.slice(0, 2).forEach((d, idx) => add(d, idx % 2 === 0 ? 8080 : 80, 'Domain'));
+
+  // ۵) ستون پنجم: IPv6 روی 8443 و 80 + جفت‌های تأییدشده + TLS روی IPv4/دامنه برای اینترنت خانگی
+  pool.ipv6.slice(0, 2).forEach((v6) => {
+    add(v6, 8443, 'IPv6');
+    add(v6, 80, 'IPv6');
+  });
+  for (const pr of pairs.slice(0, 4)) {
+    const idx = pr.lastIndexOf(':');
+    const a = pr.slice(0, idx);
+    const p = Number(pr.slice(idx + 1));
+    add(a, p, isTlsPort(p) ? 'Clean' : 'Plain');
+  }
+  pool.ip.slice(0, 2).forEach((ip) => add(ip, 443, 'IPv4'));
+  pool.domain.slice(0, 2).forEach((d) => add(d, 443, 'Domain'));
+  if (pool.host) add(pool.host, 443, 'Panel');
 
   const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
   const uris = [];
@@ -208,7 +244,7 @@ export function buildConfigs(user, settings, cleanIps = []) {
       if (uris.length >= maxConfigs) return;
       const n = uris.length + 1;
       const label = String(n).padStart(2, '0');
-      const remark = `${user.username} · 🌐 ${cat} · ${proto === 'vless' ? 'VLESS' : 'TROJAN'} · ${port} · #${label}`;
+      const remark = `${user.username} · 🌐 ${cat} · ${proto === 'vless' ? 'VLESS' : 'Trojan'} · ${port} · #${label}`;
       uris.push(proto === 'vless'
         ? vlessUri(user, settings, address, { index: n, port, cat })
         : trojanUri(user, settings, address, { index: n, port, cat }));
@@ -217,30 +253,32 @@ export function buildConfigs(user, settings, cleanIps = []) {
   };
   plan.forEach(emit);
 
-  // پرکردن باقی‌مانده تا سقف با ترکیب آدرس × پورت
+  // پرکردن باقی‌مانده تا سقف با ترکیب IPv6 و IPv4 روی پورت‌های منتخب
   if (uris.length < maxConfigs) {
-    const addrs = [...new Set([...pool.ip, ...pool.domain, ...pool.ipv6])];
+    const extraPorts = [8080, 80, 443, 2053, 8443];
+    const addrs = [...new Set([...pool.ipv6, ...pool.ip, ...pool.domain])];
     outer:
-    for (const port of ports) {
+    for (const port of extraPorts) {
       for (const a of addrs) {
         if (uris.length >= maxConfigs) break outer;
         const key = `${a}:${port}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        emit({ address: a, port, cat: isTlsPort(port) ? 'Alt' : 'Plain' });
+        emit({ address: a, port, cat: a.includes(':') ? 'IPv6' : isTlsPort(port) ? 'Alt' : 'Plain' });
       }
     }
   }
 
+  const usedAddrs = [...new Set(items.map((x) => x.address))];
   return {
     uris,
     items,
     host: pool.host || pool.domain[0] || '',
-    addresses: [...new Set(items.map((x) => x.address))],
+    addresses: usedAddrs,
     ports,
     verified: pairs.length,
-    singbox: buildSingbox(user, settings, [...new Set(items.map((x) => x.address))], ports),
-    clash: buildClash(user, settings, [...new Set(items.map((x) => x.address))], ports),
+    singbox: buildSingbox(user, settings, usedAddrs.slice(0, 12), [443, 8080, 80, 2053]),
+    clash: buildClash(user, settings, usedAddrs.slice(0, 12), [443, 8080, 80, 2053]),
   };
 }
 
@@ -250,10 +288,11 @@ function sbOutbound(user, settings, host, port = 443) {
   const sni = sniFor(settings) || host;
   const tls = isTlsPort(port);
   const ed = Number(user.early_data || settings.early_data || 2048);
+  const cleanHost = String(host || '').replace(/^\[|\]$/g, '');
   return {
     type: 'vless',
-    tag: `omni-${user.username}-${host}-${port}`.slice(0, 60),
-    server: host,
+    tag: `omni-${user.username}-${cleanHost.replace(/[:.]/g, '-')}-${port}`.slice(0, 60),
+    server: cleanHost,
     server_port: Number(port),
     uuid: user.uuid,
     flow: '',
@@ -267,7 +306,7 @@ function sbOutbound(user, settings, host, port = 443) {
     transport: {
       type: 'ws',
       path,
-      headers: { Host: sni || host },
+      headers: { Host: sni || cleanHost },
       max_early_data: ed > 0 ? ed : undefined,
       early_data_header_name: ed > 0 ? 'Sec-WebSocket-Protocol' : undefined,
     },
@@ -279,12 +318,13 @@ function sbTrojan(user, settings, host, port = 443) {
   const sni = sniFor(settings) || host;
   const tls = isTlsPort(port);
   const ed = Number(user.early_data || settings.early_data || 2048);
+  const cleanHost = String(host || '').replace(/^\[|\]$/g, '');
   return {
     type: 'trojan',
-    tag: `omni-${user.username}-tr-${host}-${port}`.slice(0, 60),
-    server: host,
+    tag: `omni-${user.username}-tr-${cleanHost.replace(/[:.]/g, '-')}-${port}`.slice(0, 60),
+    server: cleanHost,
     server_port: Number(port),
-    password: settings.trojan_password || '',
+    password: settings.trojan_password || user.uuid,
     tls: {
       enabled: tls,
       server_name: tls ? sni : undefined,
@@ -295,26 +335,39 @@ function sbTrojan(user, settings, host, port = 443) {
     transport: {
       type: 'ws',
       path,
-      headers: { Host: sni || host },
+      headers: { Host: sni || cleanHost },
       max_early_data: ed > 0 ? ed : undefined,
       early_data_header_name: ed > 0 ? 'Sec-WebSocket-Protocol' : undefined,
     },
   };
 }
 
-export function buildSingbox(user, settings, addrs, ports = [443]) {
+export function buildSingbox(user, settings, addrs, ports = [443, 8080, 80]) {
   const outs = [];
-  for (const h of addrs) for (const p of ports) {
-    outs.push(sbOutbound(user, settings, h, p));
-    if (String(settings.proto || 'both') === 'both' && settings.trojan_password) outs.push(sbTrojan(user, settings, h, p));
+  for (const h of addrs) {
+    const isV6 = String(h).includes(':');
+    const targetPorts = isV6 ? [443, 2053, 8080] : [8080, 80, 443];
+    for (const p of targetPorts.filter((x) => ports.includes(x))) {
+      outs.push(sbOutbound(user, settings, h, p));
+      if (String(settings.proto || 'both') === 'both' && settings.trojan_password) {
+        outs.push(sbTrojan(user, settings, h, p));
+      }
+    }
   }
   return {
     log: { level: 'warn', timestamp: true },
-    dns: { servers: [{ tag: 'remote', address: settings.dns_upstream || 'https://1.1.1.1/dns-query' }, { tag: 'direct', address: 'https://cloudflare-dns.com/dns-query', detour: 'direct' }], rules: [{ outbound: 'any', server: 'direct' }], final: 'remote' },
+    dns: {
+      servers: [
+        { tag: 'remote', address: settings.dns_upstream || 'https://1.1.1.1/dns-query' },
+        { tag: 'direct', address: 'https://cloudflare-dns.com/dns-query', detour: 'direct' },
+      ],
+      rules: [{ outbound: 'any', server: 'direct' }],
+      final: 'remote',
+    },
     inbounds: [{ type: 'mixed', tag: 'mixed-in', listen: '127.0.0.1', listen_port: 2080 }],
     outbounds: [
       { type: 'selector', tag: 'select', outbounds: ['auto', ...outs.map((o) => o.tag)] },
-      { type: 'urltest', tag: 'auto', outbounds: outs.map((o) => o.tag), url: 'https://cp.cloudflare.com', interval: '3m' },
+      { type: 'urltest', tag: 'auto', outbounds: outs.map((o) => o.tag), url: 'http://www.gstatic.com/generate_204', interval: '3m' },
       { type: 'direct', tag: 'direct' },
       ...outs,
     ],
@@ -335,10 +388,11 @@ function clashProxy(user, settings, host, port, proto = 'vless', idx = 1) {
   const sni = sniFor(settings) || host;
   const tls = isTlsPort(port);
   const ed = Number(user.early_data || settings.early_data || 2048);
+  const cleanHost = String(host || '').replace(/^\[|\]$/g, '');
   const base = {
     name: `omni-${idx}-${proto}-${port}`,
     type: proto,
-    server: host,
+    server: cleanHost,
     port: Number(port),
     tls,
     servername: tls ? sni : undefined,
@@ -346,22 +400,24 @@ function clashProxy(user, settings, host, port, proto = 'vless', idx = 1) {
     'client-fingerprint': user.fingerprint || settings.fingerprint || 'chrome',
     'ws-opts': {
       path,
-      headers: { Host: sni || host },
+      headers: { Host: sni || cleanHost },
       ...(ed > 0 ? { 'max-early-data': ed, 'early-data-header-name': 'Sec-WebSocket-Protocol' } : {}),
     },
     udp: true,
   };
   if (proto === 'vless') base.uuid = user.uuid;
-  else base.password = settings.trojan_password || '';
+  else base.password = settings.trojan_password || user.uuid;
   return base;
 }
 
-export function buildClash(user, settings, addrs, ports = [443]) {
+export function buildClash(user, settings, addrs, ports = [443, 8080, 80]) {
   const proxies = [];
   let i = 0;
   const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
   for (const h of addrs) {
-    for (const port of ports) {
+    const isV6 = String(h).includes(':');
+    const targetPorts = isV6 ? [443, 2053, 8080] : [8080, 80, 443];
+    for (const port of targetPorts.filter((x) => ports.includes(x))) {
       proxies.push(clashProxy(user, settings, h, port, 'vless', ++i));
       if (both) proxies.push(clashProxy(user, settings, h, port, 'trojan', i));
     }
@@ -371,7 +427,7 @@ export function buildClash(user, settings, addrs, ports = [443]) {
     'allow-lan': false,
     mode: 'rule',
     'log-level': 'warning',
-    dns: { enable: true, ipv6: false, nameserver: [settings.dns_upstream || 'https://1.1.1.1/dns-query'] },
+    dns: { enable: true, ipv6: true, nameserver: [settings.dns_upstream || 'https://1.1.1.1/dns-query'] },
     proxies,
     'proxy-groups': [
       { name: '🚀 Omni', type: 'select', proxies: proxies.map((p) => p.name) },
@@ -499,10 +555,6 @@ export function statusPage(user, settings, origin, stats) {
   <div class="muted" style="margin-top:14px;font-size:11px">${esc(name)} — پنل مدیریت پروکسی روی Cloudflare Workers</div>
 </div>
 <script>
-/* تستر دستگاه: فقط چیزهایی که از یک صفحه‌ی HTTPS قابل سنجش‌اند را می‌سنجد:
-   دامنه‌ها/هاست پنل (گواهی معتبر → fetch با no-cors) + سرعت دانلود از خود ورکر.
-   آی‌پی خام را مرورگر نمی‌تواند بسنجد (گواهی/ترافیک مختلط) — برای آن‌ها v2rayNG معیار است
-   و نتیجه‌ی «ستاره» در همین صفحه ثبت می‌شود. */
 (function(){
   var CANDS = ${JSON.stringify((stats && stats.candidates) || [])};
   var TOKEN = ${JSON.stringify(user.sub_token)};
@@ -511,13 +563,13 @@ export function statusPage(user, settings, origin, stats) {
   var el = document.getElementById('iplist'), out = document.getElementById('ip-out');
   function nm(v){ return (v && typeof v === 'object') ? String(v.addr || v.ip || '') : String(v == null ? '' : v); }
   function kind(a){ if (a.indexOf(':') >= 0) return 'ipv6'; var c = a.charAt(0); return (c >= '0' && c <= '9') ? 'ipv4' : 'host'; }
-  function cls(ms){ if (ms == null) return ''; return ms < 120 ? 'good' : ms > 600 ? 'bad' : ''; }
+  function cls(ms){ if (ms == null) return ''; return ms < 140 ? 'good' : ms > 600 ? 'bad' : ''; }
   var rows = CANDS.map(function(c){ return { addr: nm(c), ms: (c && c.ms != null ? c.ms : null), colo: (c && c.colo) || null, mbps: null }; })
     .filter(function(r){ return r.addr; });
   function render(){
     if (!rows.length) { el.innerHTML = '<div class="muted" style="font-size:11.5px">هنوز کاندیدی ثبت نشده.</div>'; return; }
     el.innerHTML = rows.slice(0, 14).map(function(r){
-      var k = kind(r.addr), tag = k === 'host' ? 'دامنه' : k === 'ipv6' ? 'IPv6' : 'آی‌پی';
+      var k = kind(r.addr), tag = k === 'host' ? 'دامنه' : k === 'ipv6' ? 'IPv6 · 443/2053/8080' : 'آی‌پی · 8080/80';
       var ms = r.ms == null ? '—' : r.ms + ' ms';
       return '<div class="ip"><b>' + r.addr + '</b><span class="muted" style="font-size:10.5px">' + tag + (r.colo ? ' · ' + r.colo : '') + '</span>' +
         '<span class="ms ' + cls(r.ms) + '">' + ms + (r.mbps ? ' · ' + r.mbps + ' Mbps' : '') + '</span>' +
@@ -528,8 +580,9 @@ export function statusPage(user, settings, origin, stats) {
   function probeHost(addr){
     return new Promise(function(res){
       var t0 = performance.now(), c = new AbortController();
-      var to = setTimeout(function(){ c.abort(); res(null); }, 5000);
-      fetch('https://' + addr + '/cdn-cgi/trace?x=' + Math.round(performance.now()), { mode: 'no-cors', cache: 'no-store', signal: c.signal })
+      var to = setTimeout(function(){ c.abort(); res(null); }, 4500);
+      var target = addr.indexOf(':') >= 0 ? '[' + addr + ']' : addr;
+      fetch('https://' + target + '/cdn-cgi/trace?x=' + Math.round(performance.now()), { mode: 'no-cors', cache: 'no-store', signal: c.signal })
         .then(function(){ clearTimeout(to); res(Math.round(performance.now() - t0)); })
         .catch(function(){ clearTimeout(to); res(null); });
     });
@@ -552,9 +605,8 @@ export function statusPage(user, settings, origin, stats) {
   document.getElementById('ip-test').onclick = async function(){
     var btn = this; btn.disabled = true;
     out.textContent = 'در حال سنجش از شبکه‌ی خودت…';
-    var hosts = rows.filter(function(r){ return kind(r.addr) !== 'ipv4' && kind(r.addr) !== 'ipv6'; });
-    var res = await Promise.all(hosts.map(function(r){ return probeHost(r.addr); }));
-    hosts.forEach(function(r, i){ r.ms = res[i]; });
+    var res = await Promise.all(rows.map(function(r){ return probeHost(r.addr); }));
+    rows.forEach(function(r, i){ if (res[i] != null) r.ms = res[i]; });
     var sp = await speedTest();
     var self = rows.filter(function(r){ return r.addr === SELF || r.addr === ORIGIN; })[0];
     if (sp) {
@@ -566,7 +618,7 @@ export function statusPage(user, settings, origin, stats) {
     var good = rows.filter(function(r){ return r.ms != null; });
     out.textContent = sp
       ? (good.length + ' کاندید از شبکه‌ی تو جواب داد — سرعت پنل: ' + sp.mbps + ' Mbps. ستاره بزن تا برای همه اولویت بگیرد.')
-      : 'سنجش انجام شد؛ اگر همه خالی بودند یعنی شبکه‌ات کلودفلر را محدود کرده — آی‌پی خام را در v2rayNG تست کن.';
+      : 'سنجش انجام شد — در v2rayNG گزینه‌ی Real Ping را بزن و هر کانفیگی که سبز بود ستاره بده.';
     try {
       await fetch('/api/report-ip', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ token: TOKEN, results: good.map(function(r){ return { ip: r.addr, ms: r.ms, colo: r.colo, mbps: r.mbps }; }) }) });
