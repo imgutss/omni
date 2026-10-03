@@ -195,7 +195,7 @@ console.log('\n[6] دیاگ شبکه');
   const deUser = await req('GET', '/api/users/ali');
   const deUris = deUser.body?.configs?.uris || [];
   ok('انتخاب کشور (آلمان DE) آی‌پی و پرچم کشور را در کانفیگ اعمال می‌کند', deUris.some((u) => decodeURIComponent(u).includes('🇩🇪') && decodeURIComponent(u).includes('آلمان')), decodeURIComponent(deUris[0] || '').slice(0, 120));
-  ok('فرگمنت استاندارد زئوس (fragment=100-200,5-10,tlshello)، fp=chrome، بدون ?ed=2048 و تطابق عنوان با آدرس', deUris.some((u) => u.includes('fragment=100-200%2C5-10%2Ctlshello') && u.includes('fp=chrome') && !decodeURIComponent(u).includes('ed=2048') && decodeURIComponent(u.split('#')[1] || '').includes(u.split('@')[1]?.split('?')[0] || '')), decodeURIComponent(deUris[0] || '').slice(0, 140));
+  ok('فرگمنت استاندارد (fragment=100-200,5-10,tlshello)، fp=chrome، بدون ?ed=2048 و تطابق عنوان با آدرس', deUris.some((u) => u.includes('fragment=100-200%2C5-10%2Ctlshello') && u.includes('fp=chrome') && !decodeURIComponent(u).includes('ed=2048') && decodeURIComponent(u.split('#')[1] || '').includes(u.split('@')[1]?.split('?')[0] || '')), decodeURIComponent(deUris[0] || '').slice(0, 140));
   await req('PUT', '/api/settings', { body: { selected_country: '' } });
 
   const customScan = await req('POST', '/api/diag/rank-ips', { body: { ips: ['213.241.198.123', '172.67.181.32'], timeout: 1200 } });
@@ -206,7 +206,13 @@ console.log('\n[6] دیاگ شبکه');
   ok('اسکن یکجای کشورها (/api/diag/scan-countries)', scanAllC.body?.ok === true && Array.isArray(scanAllC.body.results) && scanAllC.body.results.length === 4, JSON.stringify(scanAllC.body?.results?.map((r) => ({ cc: r.cc, alive: r.alive, ms: r.edge_ms }))));
 
   const rotRes = await req('POST', '/api/diag/rotate-ips', { body: { apply: true } });
-  ok('چرخش فوری آی‌پی‌های تمیز از مخزن زئوس (/api/diag/rotate-ips)', rotRes.body?.ok === true && Array.isArray(rotRes.body.clean_ips) && rotRes.body.clean_ips.length >= 4, JSON.stringify(rotRes.body?.clean_ips));
+  ok('چرخش فوری مخزن ترکیبی آی‌پی‌های تمیز (/api/diag/rotate-ips)', rotRes.body?.ok === true && Array.isArray(rotRes.body.clean_ips) && rotRes.body.clean_ips.length >= 4, JSON.stringify(rotRes.body?.clean_ips));
+
+  const netSense = await req('POST', '/api/diag/net-sense', { body: { apply: true } });
+  ok('سنسور هوشمند خط گوشی و تنظیم خودکار (/api/diag/net-sense)', netSense.body?.ok === true && netSense.body?.applied === true && Boolean(netSense.body?.isp?.fragmentRule), JSON.stringify(netSense.body?.isp));
+
+  const ugHunt = await req('POST', '/api/diag/underground-hunt', { body: { seeds: ['172.67.181.32', '104.17.147.119'], limit: 10, apply: false } });
+  ok('رادار کشف آی‌پی‌ها و دامنه‌های زیرزمینی (/api/diag/underground-hunt)', ugHunt.body?.ok === true && Array.isArray(ugHunt.body?.candidates) && ugHunt.body.candidates.length >= 4, JSON.stringify(ugHunt.body?.candidates?.slice(0, 4)));
 
   const hz = await req('GET', '/healthz', { raw: true });
   const hzTxt = await hz.text();

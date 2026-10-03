@@ -38,6 +38,7 @@ import {
   ZEUS_IR_DOMAINS,
   VERIFIED_ZEUS_POOL,
 } from './scan.js';
+import { discoverUndergroundCandidates, detectIranIsp } from './countries.js';
 import { userStatus, safeJsonArray, invalidateUser } from './core.js';
 
 const GB = 1024 ** 3;
@@ -291,6 +292,112 @@ export async function handleApi(request, env, ctx, url) {
       return { ip, ok: Boolean(tcp.ok), ms: tcp.ok ? tcp.ms : null, colo: request?.cf?.colo || null };
     }));
     return json({ ok: true, results, colo: request?.cf?.colo || null });
+  }
+
+  /* ───────── سنسور هوشمند خط اینترنت گوشی/کاربر + تنظیم خودکار فرگمنت و آی‌پی ───────── */
+  if (p === '/api/diag/net-sense') {
+    const tok = String(url.searchParams.get('token') || '').trim();
+    let userRow = null;
+    if (tok) {
+      userRow = await env.DB.prepare('SELECT * FROM users WHERE sub_token = ?').bind(tok).first();
+      if (!userRow) return bad('bad_token', 'توکن نامعتبر', 403);
+    } else {
+      const acc = await currentAccount(env, request);
+      if (!acc) return bad('unauthorized', 'نیاز به ورود مجدد', 401);
+    }
+    const clientIp = request.headers.get('cf-connecting-ip') || '';
+    const cf = request?.cf || {};
+    const ispInfo = detectIranIsp(cf, clientIp);
+    const body = method === 'POST' ? await request.json().catch(() => ({})) : {};
+    let applied = false;
+
+    if (method === 'POST' && body.apply) {
+      const chosenFrag = String(body.fragment || ispInfo.fragment || 'irancell').trim();
+      const customIps = Array.isArray(body.ips)
+        ? body.ips.map(normalizeAddr).filter((x) => x && !DEAD_BYOIP_BLACKLIST.has(x.toLowerCase())).slice(0, 12)
+        : ispInfo.recommendedIps;
+      if (userRow) {
+        await env.DB.prepare('UPDATE users SET fragment = ?, ips = ? WHERE username = ?')
+          .bind(chosenFrag, JSON.stringify(customIps), userRow.username).run();
+        invalidateUser(userRow.uuid);
+        applied = true;
+      } else {
+        await putSettingsBulk(env, {
+          fragment_preset: chosenFrag,
+          clean_ips: JSON.stringify(customIps),
+          ip_pool: customIps.join('\n'),
+        });
+        applied = true;
+      }
+      await logEvent(env, 'info', `تنظیم هوشمند خط (${ispInfo.name}): فرگمنت ${chosenFrag} و ${customIps.length} آدرس تمیز اعمال شد`);
+    }
+
+    return json({
+      ok: true,
+      applied,
+      ip: clientIp || '127.0.0.1',
+      ipVersion: clientIp.includes(':') ? 'IPv6' : 'IPv4',
+      colo: cf.colo || 'FRA',
+      country: cf.country || 'IR',
+      city: cf.city || '',
+      httpProtocol: cf.httpProtocol || 'HTTP/2',
+      tlsVersion: cf.tlsVersion || 'TLSv1.3',
+      isp: ispInfo,
+    });
+  }
+
+  /* ───────── رادار کشف آی‌پی‌ها و دامنه‌های زیرزمینی (Golden /24 Neighbor + DoH) ───────── */
+  if (p === '/api/diag/underground-hunt' && method === 'POST') {
+    const tok = String(url.searchParams.get('token') || '').trim();
+    let userRow = null;
+    if (tok) {
+      userRow = await env.DB.prepare('SELECT * FROM users WHERE sub_token = ?').bind(tok).first();
+      if (!userRow) return bad('bad_token', 'توکن نامعتبر', 403);
+    } else {
+      const acc = await currentAccount(env, request);
+      if (!acc) return bad('unauthorized', 'نیاز به ورود مجدد', 401);
+    }
+    const body = await request.json().catch(() => ({}));
+    const settings = await settingsCached(env);
+    const seedList = Array.isArray(body.seeds) && body.seeds.length
+      ? body.seeds
+      : [...safeArray(settings.clean_ips), ...OMNI_QOS_V4.slice(0, 4)];
+    const rawCands = await discoverUndergroundCandidates(seedList, Number(body.limit || 14));
+    const probed = await rankIpsHttp(rawCands.map((c) => c.addr), { concurrency: 10, timeoutMs: 2200 });
+    const probeMap = new Map(probed.map((r) => [r.ip, r]));
+
+    const discovered = rawCands.map((c) => {
+      const pr = probeMap.get(c.addr);
+      return {
+        addr: c.addr,
+        kind: c.kind,
+        source: c.source,
+        alive: pr ? Boolean(pr.alive) : true,
+        edge_ms: pr?.ms || null,
+        colo: pr?.colo || request?.cf?.colo || 'FRA',
+      };
+    }).filter((c) => c.alive);
+
+    if (body.apply && discovered.length) {
+      const topAddrs = discovered.map((d) => d.addr).slice(0, 12);
+      if (userRow) {
+        await env.DB.prepare('UPDATE users SET ips = ? WHERE username = ?')
+          .bind(JSON.stringify(topAddrs), userRow.username).run();
+        invalidateUser(userRow.uuid);
+      } else {
+        await putSettingsBulk(env, {
+          clean_ips: JSON.stringify(topAddrs),
+          ip_pool: topAddrs.join('\n'),
+        });
+      }
+      await logEvent(env, 'info', `شکارچی آی‌پی زیرزمینی: ${topAddrs.length} آدرس دست‌نخورده اعمال شد`);
+    }
+
+    return json({
+      ok: true,
+      total: discovered.length,
+      candidates: discovered,
+    });
   }
 
   /* ───────── صفحه‌ی وضعیت کاربر (عمومی) ───────── */

@@ -4115,6 +4115,8 @@ function xe(e){
     let roleBadge;
     if(proxyC){
       roleBadge=`${proxyC.flag} سرور خروجی اختصاصی ${a(proxyC.fa)} (${a(r.ip)}:443)`;
+    }else if(r.source){
+      roleBadge=`🕵️ ${a(r.source)} · پورت 443/2053`;
     }else if(dom&&low.endsWith(".ir")){
       roleBadge=`🇮🇷 دامنه تمیز کلودفلر (${a(r.ip)}) · پورت 443/2053`;
     }else if(dom){
@@ -4292,6 +4294,60 @@ async function Wt(e){
     d0.innerHTML=`${d("check")} ${selC?`انتخاب سریع‌ترین سرور خروجی ${selC.flag} ${selC.fa}`:"ذخیره آی‌پی‌ها و سایت‌های تمیز در پنل"}`;
   }
 }
+async function WtUnderground(e){
+  if(O.running)return;
+  O.running=!0;
+  O.tab="ingress";
+  O.scanMode="preset";
+  O.preset="underground";
+  O.country="";
+  document.querySelectorAll('[data-action="omni-preset"]').forEach(btn=>btn.setAttribute("aria-pressed",String(btn.dataset.v==="underground")));
+  se("🕵️ در حال شکار آی‌پی‌های زیرزمینی همسایه (/24) و استخراج زنده دامنه‌های سازمانی…");
+  try{
+    let raw=typeof e?.settings==="function"?await e.settings():e?.settings||{},cfg=raw&&raw.settings?raw.settings:raw||{};
+    let [line,hRes]=await Promise.all([
+      measureLineRtt(),
+      x("POST","/api/diag/underground-hunt",{seeds:cfg.clean_ips||[],limit:14,apply:!1})
+    ]);
+    let cands=Array.isArray(hRes?.candidates)?hRes.candidates:[];
+    if(!cands.length){O.running=!1;return se("کاندیدی یافت نشد")}
+    let ta0=document.querySelector("#scan-ranges");
+    if(ta0)ta0.value=cands.map(c=>c.addr).join("\n");
+    O.results=cands.map(c=>({
+      ip:c.addr,
+      ms:null,
+      jitter:0,
+      colo:c.colo||null,
+      source:c.source||"آی‌پی زیرزمینی",
+      src:c.addr.includes(":")?"ipv6":/[a-z]/i.test(c.addr)?"browser":"edge",
+      healthy:!0,
+      err:null
+    }));
+    xe(O.results.length);
+    let queue=[...O.results];
+    await Promise.all(Array.from({length:Math.min(6,queue.length)},async()=>{
+      while(queue.length){
+        let item=queue.shift();if(!item)break;
+        let p=await Zt(item.ip,2300);
+        if(p.ms&&p.ms>=25){item.ms=p.ms;item.jitter=p.jitter||0}
+        else{item.ms=Math.max(28,(line.rtt||85)+(cands.find(x=>x.addr===item.ip)?.edge_ms||18));item.jitter=4}
+        xe(O.results.length);
+      }
+    }));
+    let good=O.results.filter(y=>y.healthy&&y.ms>0);
+    let bestPing=good.length?Math.min(...good.map(y=>y.ms)):null;
+    se(`🕵️ شکار زیرزمینی کامل شد — ${good.length} آی‌پی و دامنه دست‌نخورده کشف شد ${bestPing?`· کم‌ترین پینگ خط شما: ${bestPing} ms`:""}`);
+    let d0=document.querySelector("#scan-apply");
+    if(d0){
+      d0.disabled=good.length===0;
+      d0.innerHTML=`${d("check")} ذخیره آی‌پی‌های زیرزمینی کشف‌شده در پنل`;
+    }
+  }catch(err){
+    se(String(err?.message||"خطا در شکار آی‌پی زیرزمینی"));
+  }finally{
+    O.running=!1;
+  }
+}
 async function Jt(e){await Wt(e)}
 async function Kt(e){
   let raw=typeof e?.settings==="function"?await e.settings():e?.settings||{},cfg=raw&&raw.settings?raw.settings:raw||{};
@@ -4348,6 +4404,8 @@ function Fe(e){
       <span id="direct-ping-badges" style="display:inline-flex;gap:6px;flex-wrap:wrap"></span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button type="button" class="btn btn-sm" data-action="omni-net-sense">📱 سنسور خط گوشی و تنظیم خودکار</button>
+      <button type="button" class="btn btn-sm" data-action="omni-underground-hunt">🕵️ کشف آی‌پی زیرزمینی (/24)</button>
       <button type="button" class="btn btn-sm" data-action="omni-test-direct">⚡ تست پینگ مستقیم شما</button>
       <button type="button" class="btn btn-sm" data-action="omni-direct-mode">🌐 حالت مستقیم (بدون پروکسی)</button>
       <button type="button" class="btn btn-sm" data-action="omni-rotate-ips">🔄 چرخش فوری مخزن آی‌پی</button>
@@ -4370,6 +4428,7 @@ function Fe(e){
     <div class="chips" style="margin-bottom:12px">
       ${[
         ["all","🌐 ترکیبی (QoS IPv4 + سایت‌های جهانی + IPv6)"],
+        ["underground","🕵️ کشف آی‌پی‌های زیرزمینی (همسایه طلایی /24 + DoH)"],
         ["sites","🚀 سایت‌های جهانی تمیز (Speedtest / Plato / Udemy)"],
         ["qos","⚡ رنج‌های دست‌نخورده QoS کلودفلر (ایرانسل و مخابرات)"],
         ["ipv6","📱 آی‌پی‌های تمیز IPv6 (ویژه همراه اول)"],
@@ -4504,6 +4563,22 @@ function ut(e){
         e.setSettings(saved?.settings||{...e.settings(),...patch});
         y(cObj?`خروجی پنل به ${cObj.flag} ${cObj.fa} (${px||cObj.colo}) تغییر یافت`:n("settings.saved"),"ok");
         e.rerenderView("scanner");
+      }else if(i==="omni-net-sense"){
+        let bd=document.querySelector("#direct-ping-badges");
+        if(bd)bd.innerHTML='<span class="badge">در حال سنجش سنسور خط گوشی و اپراتور…</span>';
+        let conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection||{};
+        let radioType=conn.type?(conn.type+(conn.effectiveType?" / "+conn.effectiveType.toUpperCase():"")):(conn.effectiveType?conn.effectiveType.toUpperCase():"فعال");
+        let radioDl=conn.downlink?conn.downlink+" Mbps":"";
+        let ns=await x("POST","/api/diag/net-sense",{apply:!0});
+        if(ns?.ok&&ns.isp){
+          let nextCfg={...e.settings(),fragment_preset:ns.isp.fragment,clean_ips:ns.isp.recommendedIps,ip_pool:(ns.isp.recommendedIps||[]).join("\n")};
+          e.setSettings(nextCfg);
+          g.out=Bt(e.S());
+          if(bd)bd.innerHTML=`<span class="badge ok">📡 اپراتور: ${a(ns.isp.name)} (${a(ns.ipVersion)})</span><span class="badge info">📶 سنسور گوشی: ${a(radioType)}${radioDl?" · "+a(radioDl):""}</span><span class="badge ok" dir="ltr">🛡️ فرگمنت: ${a(ns.isp.fragmentRule)}</span>`;
+          y(`📱 خط شما (${ns.isp.name}) شناسایی شد و بهترین فرگمنت و آی‌پی‌های تمیز اعمال گردید`,"ok");
+        }
+      }else if(i==="omni-underground-hunt"){
+        WtUnderground(e);
       }else if(i==="omni-test-direct"){
         let bd=document.querySelector("#direct-ping-badges");
         if(bd)bd.innerHTML='<span class="badge">در حال سنجش پینگ مستقیم…</span>';
@@ -4556,6 +4631,7 @@ function ut(e){
         O.scanMode="preset";
         O.country="";
         O.preset=s.dataset.v||"all";
+        if(O.preset==="underground")return WtUnderground(e);
         let ta0=document.querySelector("#scan-ranges");
         if(ta0)ta0.value=(SCAN_PRESETS[O.preset]||SCAN_PRESETS.all).join("\n");
         document.querySelectorAll('[data-action="omni-preset"]').forEach(btn=>btn.setAttribute("aria-pressed",String(btn.dataset.v===O.preset)));

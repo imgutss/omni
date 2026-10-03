@@ -514,3 +514,194 @@ export function findCountry(cc) {
   if (key === 'DIRECT' || key === 'NONE') return null;
   return COUNTRY_BY_CC.get(key) || null;
 }
+
+/** دامنه‌های سازمانی (Enterprise) کم‌حساسیت پشت کلودفلر برای استخراج زنده زیرشبکه‌های زیرزمینی */
+export const UNDERGROUND_ENTERPRISE_DOMAINS = [
+  'www.speedtest.net',
+  'platoapp.com',
+  'www.udemy.com',
+  'www.canva.com',
+  'quizlet.com',
+  'www.npmjs.com',
+  'www.fiverr.com',
+  'www.upwork.com',
+  'www.crunchbase.com',
+  '01d.ir',
+  '0seo.ir',
+];
+
+/** پیشوندهای زیرشبکه /24 طلایی کلودفلر (QoS / Enterprise / Anycast Gen-2) */
+export const UNDERGROUND_SUBNET_PREFIXES = [
+  '104.17.147',
+  '104.17.148',
+  '104.18.2',
+  '104.18.3',
+  '172.67.181',
+  '172.67.163',
+  '172.67.217',
+  '162.159.137',
+  '104.16.142',
+  '104.18.113',
+  '104.16.103',
+  '104.16.133',
+  '104.17.135',
+];
+
+/**
+ * تولید هوشمند آی‌پی‌ها و دامنه‌های زیرزمینی (Golden /24 Neighbor Discovery + Live DoH)
+ */
+export async function discoverUndergroundCandidates(seedIps = [], limit = 16) {
+  const PRIME_OFFSETS = [13, 29, 43, 61, 79, 97, 113, 131, 149, 167, 181, 199, 211, 229, 241];
+  const out = [];
+  const seen = new Set();
+  const push = (addr, kind, source) => {
+    const a = String(addr || '').trim();
+    if (!a || seen.has(a.toLowerCase()) || DEAD_BYOIP_BLACKLIST.has(a.toLowerCase())) return;
+    seen.add(a.toLowerCase());
+    out.push({ addr: a, kind, source });
+  };
+
+  // ۱) استخراج همسایه‌های طلایی از آی‌پی‌های فعلی کاربر (Seeds)
+  const seedSlot = Math.floor(Date.now() / 7000) % PRIME_OFFSETS.length;
+  for (const raw of (Array.isArray(seedIps) ? seedIps : [])) {
+    const ip = String(raw || '').trim();
+    const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (!m) continue;
+    const prefix = `${m[1]}.${m[2]}.${m[3]}`;
+    const baseOct = Number(m[4]);
+    const off1 = PRIME_OFFSETS[(seedSlot + 2) % PRIME_OFFSETS.length];
+    const off2 = PRIME_OFFSETS[(seedSlot + 7) % PRIME_OFFSETS.length];
+    const n1 = ((baseOct + off1) % 238) + 11;
+    const n2 = ((baseOct + off2) % 238) + 11;
+    push(`${prefix}.${n1}`, 'neighbor_v4', `همسایه طلایی ${prefix}.0/24`);
+    push(`${prefix}.${n2}`, 'neighbor_v4', `همسایه طلایی ${prefix}.0/24`);
+  }
+
+  // ۲) کوئری زنده DoH از دامنه‌های سازمانی برای کشف آی‌پی‌های تازه لبه کلودفلر و همسایه‌های آن‌ها
+  const dohPick = [];
+  for (let i = 0; i < 4; i++) {
+    dohPick.push(UNDERGROUND_ENTERPRISE_DOMAINS[(seedSlot + i * 2) % UNDERGROUND_ENTERPRISE_DOMAINS.length]);
+  }
+  await Promise.all(dohPick.map(async (domain) => {
+    try {
+      const r = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`, {
+        headers: { accept: 'application/dns-json' },
+        signal: AbortSignal.timeout(1800),
+      });
+      if (!r.ok) return;
+      const d = await r.json();
+      const answers = (d.Answer || []).filter((a) => a.type === 1 && /^\d+\.\d+\.\d+\.\d+$/.test(a.data));
+      for (const ans of answers.slice(0, 2)) {
+        const parts = ans.data.split('.');
+        const prefix = `${parts[0]}.${parts[1]}.${parts[2]}`;
+        const neighborOct = ((Number(parts[3]) + PRIME_OFFSETS[(seedSlot + 4) % PRIME_OFFSETS.length]) % 238) + 11;
+        push(`${prefix}.${neighborOct}`, 'enterprise_neighbor', `همسایه سازمانی (${domain})`);
+      }
+    } catch { /* ignore DoH timeout */ }
+  }));
+
+  // ۳) زیرشبکه‌های زیرزمینی کم‌ترافیک کلودفلر با آفست اول چرخشی
+  for (let i = 0; i < UNDERGROUND_SUBNET_PREFIXES.length && out.length < limit - 5; i++) {
+    const p = UNDERGROUND_SUBNET_PREFIXES[(seedSlot + i) % UNDERGROUND_SUBNET_PREFIXES.length];
+    const oct = PRIME_OFFSETS[(seedSlot + i * 3) % PRIME_OFFSETS.length];
+    push(`${p}.${oct}`, 'underground_v4', `ساب‌نت QoS ${p}.0/24`);
+  }
+
+  // ۴) سایت‌های تمیز جهانی و دامنه‌های زیرزمینی + آی‌پی‌های نسل ششم (IPv6)
+  push('www.canva.com', 'clean_site', 'دامنه سازمانی Canva');
+  push('quizlet.com', 'clean_site', 'دامنه آموزشی Quizlet');
+  push('www.speedtest.net', 'clean_site', 'دامنه Speedtest');
+  push('platoapp.com', 'clean_site', 'دامنه گیمینگ Plato');
+  push('2606:4700::6812:1a2e', 'clean_v6', 'IPv6 زیرزمینی کلودفلر');
+  push('2606:4700:3030::ac43:b58a', 'clean_v6', 'IPv6 زیرزمینی کلودفلر');
+  push('01d.ir', 'ir_domain', 'دامنه تمیز داخلی .ir');
+
+  return out.slice(0, limit);
+}
+
+/**
+ * تشخیص هوشمند اپراتور اینترنت کاربر (ایرانسل، همراه اول، مخابرات، رایتل، شاتل و...) از روی اطلاعات لبه کلودفلر
+ */
+export function detectIranIsp(cf = {}, clientIp = '') {
+  const asn = Number(cf?.asn || 0);
+  const org = String(cf?.asOrganization || '').toLowerCase();
+  const isV6 = String(clientIp || '').includes(':');
+
+  if (asn === 44244 || org.includes('irancell') || org.includes('mtn')) {
+    return {
+      code: 'irancell',
+      name: 'ایرانسل (MTN Irancell)',
+      asn,
+      isV6,
+      fragment: 'irancell',
+      fragmentRule: '100-200,5-10,tlshello',
+      bestPorts: [443, 2053],
+      tip: 'ایرانسل روی آی‌پی‌های QoS، سایت‌های Speedtest/Plato و IPv6 با فرگمنت 100-200 بهترین پینگ را می‌دهد.',
+      recommendedIps: ['172.67.181.32', '104.17.147.119', 'www.speedtest.net', 'platoapp.com', '2606:4700::6812:1a2e', '2606:4700:3030::ac43:b58a'],
+    };
+  }
+  if (asn === 197207 || org.includes('mobile communication company of iran') || org.includes('mci')) {
+    return {
+      code: 'mci',
+      name: 'همراه اول (MCI)',
+      asn,
+      isV6,
+      fragment: 'mci',
+      fragmentRule: '10-30,2-5,tlshello',
+      bestPorts: [443, 2053, 8080],
+      tip: 'همراه اول روی آی‌پی‌های نسل ششم (IPv6) و زیرشبکه 172.67 با فرگمنت 10-30 سریع‌ترین اتصال را دارد.',
+      recommendedIps: ['2606:4700::6812:1a2e', '2606:4700:3030::ac43:b58a', '172.67.181.32', '104.17.148.77', 'www.speedtest.net', 'platoapp.com'],
+    };
+  }
+  if (asn === 58224 || asn === 12880 || org.includes('iran telecommunication') || org.includes('tci') || org.includes('mkh')) {
+    return {
+      code: 'tci',
+      name: 'مخابرات ایران (TCI)',
+      asn,
+      isV6,
+      fragment: 'tci',
+      fragmentRule: '50-200,1-3,tlshello',
+      bestPorts: [2053, 443],
+      tip: 'مخابرات روی پورت 2053، دامنه‌های تمیز .ir و زیرشبکه 104.18.3.x بدون افت سرعت کار می‌کند.',
+      recommendedIps: ['01d.ir', '0seo.ir', '104.18.3.91', '104.16.142.53', 'www.udemy.com', 'www.speedtest.net'],
+    };
+  }
+  if (asn === 57218 || org.includes('rightel')) {
+    return {
+      code: 'rightel',
+      name: 'رایتل (Rightel)',
+      asn,
+      isV6,
+      fragment: 'rightel',
+      fragmentRule: '50-100,2-5,tlshello',
+      bestPorts: [443, 2053],
+      tip: 'رایتل با فرگمنت 50-100 و آی‌پی‌های QoS کمترین پکت‌لاس را دارد.',
+      recommendedIps: ['172.67.181.32', '104.17.147.119', 'www.speedtest.net', 'platoapp.com', '2606:4700::6812:1a2e'],
+    };
+  }
+  if (asn === 31549 || org.includes('shatel') || asn === 43754 || org.includes('asiatech') || asn === 50810 || org.includes('mobinnet') || asn === 25184 || org.includes('hiweb')) {
+    return {
+      code: 'tci',
+      name: `اینترنت ثابت (${cf?.asOrganization || 'ISP'})`,
+      asn,
+      isV6,
+      fragment: 'tci',
+      fragmentRule: '50-200,1-3,tlshello',
+      bestPorts: [443, 2053],
+      tip: 'برای اینترنت ثابت (شاتل/آسیاتک/مبین‌نت/های‌وب)، ترکیب پورت 2053، دامنه‌های جهانی و .ir پیشنهاد می‌شود.',
+      recommendedIps: ['104.18.3.91', '172.67.181.32', 'www.speedtest.net', 'www.udemy.com', '01d.ir', '0seo.ir'],
+    };
+  }
+  return {
+    code: 'irancell',
+    name: cf?.asOrganization ? `${cf.asOrganization} (AS${asn || '?'})` : 'اپراتور فعلی شما',
+    asn,
+    isV6,
+    fragment: 'irancell',
+    fragmentRule: '100-200,5-10,tlshello',
+    bestPorts: [443, 2053],
+    tip: 'ترکیب آی‌پی‌های QoS، سایت‌های تمیز جهانی و IPv6 برای خط فعلی شما بهینه‌سازی شده است.',
+    recommendedIps: ['172.67.181.32', '104.17.147.119', 'www.speedtest.net', 'platoapp.com', '2606:4700::6812:1a2e', '01d.ir'],
+  };
+}
+

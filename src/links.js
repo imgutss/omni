@@ -750,13 +750,26 @@ export function statusPage(user, settings, origin, stats) {
     <div class="kv"><div class="k">آخرین اتصال</div><b style="font-size:12px">${esc(user.last_seen || '—')}</b></div>
   </div>
   <a class="btn" href="${esc(origin)}/s/${esc(user.sub_token)}">📥 دریافت کانفیگ</a>
-  <a class="btn ghost" href="v2rayng://install-config?url=${encodeURIComponent(`${origin}/s/${user.sub_token}`)}">افزودن مستقیم در v2rayNG</a>
+  <a class="btn ghost" href="v2rayng://install-config?url=${encodeURIComponent(`${origin}/s/${user.sub_token}`)}">📲 باز کردن مستقیم در v2rayNG / PattNG</a>
   <div class="muted" style="margin-top:10px">لینک اشتراک (در کلاینت وارد کن):</div>
   <code>${esc(origin)}/s/${esc(user.sub_token)}</code>
+
+  <div style="margin-top:18px;padding:14px;border-radius:15px;background:#0a0e15;border:1px solid var(--line)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <b style="font-size:13px;color:var(--a1)">📱 سنسور هوشمند خط گوشی و رادار زیرزمینی</b>
+      <span id="net-badge" class="badge ok" style="font-size:10.5px">در حال سنجش خط…</span>
+    </div>
+    <div id="net-info" class="muted" style="font-size:11.5px;margin-top:8px;line-height:1.7">در حال تشخیص اپراتور سیم‌کارت/وای‌فای و وضعیت رادیویی گوشی…</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">
+      <button class="btn" id="btn-autotune" type="button" style="margin-top:0;padding:10px 12px;font-size:12px">⚡ تنظیم خودکار برای نت من</button>
+      <button class="btn ghost" id="btn-underground" type="button" style="margin-top:0;padding:10px 12px;font-size:12px;border-color:rgba(34,211,238,.35);color:var(--a1)">🕵️ کشف آی‌پی زیرزمینی</button>
+    </div>
+  </div>
+
   <div class="muted" style="margin-top:18px">⚡️ تست زنده پینگ و آی‌پی تمیز برای اینترنت شما</div>
-  <div class="muted" style="font-size:11.5px;margin-top:3px">پینگ و سرعت واقعی مستقیماً از مرورگر دستگاه شما اندازه‌گیری می‌شود؛ آی‌پی‌های سبز را ستاره بزنید تا در صدر ساب‌لینک قرار بگیرند.</div>
+  <div class="muted" style="font-size:11.5px;margin-top:3px">پینگ مستقیماً از مرورگر گوشی شما اندازه‌گیری می‌شود؛ آی‌پی‌های سبز را ستاره بزنید تا در صدر ساب‌لینک قرار بگیرند.</div>
   <div id="iplist" style="margin-top:10px"></div>
-  <button class="btn ghost" id="ip-test" type="button">⚡ تست مجدد پینگ و سرعت واقعی روی اینترنت من</button>
+  <button class="btn ghost" id="ip-test" type="button">⚡ تست مجدد پینگ روی اینترنت من</button>
   <div id="ip-out" class="muted" style="margin-top:8px;font-size:11.5px"></div>
   <div class="muted" style="margin-top:14px;font-size:11px">${esc(name)} — پنل مدیریت پروکسی روی Cloudflare Workers</div>
 </div>
@@ -767,24 +780,93 @@ export function statusPage(user, settings, origin, stats) {
   var ORIGIN = ${JSON.stringify(origin)};
   var SELF = ORIGIN.replace('https://', '').replace('http://', '');
   var el = document.getElementById('iplist'), out = document.getElementById('ip-out');
+  var netInfoEl = document.getElementById('net-info'), netBadgeEl = document.getElementById('net-badge');
+  var sensedIsp = null;
   function nm(v){ return (v && typeof v === 'object') ? String(v.addr || v.ip || '') : String(v == null ? '' : v); }
   function kind(a){ if (a.indexOf(':') >= 0) return 'ipv6'; var c = a.charAt(0); return (c >= '0' && c <= '9') ? 'ipv4' : 'host'; }
   function cls(ms){ if (ms == null || ms <= 0) return ''; return ms < 180 ? 'good' : ms > 500 ? 'bad' : ''; }
   var rows = CANDS.map(function(c){
     var m = (c && c.ms != null && Number(c.ms) >= 25) ? Number(c.ms) : null;
-    return { addr: nm(c), ms: m, colo: (c && c.colo) || null, mbps: null, testing: false };
+    return { addr: nm(c), ms: m, colo: (c && c.colo) || null, mbps: null, source: (c && c.source) || '', testing: false };
   }).filter(function(r){ return r.addr; });
   function render(){
     if (!rows.length) { el.innerHTML = '<div class="muted" style="font-size:11.5px">هنوز کاندیدی ثبت نشده.</div>'; return; }
     el.innerHTML = rows.slice(0, 14).map(function(r){
-      var k = kind(r.addr), tag = k === 'host' ? 'دامنه · 443/2053' : k === 'ipv6' ? 'IPv6 · 443/2053/8080' : 'آی‌پی تمیز · 443/8080';
+      var k = kind(r.addr), tag = r.source ? r.source : (k === 'host' ? 'دامنه · 443/2053' : k === 'ipv6' ? 'IPv6 · 443/2053' : 'آی‌پی تمیز · 443/2053');
       var msTxt = r.testing ? '⏳ در حال تست…' : (r.ms != null && r.ms > 0 ? r.ms + ' ms' : 'آماده تست');
       return '<div class="ip"><b>' + r.addr + '</b><span class="muted" style="font-size:10.5px">' + tag + (r.colo ? ' · ' + r.colo : '') + '</span>' +
-        '<span class="ms ' + cls(r.ms) + '">' + msTxt + (r.mbps ? ' · ' + r.mbps + ' Mbps' : '') + '</span>' +
+        '<span class="ms ' + cls(r.ms) + '">' + msTxt + '</span>' +
         '<button class="star" data-addr="' + r.addr + '" data-ms="' + (r.ms || '') + '" title="این آی‌پی روی اینترنت من عالی بود">★</button></div>';
     }).join('');
   }
   render();
+  async function runNetSensor(){
+    try {
+      var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection || {};
+      var radioType = conn.type ? (conn.type + (conn.effectiveType ? ' / ' + conn.effectiveType.toUpperCase() : '')) : (conn.effectiveType ? conn.effectiveType.toUpperCase() : 'نامشخص');
+      var radioDl = conn.downlink ? conn.downlink + ' Mbps' : '';
+      var ns = await fetch(ORIGIN + '/api/diag/net-sense?token=' + encodeURIComponent(TOKEN), { cache: 'no-store' }).then(function(r){ return r.json(); });
+      if (ns && ns.ok) {
+        sensedIsp = ns.isp;
+        if (netBadgeEl) netBadgeEl.textContent = ns.isp.name + ' · ' + ns.ipVersion;
+        if (netInfoEl) {
+          netInfoEl.innerHTML =
+            '📡 <b>اپراتور:</b> ' + ns.isp.name + ' &nbsp;|&nbsp; 📶 <b>سنسور گوشی:</b> ' + radioType + (radioDl ? ' (' + radioDl + ')' : '') +
+            '<br>🛡️ <b>فرگمنت بهینه خط شما:</b> <span style="direction:ltr;display:inline-block;color:#22d3ee">' + ns.isp.fragmentRule + '</span> · پورت پیشنهادی: <b>' + (ns.isp.bestPorts || [443,2053]).join(' / ') + '</b>' +
+            '<br><span style="color:#a7f3d0">' + ns.isp.tip + '</span>';
+        }
+      }
+    } catch (e) {
+      if (netInfoEl) netInfoEl.textContent = 'سنسور خط آماده است. برای بهینه‌سازی روی دکمه‌های زیر بزنید.';
+    }
+  }
+  runNetSensor();
+  document.getElementById('btn-autotune').onclick = async function(){
+    var btn = document.getElementById('btn-autotune');
+    btn.disabled = true; btn.textContent = '⏳ در حال تنظیم…';
+    try {
+      var goodIps = rows.filter(function(r){ return r.ms != null && r.ms >= 25 && r.ms < 600; }).map(function(r){ return r.addr; }).slice(0, 10);
+      var res = await fetch(ORIGIN + '/api/diag/net-sense?token=' + encodeURIComponent(TOKEN), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ apply: true, fragment: sensedIsp ? sensedIsp.fragment : undefined, ips: goodIps.length >= 3 ? goodIps : undefined })
+      }).then(function(r){ return r.json(); });
+      if (res && res.ok) {
+        out.textContent = '✅ اشتراک شما بر اساس خط «' + (res.isp ? res.isp.name : 'فعلی') + '» با بهترین فرگمنت و آی‌پی‌های تمیز تنظیم شد! اکنون در v2rayNG اشتراک را آپدیت کنید.';
+      }
+    } catch (e) {}
+    btn.disabled = false; btn.textContent = '⚡ تنظیم خودکار برای نت من';
+  };
+  document.getElementById('btn-underground').onclick = async function(){
+    var btn = document.getElementById('btn-underground');
+    btn.disabled = true; btn.textContent = '🕵️ در حال شکار…';
+    out.textContent = 'در حال استخراج آی‌پی‌های زیرزمینی همسایه (/24) و دامنه‌های سازمانی…';
+    try {
+      var seeds = rows.filter(function(r){ return r.ms != null && r.ms < 350; }).map(function(r){ return r.addr; }).slice(0, 4);
+      var hRes = await fetch(ORIGIN + '/api/diag/underground-hunt?token=' + encodeURIComponent(TOKEN), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ seeds: seeds, limit: 12, apply: false })
+      }).then(function(r){ return r.json(); });
+      if (hRes && Array.isArray(hRes.candidates) && hRes.candidates.length) {
+        rows = hRes.candidates.map(function(c){
+          return { addr: c.addr, ms: null, colo: c.colo || null, source: c.source || 'زیرزمینی', testing: true };
+        });
+        render();
+        await runLiveTest();
+        var fastUnderground = rows.filter(function(r){ return r.ms != null && r.ms >= 25 && r.ms < 500; }).map(function(r){ return r.addr; });
+        if (fastUnderground.length) {
+          await fetch(ORIGIN + '/api/diag/net-sense?token=' + encodeURIComponent(TOKEN), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ apply: true, ips: fastUnderground.slice(0, 10) })
+          });
+          out.textContent = '🕵️ ' + fastUnderground.length + ' آی‌پی زیرزمینی با پینگ عالی روی خط شما کشف و در صدر ساب‌لینک ذخیره شد!';
+        }
+      }
+    } catch (e) {}
+    btn.disabled = false; btn.textContent = '🕵️ کشف آی‌پی زیرزمینی';
+  };
   function measureEdgeRtt(){
     return new Promise(function(res){
       var u = ORIGIN + '/healthz?x=' + Math.random().toString(36).slice(2);
