@@ -288,8 +288,11 @@ export async function ensureSchema(env) {
   SCHEMA_READY = true;
 }
 
-/* ─────────── بوت‌استرپ: تنظیمات پیش‌فرض ─────────── */
+/* ─────────── بوت‌استرپ: تنظیمات پیش‌فرض (کش در حافظه برای حذف کوئری‌های تکراری D1 روی هر اتصال) ─────────── */
 export async function bootstrap(env, url) {
+  if (SCHEMA_READY && SETTINGS_CACHE.data && Date.now() - SETTINGS_CACHE.at < 30000) {
+    return SETTINGS_CACHE.data;
+  }
   await ensureSchema(env);
   const st = await allSettings(env);
   const missing = {};
@@ -299,7 +302,11 @@ export async function bootstrap(env, url) {
   if (!st.admin_chat_id && env.ADMIN_CHAT_ID) missing.admin_chat_id = String(env.ADMIN_CHAT_ID);
   if (!st.ip_pool) missing.ip_pool = CF_GOOD_IPS.join('\n');
   if (!st.public_host) missing.public_host = url.host;
-  if (Object.keys(missing).length) await putSettingsBulk(env, missing);
-  await ensureRecoveryCode(env);
-  return settingsCached(env, 0);
+  if (!st.recovery_code) missing.recovery_code = randomToken(12);
+  if (Object.keys(missing).length) {
+    await putSettingsBulk(env, missing);
+    Object.assign(st, missing);
+  }
+  SETTINGS_CACHE = { at: Date.now(), data: st };
+  return st;
 }

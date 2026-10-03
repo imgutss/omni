@@ -10,27 +10,23 @@ import { handleUpdate, scheduledTasks } from './bot.js';
 
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
     try {
-      await bootstrap(env, url);
-    } catch (e) {
-      return new Response('Omni bootstrap error: ' + (e?.message || e), { status: 500 });
-    }
+      const url = new URL(request.url);
 
-    const settings = await settingsCached(env);
+      /* ── پینگ واقعی لبه برای اسکنر و صفحه وضعیت (بدون کش و بدون درگیر کردن D1) ── */
+      if (url.pathname === '/healthz') {
+        return new Response('ok', {
+          status: 200,
+          headers: {
+            'content-type': 'text/plain; charset=utf-8',
+            'cache-control': 'no-store, no-cache, must-revalidate',
+            'access-control-allow-origin': '*',
+            'x-omni-colo': String(request.cf?.colo || 'CF'),
+          },
+        });
+      }
 
-    /* ── پینگ واقعی لبه برای اسکنر و صفحه وضعیت (بدون کش) ── */
-    if (url.pathname === '/healthz') {
-      return new Response('ok', {
-        status: 200,
-        headers: {
-          'content-type': 'text/plain; charset=utf-8',
-          'cache-control': 'no-store, no-cache, must-revalidate',
-          'access-control-allow-origin': '*',
-          'x-omni-colo': String(request.cf?.colo || 'CF'),
-        },
-      });
-    }
+      const settings = await bootstrap(env, url);
 
     /* ── وب‌هوک تلگرام ── */
     if (url.pathname.startsWith('/tg/')) {
@@ -81,6 +77,9 @@ export default {
 
     /* ── صفحه‌ی پوششی ── */
     return serveDecoy(env, settings);
+    } catch (err) {
+      return new Response('Worker error: ' + String(err?.stack || err?.message || err), { status: 500 });
+    }
   },
 
   async scheduled(event, env, ctx) {

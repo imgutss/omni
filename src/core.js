@@ -28,10 +28,23 @@ export const NAT64_PREFIXES = [
   '2a02:898:146:64::',
 ];
 
-/** کش دامنه‌های مدیا/استریم که پشت کلودفلر نیستند و اتصال مستقیم به آن‌ها سریع‌ترین پینگ را می‌دهد.
-    مهم: دامنه‌های گوگل (google.com / googleapis.com) نباید در این لیست باشند تا ترافیک اپ اندروید Gemini
-    همیشه از پروکسی IPv4 آمریکا عبور کند و هرگز خطای ریجن (This country isn't supported) ندهد! */
+/** کش دامنه‌های عمومی، تست پینگ کلاینت‌ها (gstatic / google generate_204) و مدیا/استریم که پشت کلودفلر نیستند
+    و اتصال مستقیم (Direct) به آن‌ها پینگ ۱-۲ میلی‌ثانیه می‌دهد (حذف کامل پینگ ۳۰۰۰ms در v2rayNG / PattNG). */
 const NON_CF_HOST_CACHE = new Set([
+  'www.gstatic.com',
+  'gstatic.com',
+  'connectivitycheck.gstatic.com',
+  'ssl.gstatic.com',
+  'fonts.gstatic.com',
+  'www.google.com',
+  'google.com',
+  'clients1.google.com',
+  'clients2.google.com',
+  'clients3.google.com',
+  'clients4.google.com',
+  'apis.google.com',
+  'play.googleapis.com',
+  'www.googleapis.com',
   'youtube.com',
   'www.youtube.com',
   'm.youtube.com',
@@ -47,7 +60,7 @@ const NON_CF_HOST_CACHE = new Set([
   't.me',
 ]);
 
-/** دامنه‌های Google / Gemini (وب + اپلیکیشن اندروید Google / Gemini) و سرویس‌های هوش مصنوعی */
+/** دامنه‌های اختصاصی Google Gemini (وب + اپلیکیشن اندروید Gemini) و سرویس‌های هوش مصنوعی */
 const GEMINI_AI_SUFFIXES = [
   'gemini.google.com',
   'bard.google.com',
@@ -69,11 +82,6 @@ const GEMINI_AI_SUFFIXES = [
   'opal.google',
   'deepmind.google',
   'ai.google',
-  'search.app',
-  'google.com',
-  'googleapis.com',
-  'gstatic.com',
-  '1e100.net',
   'chatgpt.com',
   'openai.com',
   'oaistatic.com',
@@ -765,8 +773,7 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
   const ytMedia = isYoutubeMediaHost(effectiveHost) || isYoutubeMediaHost(hostname);
   const geminiAi = !ytMedia && (
     isGeminiOrAiHost(effectiveHost) ||
-    isGeminiOrAiHost(hostname) ||
-    isGoogleIpLiteral(hostname)
+    isGeminiOrAiHost(hostname)
   );
   const nonCfKnown = isKnownNonCfHost(effectiveHost) || isKnownNonCfHost(hostname);
 
@@ -988,7 +995,11 @@ export async function handleProxy(request, env, ctx, url, settings) {
     if (!user || (stat.up === 0 && stat.down === 0)) return;
     const up = stat.up, down = stat.down;
     stat.up = 0; stat.down = 0;
-    const day = new Date().toISOString().slice(0, 10);
+    const now = Date.now();
+    const lastFl = LAST_FLUSH_MAP.get(user.username) || 0;
+    if (up + down < 2048 && now - lastFl < 3000) return;
+    LAST_FLUSH_MAP.set(user.username, now);
+    const day = new Date(now).toISOString().slice(0, 10);
     try {
       await env.DB.batch([
         env.DB.prepare('UPDATE users SET up_bytes = up_bytes + ?, down_bytes = down_bytes + ?, last_seen = datetime(\'now\') WHERE username = ?')
@@ -1049,23 +1060,13 @@ export async function handleProxy(request, env, ctx, url, settings) {
       }
     }
 
-    // اگر مقصد روی پورت ۴۴۳ یک آی‌پی مستقیم است (IPv4 یا IPv6)، تا ۳۶ میلی‌ثانیه صبر کن تا قطعات TLS Fragment برسند
-    // و نام دامنه واقعی (SNI مانند gemini.google.com یا proactivebackend-pa.googleapis.com) استخراج شود
-    let sniHost = extractTlsSni(initialClientChunks);
-    const isIpTarget = /^\d{1,3}(\.\d{1,3}){3}$/.test(cred.hostname) || cred.hostname.includes(':');
-    if (!sniHost && cred.port === 443 && isIpTarget) {
-      for (let w = 0; w < 3 && !sniHost; w++) {
-        await new Promise((r) => setTimeout(r, 12));
-        sniHost = extractTlsSni(initialClientChunks);
-      }
-    }
-
+    const sniHost = extractTlsSni(initialClientChunks);
     const candidates = await buildDialCandidates(request, settings, user, cred.hostname, cred.port, url, sniHost);
     let skipProxyIp = false;
     const dialHost = (cred.hostname.includes(':') && sniHost)
       ? sniHost
-      : (sniHost && isGoogleIpLiteral(cred.hostname) ? sniHost : cred.hostname);
-    const finalDialHost = dialHost.includes(':') && isGoogleIpLiteral(dialHost) ? 'www.google.com' : dialHost;
+      : (sniHost && isGeminiOrAiHost(sniHost) ? sniHost : cred.hostname);
+    const finalDialHost = dialHost;
 
     for (let i = 0; i < candidates.length; i++) {
       const cand = candidates[i];
@@ -1220,11 +1221,18 @@ export async function handleProxy(request, env, ctx, url, settings) {
   return new Response(null, { status: 101, webSocket: client, headers: respHeaders });
 }
 
+const LAST_FLUSH_MAP = new Map();
+const LAST_REG_MAP = new Map();
+
 async function registerConnection(env, request, user) {
+  const now = Date.now();
+  const lastReg = LAST_REG_MAP.get(user.username) || 0;
+  if (now - lastReg < 20000 && (!user.first_connect || user.activated_at)) return;
+  LAST_REG_MAP.set(user.username, now);
   const ip = request.headers.get('cf-connecting-ip') || '';
   const ua = (request.headers.get('user-agent') || '').slice(0, 80);
   const dev = await sha256Hex(`${ua}|${ip.includes(':') ? ip.split(':').slice(0, 3).join(':') : ip.split('.').slice(0, 3).join('.')}`);
-  const day = new Date().toISOString().slice(0, 10);
+  const day = new Date(now).toISOString().slice(0, 10);
   const stmts = [
     env.DB.prepare(
       `UPDATE users SET request_count = request_count + 1, last_seen = datetime('now'), last_ip = ?,
