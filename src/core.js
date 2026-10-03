@@ -9,16 +9,19 @@
      سقف دستگاه، بلاک تبلیغات/NSFW/دامنه‌های دلخواه، صفحه‌ی پوششی (decoy)
    ══════════════════════════════════════════════════════════════════════════ */
 import { connect } from 'cloudflare:sockets';
+import { findCountry } from './countries.js';
 
 const dec = new TextDecoder();
 const enc = new TextEncoder();
 
 /* ─────────── استخر ProxyIP و پیشوندهای NAT64 (الگوی BPB / Zeus / Omni) ─────────── */
 export const DEFAULT_PROXY_IPS = [
+  '103.228.170.234:443',
+  '103.137.248.227:443',
+  '103.13.208.242:443',
+  '43.169.18.179:443',
   'bpb.yousef.isegaro.com:443',
-  'tr.diam4.ggff.net:443',
   'di.nscl.ir:443',
-  'proxyip.cmliussss.net:443',
 ];
 
 export const NAT64_PREFIXES = [
@@ -412,8 +415,8 @@ async function handleUdpDns(ws, cred, dnsUpstream, stat) {
   return processDnsChunk;
 }
 
-/* ─────────── ساخت لیست کاندیدهای ProxyIP + NAT64 برای فالبک ─────────── */
-function buildDialCandidates(request, settings, user, hostname, port) {
+/* ─────────── ساخت لیست کاندیدهای ProxyIP + NAT64 برای فالبک و خروجی کشور ─────────── */
+function buildDialCandidates(request, settings, user, hostname, port, reqUrl) {
   const candidates = [];
   const seen = new Set();
   const add = (h, p, label) => {
@@ -427,34 +430,51 @@ function buildDialCandidates(request, settings, user, hostname, port) {
   };
 
   const cfTarget = isCloudflareTarget(hostname);
-  // ۱) اگر مقصد آی‌پی خود کلودفلر نیست، اول اتصال مستقیم را امتحان کن
+  const reqProxy = reqUrl?.searchParams?.get('proxyip') || '';
+  const reqCc = (reqUrl?.searchParams?.get('cc') || settings?.selected_country || '').trim().toUpperCase();
+  const selCountry = reqCc ? findCountry(reqCc) : null;
+
+  // جمع‌آوری سرورهای خروجی کشور انتخابی و پروکسی‌های اختصاصی پنل/کاربر
+  const countryProxies = [
+    ...(reqProxy ? reqProxy.split(/[\s,]+/) : []),
+    ...(selCountry?.proxies || []),
+    ...safeJsonArray(user?.proxies),
+    ...safeJsonArray(settings?.proxy_ips),
+  ].filter(Boolean);
+
+  // ۱) اگر کشور خاصی انتخاب شده (یا پروکسی اختصاصی داریم) و پورت 443 است (یا مقصد کلودفلر است)،
+  // اول از سرور خروجی همان کشور عبور بده تا آی‌پی و کشور خروجی واقعی کاربر تغییر کند!
+  if (countryProxies.length && (port === 443 || cfTarget)) {
+    for (const raw of countryProxies) {
+      const parsed = parseProxyEntry(raw, 443);
+      if (parsed) add(parsed.hostname, parsed.port, 'country-proxy');
+    }
+  }
+
+  // ۲) اگر مقصد آی‌پی خود کلودفلر نیست، اتصال مستقیم را هم به عنوان فالبک فوری بگذار
   if (!cfTarget) {
     add(hostname, port, 'direct');
   }
 
-  // ۲) پروکسی‌های اختصاصی کاربر و پنل
-  for (const raw of [...safeJsonArray(user?.proxies), ...safeJsonArray(settings?.proxy_ips)]) {
+  // ۳) اگر پورت غیر 443 بود، پروکسی‌های اختصاصی را بعد از اتصال مستقیم بگذار
+  for (const raw of countryProxies) {
     const parsed = parseProxyEntry(raw, port);
     if (parsed) add(parsed.hostname, parsed.port, 'user-proxy');
   }
 
-  // ۳) NAT64 (اگر مقصد IPv4 است — بسیار سریع و بدون نیاز به سرور واسط)
+  // ۴) NAT64 (اگر مقصد IPv4 است — بسیار سریع و بدون نیاز به سرور واسط)
   for (const pref of NAT64_PREFIXES) {
     const v6 = ipv4ToNat64(hostname, pref);
     if (v6) add(v6, port, 'nat64');
   }
 
-  // ۴) استخر جهانی ProxyIP روی پورت 443
+  // ۵) استخر جهانی ProxyIP روی پورت 443
   for (const raw of DEFAULT_PROXY_IPS) {
     const parsed = parseProxyEntry(raw, 443);
     if (parsed) add(parsed.hostname, parsed.port, 'pool-proxy');
   }
-  const colo = String(request?.cf?.colo || '').toLowerCase();
-  if (colo && /^[a-z]{3}$/.test(colo)) {
-    add(`${colo}.proxyip.cmliussss.net`, 443, 'colo-proxy');
-  }
 
-  // ۵) اگر مقصد کلودفلر بود ولی هیچ فالبکی جواب نداد، در آخر اتصال مستقیم را هم بگذار
+  // ۶) اگر مقصد کلودفلر بود ولی هیچ فالبکی جواب نداد، در آخر اتصال مستقیم را هم بگذار
   if (cfTarget) {
     add(hostname, port, 'direct-last');
   }
@@ -560,7 +580,7 @@ export async function handleProxy(request, env, ctx, url, settings) {
     } catch { /* ignore */ }
   };
 
-  const pumpDownstream = async (sock, cred) => {
+  const pumpDownstream = async (sock, cred, cand) => {
     const reader = sock.readable.getReader();
     let gotBytes = false;
     try {
@@ -568,6 +588,12 @@ export async function handleProxy(request, env, ctx, url, settings) {
         const { value, done } = await reader.read();
         if (done) break;
         if (value && value.byteLength) {
+          // اگر کاندید فعلی ProxyIP است و کلاینت TLS ClientHello (0x16) فرستاده
+          // ولی سرور ProxyIP با TLS Alert (0x15 = عدم تطابق دامنه) پاسخ داد،
+          // این Alert را دور بریز و سراغ اتصال مستقیم یا ProxyIP بعدی برو!
+          if (!gotBytes && cand?.label?.includes('proxy') && cred.port === 443 && initialClientChunks[0]?.[0] === 0x16 && value[0] === 0x15) {
+            return false;
+          }
           gotBytes = true;
           hasIncomingData = true;
           stat.down += value.byteLength;
@@ -598,7 +624,7 @@ export async function handleProxy(request, env, ctx, url, settings) {
       }
     }
 
-    const candidates = buildDialCandidates(request, settings, user, cred.hostname, cred.port);
+    const candidates = buildDialCandidates(request, settings, user, cred.hostname, cred.port, url);
     for (let i = 0; i < candidates.length; i++) {
       const cand = candidates[i];
       let sock = null;
@@ -622,8 +648,8 @@ export async function handleProxy(request, env, ctx, url, settings) {
           if (chunk?.byteLength) await remoteWriter.write(chunk);
         }
 
-        // خواندن از سوکت مقصد؛ اگر بلافاصله با ۰ بایت بسته شد، سراغ کاندید بعدی (ProxyIP / NAT64) برو
-        const gotBytes = await pumpDownstream(sock, cred);
+        // خواندن از سوکت مقصد؛ اگر بلافاصله با ۰ بایت یا TLS Alert بسته شد، سراغ کاندید بعدی برو
+        const gotBytes = await pumpDownstream(sock, cred, cand);
         if (gotBytes) {
           try { ws.close(1000, 'normal'); } catch { /* ignore */ }
           return;

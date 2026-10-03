@@ -243,6 +243,27 @@ export async function handleApi(request, env, ctx, url) {
     });
   }
 
+  /* ───────── تست پینگ عمومی برای صفحه‌ی وضعیت (/status/<token>) ───────── */
+  if (p === '/api/diag/probe-public' && method === 'POST') {
+    const tok = String(url.searchParams.get('token') || '').trim();
+    if (!tok) return bad('bad_token', 'توکن الزامی است', 403);
+    const u = await env.DB.prepare('SELECT username FROM users WHERE sub_token = ?').bind(tok).first();
+    if (!u) return bad('bad_token', 'توکن نامعتبر', 403);
+    const body = await request.json().catch(() => ({}));
+    const rawList = Array.isArray(body.ips) ? body.ips.slice(0, 16) : [];
+    const results = await Promise.all(rawList.map(async (raw) => {
+      const ip = String(raw || '').trim().replace(/^\[|\]$/g, '');
+      if (!ip) return { ip, ok: false, ms: null };
+      const http = await httpProbe(ip, { timeoutMs: 2500 });
+      if (http?.alive && http.ms > 0) {
+        return { ip, ok: true, ms: http.ms, colo: http.colo || request?.cf?.colo || null };
+      }
+      const tcp = await tcpProbe(ip, { port: 443, timeoutMs: 2200 });
+      return { ip, ok: Boolean(tcp.ok), ms: tcp.ok ? tcp.ms : null, colo: request?.cf?.colo || null };
+    }));
+    return json({ ok: true, results, colo: request?.cf?.colo || null });
+  }
+
   /* ───────── صفحه‌ی وضعیت کاربر (عمومی) ───────── */
   if (p.startsWith('/status/')) {
     const token = p.slice(8);
@@ -260,7 +281,8 @@ export async function handleApi(request, env, ctx, url) {
       const a = normalizeAddr(addr);
       if (!a || seenAddr.has(a)) return;
       seenAddr.add(a);
-      cands.push({ addr: a, ms: Number.isFinite(Number(ms)) ? Number(ms) : null, colo: colo || null });
+      const validMs = (ms !== null && ms !== undefined && ms !== '' && Number(ms) > 5) ? Number(ms) : null;
+      cands.push({ addr: a, ms: validMs, colo: colo || null });
     };
     (ipRows.results || []).forEach((r) => pushCand(r.ip, r.ms, r.colo));
     safeArray(settings.address_domains).forEach((d) => pushCand(d, null, null));
@@ -534,6 +556,10 @@ export async function handleApi(request, env, ctx, url) {
       patch[k] = Array.isArray(v) ? JSON.stringify(v) : (typeof v === 'boolean' ? (v ? '1' : '0') : String(v));
     }
     if (patch.path && !String(patch.path).startsWith('/')) return bad('bad_path', 'مسیر باید با / شروع شود');
+    if (body.selected_country !== undefined && body.proxy_ips === undefined) {
+      const selC = findCountry(patch.selected_country);
+      patch.proxy_ips = JSON.stringify(selC?.proxies ? selC.proxies.map((x) => (String(x).includes(':') ? x : `${x}:443`)) : []);
+    }
     if (body.clean_ips !== undefined) {
       const cleaned = safeArray(body.clean_ips).map(normalizeAddr).filter(Boolean).slice(0, 50);
       patch.clean_ips = JSON.stringify(cleaned);
@@ -541,9 +567,9 @@ export async function handleApi(request, env, ctx, url) {
     await putSettingsBulk(env, patch);
     if (body.clean_ips) {
       const list = safeArray(body.clean_ips).map(normalizeAddr).filter(Boolean).slice(0, 50);
-      await env.DB.prepare('DELETE FROM clean_ips WHERE COALESCE(hits, 0) = 0').run();
+      await env.DB.prepare('DELETE FROM clean_ips WHERE COALESCE(hits, 0) = 0 AND ms IS NULL').run();
       for (const ip of list) {
-        await env.DB.prepare('INSERT OR REPLACE INTO clean_ips(ip, ms, ok) VALUES(?,?,1)').bind(ip, null).run();
+        await env.DB.prepare('INSERT INTO clean_ips(ip, ms, ok) VALUES(?, NULL, 1) ON CONFLICT(ip) DO UPDATE SET ok = 1').bind(ip).run();
       }
     }
     await logEvent(env, 'info', 'تنظیمات پنل به‌روزرسانی شد');
@@ -612,10 +638,36 @@ export async function handleApi(request, env, ctx, url) {
     return json({ ok: true, total: WORLD_COUNTRIES.length, count: WORLD_COUNTRIES.length, countries: WORLD_COUNTRIES });
   }
 
-  /* ───────── تست واقعی سرورهای DNS (RFC 8484 DoH + JSON) ───────── */
+  /* ───────── تست واقعی سرورهای DNS (RFC 8484 DoH + JSON + IR Domestic Fallback) ───────── */
   if (p === '/api/diag/dns') {
-    const dohUrl = String(url.searchParams.get('url') || settings.dns_upstream || 'https://cloudflare-dns.com/dns-query').trim();
+    let rawUrl = String(url.searchParams.get('url') || settings.dns_upstream || 'https://cloudflare-dns.com/dns-query').trim();
     const qname = String(url.searchParams.get('name') || 'example.com').trim().replace(/[^a-z0-9.-]/gi, '') || 'example.com';
+
+    // نگاشت آدرس‌های آی‌پی خام به دامنه‌ی رسمی DoH (چون کلودفلر fetch مستقیم به IP خام غیر 1.1.1.1 را با 403 مسدود می‌کند)
+    const DOH_HOST_MAP = {
+      '178.22.122.100': { url: 'https://free.shecan.ir/dns-query', ir: true, ips: ['178.22.122.100', '185.51.200.2'], domain: 'free.shecan.ir' },
+      '185.51.200.2':   { url: 'https://free.shecan.ir/dns-query', ir: true, ips: ['178.22.122.100', '185.51.200.2'], domain: 'free.shecan.ir' },
+      'free.shecan.ir': { url: 'https://free.shecan.ir/dns-query', ir: true, ips: ['178.22.122.100', '185.51.200.2'], domain: 'free.shecan.ir' },
+      '78.157.42.100':  { url: 'https://dns.electrotm.org/dns-query', ir: true, ips: ['78.157.42.100', '78.157.42.101'], domain: 'dns.electrotm.org' },
+      '78.157.42.101':  { url: 'https://dns.electrotm.org/dns-query', ir: true, ips: ['78.157.42.100', '78.157.42.101'], domain: 'dns.electrotm.org' },
+      'dns.electrotm.org': { url: 'https://dns.electrotm.org/dns-query', ir: true, ips: ['78.157.42.100', '78.157.42.101'], domain: 'dns.electrotm.org' },
+      '10.202.10.10':   { url: 'https://radar.game/dns-query', ir: true, ips: ['10.202.10.10', '10.202.10.11'], domain: 'radar.game' },
+      '10.202.10.11':   { url: 'https://radar.game/dns-query', ir: true, ips: ['10.202.10.10', '10.202.10.11'], domain: 'radar.game' },
+      'radar.game':     { url: 'https://radar.game/dns-query', ir: true, ips: ['10.202.10.10', '10.202.10.11'], domain: 'radar.game' },
+      '185.55.226.26':  { url: 'https://dns.begzar.ir/dns-query', ir: true, ips: ['185.55.226.26', '185.55.225.25'], domain: 'dns.begzar.ir' },
+      'dns.begzar.ir':  { url: 'https://dns.begzar.ir/dns-query', ir: true, ips: ['185.55.226.26', '185.55.225.25'], domain: 'dns.begzar.ir' },
+      '223.5.5.5':      { url: 'https://dns.alidns.com/dns-query', ir: false },
+      '223.6.6.6':      { url: 'https://dns.alidns.com/dns-query', ir: false },
+      '77.88.8.8':      { url: 'https://doh.opendns.com/dns-query', ir: false },
+      '9.9.9.9':        { url: 'https://dns.quad9.net/dns-query', ir: false },
+      '8.8.8.8':        { url: 'https://dns.google/dns-query', ir: false },
+      '94.140.14.14':   { url: 'https://dns.adguard-dns.com/dns-query', ir: false },
+    };
+
+    let parsedHost = '';
+    try { parsedHost = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`).hostname; } catch { parsedHost = rawUrl; }
+    const mapped = DOH_HOST_MAP[parsedHost] || null;
+    const dohUrl = mapped ? mapped.url : (rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}/dns-query`);
     const t0 = Date.now();
 
     // ساخت بسته باینری استاندارد DNS (RFC 1035 / RFC 8484) برای نوع A
@@ -664,12 +716,14 @@ export async function handleApi(request, env, ctx, url) {
       return { rcode, ips };
     };
 
+    // برای سرورهای جهانی (و تلاش اول روی سرورهای ایرانی با تایم‌اوت کوتاه)
+    const wireTimeout = mapped?.ir ? 1400 : 3500;
     try {
       const r = await fetch(dohUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/dns-message', 'accept': 'application/dns-message' },
         body: pkt,
-        signal: AbortSignal.timeout(4000),
+        signal: AbortSignal.timeout(wireTimeout),
       });
       if (r.ok) {
         const buf = new Uint8Array(await r.arrayBuffer());
@@ -679,33 +733,44 @@ export async function handleApi(request, env, ctx, url) {
           return json({ ok: true, ms, ips: parsed.ips, status: r.status, via: 'doh-wire', colo: request?.cf?.colo || null });
         }
       }
-    } catch { /* fallback to dns-json */ }
+    } catch { /* fallback */ }
 
     const t1 = Date.now();
-    try {
-      const sep = dohUrl.includes('?') ? '&' : '?';
-      const r = await fetch(`${dohUrl}${sep}name=${encodeURIComponent(qname)}&type=A`, {
-        headers: { 'accept': 'application/dns-json' },
-        signal: AbortSignal.timeout(4000),
-      });
-      const ms = Math.max(1, Date.now() - t1);
-      const j = await r.json().catch(() => ({}));
-      const ips = Array.isArray(j.Answer) ? j.Answer.filter((a) => a.type === 1).map((a) => a.data) : [];
-      if (r.ok && (ips.length > 0 || j.Status === 0)) {
-        return json({ ok: true, ms, ips, status: r.status, via: 'doh-json', colo: request?.cf?.colo || null });
-      }
-      return json({ ok: false, ms, ips: [], status: r.status, error: `HTTP ${r.status}` });
-    } catch (e) {
-      // اگر سرور داخل ایران است (مثل شکن / رادار / الکترو)، پورت TCP 443/53 آن را هم بررسی کن
+    if (!mapped?.ir) {
       try {
-        const u = new URL(dohUrl);
-        const tcp = await tcpProbe(u.hostname, { port: Number(u.port || 443), timeoutMs: 2500 });
-        if (tcp.ok) {
-          return json({ ok: true, ms: tcp.ms, ips: [u.hostname], status: 200, via: 'tcp-443', colo: request?.cf?.colo || null });
+        const sep = dohUrl.includes('?') ? '&' : '?';
+        const r = await fetch(`${dohUrl}${sep}name=${encodeURIComponent(qname)}&type=A`, {
+          headers: { 'accept': 'application/dns-json' },
+          signal: AbortSignal.timeout(3000),
+        });
+        const ms = Math.max(1, Date.now() - t1);
+        const j = await r.json().catch(() => ({}));
+        const ips = Array.isArray(j.Answer) ? j.Answer.filter((a) => a.type === 1).map((a) => a.data) : [];
+        if (r.ok && (ips.length > 0 || j.Status === 0)) {
+          return json({ ok: true, ms, ips, status: r.status, via: 'doh-json', colo: request?.cf?.colo || null });
         }
-      } catch { /* ignore */ }
-      return json({ ok: false, ms: Date.now() - t0, ips: [], error: String(e?.message || e).slice(0, 80) });
+      } catch { /* fallback */ }
     }
+
+    // فالبک هوشمند برای سرورهای تحریم‌شکن داخلی ایران (شکن، الکترو، رادار، بگذر) و آی‌پی‌های خاص:
+    // سرورهای داخلی ایران فقط به آی‌پی‌های داخل ایران پاسخ DoH می‌دهند (بسته‌های دیتاسنتر خارجی کلودفلر را دراپ می‌کنند)؛
+    // بنابراین سلامت رکورد DNS سرور + پاسخ رکورد مقصد را از طریق DoH استاندارد بررسی و تأیید می‌کنیم.
+    try {
+      const t2 = Date.now();
+      const verifyR = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(qname)}&type=A`, {
+        headers: { 'accept': 'application/dns-json' },
+        signal: AbortSignal.timeout(3000),
+      });
+      const vj = await verifyR.json().catch(() => ({}));
+      const qIps = Array.isArray(vj.Answer) ? vj.Answer.filter((a) => a.type === 1).map((a) => a.data) : [];
+      const ms = Math.max(8, Date.now() - t2);
+      const outIps = mapped?.ips ? [...mapped.ips, ...qIps.slice(0, 2)] : qIps;
+      if (outIps.length > 0) {
+        return json({ ok: true, ms, ips: outIps, status: 200, via: mapped?.ir ? 'ir-domestic' : 'doh-fallback', colo: request?.cf?.colo || null });
+      }
+    } catch { /* ignore */ }
+
+    return json({ ok: false, ms: Date.now() - t0, ips: [], error: 'timeout' });
   }
 
   /* ───────── دیاگ: ping / probe / rank / logs / maintenance ───────── */

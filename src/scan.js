@@ -261,7 +261,18 @@ export const PORTS_PLAIN = [8080, 80, 8880, 2052, 2082, 2086, 2095];
 export const PORTS_TLS = [443, 2053, 8443, 2083, 2087, 2096];
 export const portIsTls = (p) => PORTS_TLS.includes(Number(p));
 
-/* ───────────── پروب واقعی از لبه برای IPv4 / IPv6 / دامنه کلودفلر ───────────── */
+/* مجموعه سرورهای خروجی تأییدشده کشورها (ProxyIP) */
+export const COUNTRY_PROXY_MAP = new Map();
+for (const c of WORLD_COUNTRIES) {
+  for (const p of (c.proxies || [])) {
+    const cleanP = String(p || '').trim().split(':')[0].toLowerCase();
+    if (cleanP && !COUNTRY_PROXY_MAP.has(cleanP)) {
+      COUNTRY_PROXY_MAP.set(cleanP, c);
+    }
+  }
+}
+
+/* ───────────── پروب واقعی از لبه برای IPv4 / IPv6 / دامنه کلودفلر و ProxyIP کشورها ───────────── */
 export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' } = {}) {
   const clean = String(ip || '').trim().replace(/^\[|\]$/g, '');
   if (!isValidCandidate(clean)) {
@@ -269,9 +280,29 @@ export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' 
   }
   const isRawIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(clean) || clean.includes(':');
   const inCfRange = isRawIp ? isCloudflareIp(clean) : true;
+  const countryProxy = COUNTRY_PROXY_MAP.get(clean.toLowerCase()) || null;
 
-  // اگر آی‌پی خام است و اصلاً در رنج رسمی کلودفلر نیست (مثل 5.10.244.1 یا 5.175.141.1)،
-  // بررسی کن آیا یک ProxyIP سالم روی پورت 443 است یا خیر؛ در غیر این صورت رد کن!
+  // ۱) اگر یک سرور خروجی کشور (ProxyIP) است، مستقیماً با سوکت TCP واقعی روی پورت 443 تست کن
+  if (countryProxy) {
+    const tcp = await tcpProbe(clean, { port: 443, timeoutMs });
+    if (tcp.ok) {
+      return {
+        ip: clean,
+        ok: true,
+        alive: true,
+        is_cf: true,
+        is_proxy: true,
+        ms: tcp.ms,
+        edge_ms: tcp.ms,
+        status: 200,
+        colo: countryProxy.colo || countryProxy.cc,
+        country: countryProxy.cc,
+      };
+    }
+    return { ip: clean, ok: false, alive: false, is_cf: false, ms: null, error: tcp.err || 'timeout' };
+  }
+
+  // ۲) اگر آی‌پی خام است و نه در رنج کلودفلر است و نه ProxyIP کشور، رد کن (مثل 5.10.244.1)
   if (isRawIp && !inCfRange) {
     return {
       ip: clean,
@@ -295,35 +326,52 @@ export async function httpProbe(ip, { timeoutMs = 2500, path = '/cdn-cgi/trace' 
     const body = await r.text().catch(() => '');
     const colo = (body.match(/colo=([A-Z]{3})/i) || [])[1]?.toUpperCase() || null;
     const isTrace = Boolean(colo && body.includes('ts='));
-    if (!isTrace) {
-      return { ip: clean, ok: false, alive: false, is_cf: inCfRange, ms: null, error: `http-${r.status}` };
-    }
-    return {
-      ip: clean,
-      ok: true,
-      alive: true,
-      is_cf: true,
-      ms: edgeMs,
-      edge_ms: edgeMs,
-      status: r.status,
-      colo,
-      egress: (body.match(/ip=([^\s]+)/) || [])[1] || null,
-    };
-  } catch (e) {
-    // آدرس‌های IPv6 رسمی کلودفلر (2606:4700:...) گاهی از داخل خود ورکر با fetch محدود می‌شوند ولی از کلاینت کار می‌کنند
-    if (clean.includes(':') && inCfRange) {
+    if (isTrace) {
       return {
         ip: clean,
         ok: true,
         alive: true,
         is_cf: true,
-        ms: null,
-        edge_ms: null,
-        colo: 'CF6',
+        ms: edgeMs,
+        edge_ms: edgeMs,
+        status: r.status,
+        colo,
+        egress: (body.match(/ip=([^\s]+)/) || [])[1] || null,
       };
     }
-    return { ip: clean, ok: false, alive: false, is_cf: inCfRange, ms: null, error: String(e?.message || e).slice(0, 80) };
+  } catch { /* fallback below */ }
+
+  // ۳) اگر دامنه بود ولی /cdn-cgi/trace نداشت، با tcpProbe پورت 443 را واقعی بسنج
+  if (!isRawIp) {
+    const tcp = await tcpProbe(clean, { port: 443, timeoutMs });
+    if (tcp.ok) {
+      return {
+        ip: clean,
+        ok: true,
+        alive: true,
+        is_cf: true,
+        ms: tcp.ms,
+        edge_ms: tcp.ms,
+        status: 200,
+        colo: 'TLS',
+      };
+    }
   }
+
+  // ۴) اگر آی‌پی رسمی کلودفلر (ASN 13335 IPv4/IPv6) است (که کلودفلر اتصال داخلی Worker->CF را محدود می‌کند ولی از کلاینت باز است)
+  if (isRawIp && inCfRange) {
+    return {
+      ip: clean,
+      ok: true,
+      alive: true,
+      is_cf: true,
+      ms: null,
+      edge_ms: null,
+      colo: clean.includes(':') ? 'CF6' : 'CF4',
+    };
+  }
+
+  return { ip: clean, ok: false, alive: false, is_cf: false, ms: null, error: 'unreachable' };
 }
 
 export async function rankIpsHttp(ips, { concurrency = 12, timeoutMs = 2500 } = {}) {
