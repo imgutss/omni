@@ -79,10 +79,15 @@ const DB_NAME = 'omni-db';
 log(`دیتابیس D1 «${DB_NAME}»…`);
 let databaseId = '';
 {
+  const existingToml = readFileSync(WRANGLER, 'utf8');
+  const existingMatch = existingToml.match(/database_id\s*=\s*"([^"]+)"/);
   const list = await cf(`/accounts/${accountId}/d1/database`);
   const found = (list.json?.result || []).find((d) => d.name === DB_NAME);
   if (found) { databaseId = found.uuid; ok('دیتابیس موجود است: ' + databaseId); }
-  else {
+  else if (existingMatch && existingMatch[1]) {
+    databaseId = existingMatch[1];
+    ok('استفاده از database_id موجود در wrangler.toml: ' + databaseId);
+  } else {
     const c = await cf(`/accounts/${accountId}/d1/database`, { method: 'POST', body: JSON.stringify({ name: DB_NAME, primary_location_hint: 'weur' }) });
     databaseId = c.json?.result?.uuid || '';
     if (!databaseId) { console.error('✖ ساخت دیتابیس ناموفق:', JSON.stringify(c.json)); process.exit(1); }

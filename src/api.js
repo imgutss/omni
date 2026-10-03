@@ -98,6 +98,7 @@ export function normalizeAddr(v) {
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
 
 const TOKEN_USER_ALIASES = {
+  'sBERuL-cyzWCUijFyv3oo1AT': 'Alim',
   'fFgkSjJTbbkl3BduYftMlk_3': 'Alim',
   'DiY3eKMXIrXeQdbUNogIfuTv': 'Alim',
   'ux7V6g3toplQjwURLo8rhxM8': 'Alim',
