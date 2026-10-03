@@ -19,6 +19,19 @@ export default {
 
     const settings = await settingsCached(env);
 
+    /* ── پینگ واقعی لبه برای اسکنر و صفحه وضعیت (بدون کش) ── */
+    if (url.pathname === '/healthz') {
+      return new Response('ok', {
+        status: 200,
+        headers: {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'no-store, no-cache, must-revalidate',
+          'access-control-allow-origin': '*',
+          'x-omni-colo': String(request.cf?.colo || 'CF'),
+        },
+      });
+    }
+
     /* ── وب‌هوک تلگرام ── */
     if (url.pathname.startsWith('/tg/')) {
       const secret = env.BOT_WEBHOOK_SECRET || 'omni-hook';

@@ -195,7 +195,22 @@ console.log('\n[6] دیاگ شبکه');
   const deUser = await req('GET', '/api/users/ali');
   const deUris = deUser.body?.configs?.uris || [];
   ok('انتخاب کشور (آلمان DE) آی‌پی و پرچم کشور را در کانفیگ اعمال می‌کند', deUris.some((u) => decodeURIComponent(u).includes('🇩🇪') && decodeURIComponent(u).includes('آلمان')), decodeURIComponent(deUris[0] || '').slice(0, 120));
+  ok('فرگمنت استاندارد Xray (fragment=10-20,10-20,tlshello) و تطابق عنوان با آدرس', deUris.some((u) => u.includes('fragment=10-20%2C10-20%2Ctlshello') && decodeURIComponent(u.split('#')[1] || '').includes(u.split('@')[1]?.split('?')[0] || '')), decodeURIComponent(deUris[0] || '').slice(0, 140));
   await req('PUT', '/api/settings', { body: { selected_country: '' } });
+
+  const customScan = await req('POST', '/api/diag/rank-ips', { body: { ips: ['213.241.198.123', '172.67.181.32'], timeout: 1200 } });
+  const customItems = customScan.body?.results || [];
+  ok('اسکن آی‌پی دلخواه هیچ نام یا پرچم کشور اشتباهی روی آی‌پی نمی‌گذارد', customItems.length >= 2 && customItems.every((r) => r.country === null && r.country_fa === null && r.flag === null), JSON.stringify(customItems.slice(0, 2)));
+
+  const scanAllC = await req('POST', '/api/diag/scan-countries', { body: { ccs: ['DE', 'NL', 'FR', 'US'], timeout: 1500 } });
+  ok('اسکن یکجای کشورها (/api/diag/scan-countries)', scanAllC.body?.ok === true && Array.isArray(scanAllC.body.results) && scanAllC.body.results.length === 4, JSON.stringify(scanAllC.body?.results?.map((r) => ({ cc: r.cc, alive: r.alive, ms: r.edge_ms }))));
+
+  const rotRes = await req('POST', '/api/diag/rotate-ips', { body: { apply: true } });
+  ok('چرخش فوری آی‌پی‌های تمیز از مخزن زئوس (/api/diag/rotate-ips)', rotRes.body?.ok === true && Array.isArray(rotRes.body.clean_ips) && rotRes.body.clean_ips.length >= 4, JSON.stringify(rotRes.body?.clean_ips));
+
+  const hz = await req('GET', '/healthz', { raw: true });
+  const hzTxt = await hz.text();
+  ok('/healthz بدون کش کار می‌کند', hz.status === 200 && hzTxt === 'ok' && (hz.headers.get('cache-control') || '').includes('no-store'), hzTxt);
 }
 
 console.log('\n[7] نشست‌ها / رمز / بازیابی');

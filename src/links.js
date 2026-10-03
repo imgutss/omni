@@ -1,27 +1,43 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Omni — src/links.js
    ساخت لینک‌های VLESS/Trojan، ساب‌لینک (base64/clash/sing-box) و صفحه‌ی وضعیت
-   بهینه‌سازی‌شده بر اساس الگوی ترکیبی Omni Control Panel + BPB + Zeus + Nahan
+   - پشتیبانی از فرمت استاندارد فرگمنت Xray/v2rayNG/MahsaNG (fragment=10-20,10-20,tlshello)
+   - دسته‌بندی هوشمند کانفیگ‌ها برای هر ۳ اپراتور (همراه اول، ایرانسل، مخابرات)
+   - پشتیبانی از آی‌پی چرخشی زئوس (BYOIP + دامنه‌های .ir) + کانفیگ مستقیم و تک‌لوکیشن
    ══════════════════════════════════════════════════════════════════════════ */
 
-import { IPV6_SEEDS, CF_DOMAINS, CF_GOOD_IPS, isValidCandidate, findCountry } from './scan.js';
+import {
+  IPV6_SEEDS,
+  CF_DOMAINS,
+  CF_GOOD_IPS,
+  ZEUS_BYOIP_V4,
+  ZEUS_IR_DOMAINS,
+  VERIFIED_ZEUS_POOL,
+  COUNTRY_PROXY_MAP,
+  isValidCandidate,
+  findCountry,
+} from './scan.js';
 
 const enc = encodeURIComponent;
 
-/* پریست‌های فرگمنت (فقط در صورت انتخاب صریح کاربر/ادمین اعمال می‌شود؛ پیش‌فرض: بدون فرگمنت) */
+/* پریست‌های واقعی فرگمنت (مطابق استاندارد Xray-core / v2rayNG / MahsaNG / ZEUS v2.2.5) */
 export const FRAGMENT_PRESETS = [
-  { id: 'none', label: '— بدون فرگمنت (پیش‌فرض — کم‌ترین پینگ)', size: '', interval: '', packets: '' },
-  { id: 'mci', label: 'همراه اول (MCI)', size: '100-200', interval: '1-1', packets: 'tlshello' },
-  { id: 'irancell', label: 'ایرانسل', size: '1-3', interval: '1-1', packets: 'tlshello' },
-  { id: 'rightel', label: 'رایتل', size: '100-200', interval: '5-10', packets: 'tlshello' },
-  { id: 'tci', label: 'مخابرات (TCI)', size: '1-1', interval: '1-1', packets: 'tlshello,sniext' },
-  { id: 'gaming', label: 'گیمینگ (بدون فرگمنت — کم‌ترین پینگ)', size: '', interval: '', packets: '' },
-  { id: 'aggressive', label: 'تهاجمی', size: '1-100', interval: '1-5', packets: 'tlshello,sniext,clienthello' },
+  { id: 'none', label: '— بدون فرگمنت سراسری (کانفیگ‌های ضد فیلتر جداگانه ساخته می‌شوند)', size: '', interval: '', packets: '' },
+  { id: 'irancell', label: '💛 ویژه ایرانسل و مخابرات (پیشنهادی زئوس: 10-20 / 10-20 / tlshello)', size: '10-20', interval: '10-20', packets: 'tlshello' },
+  { id: 'tci', label: '☎️ ویژه مخابرات و ADSL (فرگمنت ریز: 5-15 / 10-20 / tlshello)', size: '5-15', interval: '10-20', packets: 'tlshello' },
+  { id: 'mci', label: '📱 ویژه همراه اول (فرگمنت سبک: 50-100 / 5-10 / tlshello)', size: '50-100', interval: '5-10', packets: 'tlshello' },
+  { id: 'rightel', label: '💜 ویژه رایتل و شاتل (20-40 / 10-15 / tlshello)', size: '20-40', interval: '10-15', packets: 'tlshello' },
+  { id: 'gaming', label: '🎮 گیمینگ (بدون فرگمنت — کم‌ترین پینگ)', size: '', interval: '', packets: '' },
+  { id: 'aggressive', label: '🔥 ضد فیلتر تهاجمی (1-10 / 5-10 / tlshello)', size: '1-10', interval: '5-10', packets: 'tlshello' },
 ];
 
-export const FINGERPRINTS = ['chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random', 'randomized'];
+export const FINGERPRINTS = ['chrome', 'unsafe', 'firefox', 'safari', 'ios', 'android', 'edge', 'random', 'randomized'];
 
-export const fragmentPreset = (id) => FRAGMENT_PRESETS.find((p) => p.id === id) || FRAGMENT_PRESETS[0];
+export const fragmentPreset = (id) => {
+  const mapAlias = { high: 'irancell', medium: 'mci', low: 'rightel' };
+  const key = mapAlias[id] || id;
+  return FRAGMENT_PRESETS.find((p) => p.id === key) || FRAGMENT_PRESETS[0];
+};
 export const fragmentValue = (id) => {
   const p = fragmentPreset(id);
   return p.size ? p : null;
@@ -61,12 +77,28 @@ export function choosePorts(settings, count = 5) {
   return [...new Set(out)].slice(0, Math.max(1, Math.min(13, count)));
 }
 
-/** استخر آدرس‌ها در سه سبد (IPv6 / IPv4 تمیز / دامنه) با فیلتر کامل آدرس‌های .0 و معیوب */
+/** انتخاب چرخشی آی‌پی‌های تمیز از مخزن تاییدشده زئوس بر اساس زمان (در صورت فعال بودن آی‌پی چرخشی) */
+export function getRotatedZeusIps(settings, count = 8) {
+  const rotateMins = Math.max(1, Number(settings?.rotate_minutes || 15));
+  const autoRotate = String(settings?.auto_rotate || '0') === '1';
+  const slot = autoRotate ? Math.floor(Date.now() / (rotateMins * 60_000)) : 0;
+  const pool = ZEUS_BYOIP_V4;
+  const out = [];
+  for (let i = 0; i < count && i < pool.length; i++) {
+    out.push(pool[(slot * 3 + i) % pool.length]);
+  }
+  return out;
+}
+
+/** استخر آدرس‌ها در سه سبد (IPv6 / IPv4 تمیز / دامنه) با حذف کامل سرورهای خروجی ProxyIP از لیست ورودی */
 export function configPool(user, settings, cleanIps = []) {
   const cleanAddr = (x) => String(x ?? '').trim().replace(/^\[|\]$/g, '');
+  // مهم: سرورهای خروجی کشورها (COUNTRY_PROXY_MAP) هرگز نباید به عنوان آی‌پی ورودی کلاینت استفاده شوند
+  const isIngressCandidate = (addr) => isValidCandidate(addr) && !COUNTRY_PROXY_MAP.has(addr.toLowerCase());
+
   const norm = (cleanIps || [])
     .map((r) => (typeof r === 'string' ? { ip: cleanAddr(r), hits: 0, ms: null } : { ...r, ip: cleanAddr(r?.ip ?? r?.addr) }))
-    .filter((r) => r && r.ip && isValidCandidate(r.ip));
+    .filter((r) => r && r.ip && isIngressCandidate(r.ip));
   const byMs = (a, b) => (a.ms ?? 9999) - (b.ms ?? 9999);
 
   const verifiedAll = norm.filter((r) => Number(r.hits || 0) > 0).sort(byMs).map((r) => r.ip);
@@ -78,28 +110,37 @@ export function configPool(user, settings, cleanIps = []) {
   const guessedV4 = guessedAll.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x));
   const guessedV6 = guessedAll.filter((x) => x.includes(':'));
 
-  const userList = safeArray(user?.ips).map(cleanAddr).filter(isValidCandidate);
+  const userList = safeArray(user?.ips).map(cleanAddr).filter(isIngressCandidate);
   const userV6 = userList.filter((x) => x.includes(':'));
   const userV4 = userList.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x));
   const userDom = userList.filter((x) => !x.includes(':') && /[a-z]/i.test(x));
 
+  const settingsCleanList = safeArray(settings?.clean_ips).map(cleanAddr).filter(isIngressCandidate);
+  const settingsCleanV4 = settingsCleanList.filter((x) => /^\d+\.\d+\.\d+\.\d+$/.test(x));
+  const settingsCleanV6 = settingsCleanList.filter((x) => x.includes(':'));
+  const settingsCleanDom = settingsCleanList.filter((x) => !x.includes(':') && /[a-z]/i.test(x));
+
+  const rotatedByoip = getRotatedZeusIps(settings, 10);
   const host = sniFor(settings);
   const uniq = (arr) => [...new Set(arr.filter(Boolean))];
   const selCountry = findCountry(settings.selected_country);
 
   const domain = uniq([
     ...userDom,
+    ...settingsCleanDom,
     ...verifiedDomains,
-    ...safeArray(settings.address_domains).map(cleanAddr).filter(isValidCandidate),
+    ...ZEUS_IR_DOMAINS.slice(0, 6),
+    ...safeArray(settings.address_domains).map(cleanAddr).filter(isIngressCandidate),
     ...CF_DOMAINS,
-  ]).slice(0, 8);
+  ]).slice(0, 10);
 
   const ipv6 = String(settings.ipv6_enabled || '1') === '1'
     ? uniq([
         ...userV6,
+        ...settingsCleanV6,
         ...(selCountry?.v6 || []),
         ...verifiedV6,
-        ...safeArray(settings.ipv6_pool).map(cleanAddr).filter((x) => x.includes(':') && isValidCandidate(x)),
+        ...safeArray(settings.ipv6_pool).map(cleanAddr).filter((x) => x.includes(':') && isIngressCandidate(x)),
         ...IPV6_SEEDS,
         ...guessedV6,
       ]).slice(0, 12)
@@ -107,18 +148,20 @@ export function configPool(user, settings, cleanIps = []) {
 
   const ip = uniq([
     ...userV4,
-    ...(selCountry?.v4 || []),
+    ...settingsCleanV4,
+    ...rotatedByoip.slice(0, 5),
     ...verifiedV4,
     ...CF_GOOD_IPS,
+    ...rotatedByoip.slice(5),
     ...guessedV4,
-  ]).filter(isValidCandidate);
+  ]).filter(isIngressCandidate);
 
-  return { domain, ipv6, ip, host, verified: verifiedV4, guessed: guessedV4, country: selCountry };
+  return { domain, ipv6, ip, host, verified: verifiedV4, guessed: guessedV4, country: selCountry, rotatedByoip };
 }
 
 export function addressesFor(user, settings, cleanIps = [], { limit = 10 } = {}) {
   const p = configPool(user, settings, cleanIps);
-  return [...new Set([...p.ipv6.slice(0, 4), ...p.ip.slice(0, 4), ...p.domain.slice(0, 2)])].slice(0, limit);
+  return [...new Set([...p.ip.slice(0, 5), ...p.ipv6.slice(0, 3), ...p.domain.slice(0, 2)])].slice(0, limit);
 }
 
 const encHost = (h) => {
@@ -126,56 +169,120 @@ const encHost = (h) => {
   return clean.includes(':') ? `[${clean}]` : clean;
 };
 
-/** ساخت مسیر WebSocket همراه با پارامترهای کشور خروجی (cc و proxyip) و EarlyData */
-export function wsPathFor(user, settings, { includeEd = true } = {}) {
+/** برچسب کوتاه آدرس برای نمایش شفاف در عنوان کانفیگ تا عنوان بالا با آدرس پایین دقیقاً هم‌خوانی داشته باشد */
+function shortHostLabel(host) {
+  const clean = String(host || '').trim().replace(/^\[|\]$/g, '');
+  if (!clean) return '';
+  if (clean.includes(':')) {
+    const parts = clean.split(':').filter(Boolean);
+    return `IPv6:${parts[parts.length - 1] || 'cf'}`;
+  }
+  return clean;
+}
+
+/** ساخت مسیر WebSocket همراه با پارامترهای کشور خروجی (cc و proxyip)، حالت مستقیم (mode=direct) و EarlyData */
+export function wsPathFor(user, settings, { includeEd = true, overrideCc = null, overrideProxy = null, directMode = false } = {}) {
   const basePath = (settings.path || '/ws').split('?')[0];
   const ed = Number(user?.early_data ?? settings.early_data ?? 2048);
-  const selC = findCountry(settings.selected_country);
+  const rawCc = overrideCc !== null ? overrideCc : (settings.selected_country || '');
+  const isDirect = directMode || String(rawCc).toUpperCase() === 'DIRECT';
+  const selC = isDirect ? null : findCountry(rawCc);
   const qs = [];
   if (includeEd && ed > 0) qs.push(`ed=${ed}`);
-  if (selC) {
+  if (isDirect) {
+    qs.push('mode=direct');
+  } else if (selC) {
     qs.push(`cc=${selC.cc}`);
-    if (selC.proxies?.[0]) qs.push(`proxyip=${selC.proxies[0]}:443`);
+    const px = overrideProxy || (selC.proxies?.[0] ? `${selC.proxies[0]}:443` : '');
+    if (px) qs.push(`proxyip=${px}`);
   }
   return qs.length ? `${basePath}?${qs.join('&')}` : basePath;
 }
 
+/** ساخت عنوان شفاف و هماهنگ برای کانفیگ (آدرس بالا در v2rayNG دقیقاً هم‌نام با آدرس:پورت پایین است) */
+export function formatConfigRemark(user, settings, host, { index = 1, port = 443, cat = 'سریع', proto = 'vless', overrideCc = null, directMode = false, hasFrag = false } = {}) {
+  const rawCc = overrideCc !== null ? overrideCc : (settings.selected_country || '');
+  const isDirect = directMode || !rawCc || String(rawCc).toUpperCase() === 'DIRECT';
+  const selC = isDirect ? null : findCountry(rawCc);
+  const exitLabel = selC ? `خروجی ${selC.flag} ${selC.fa}` : '🌐 مستقیم';
+  const protoLabel = proto === 'trojan' ? 'Trojan' : 'VLESS';
+  const fragTag = hasFrag ? ' [Frag]' : '';
+  const hostTag = shortHostLabel(host);
+  const prefix = settings.remark_prefix ? `${settings.remark_prefix} · ` : '';
+  return `${prefix}#${String(index).padStart(2, '0')} ${cat}${fragTag} · ${hostTag}:${port} (${exitLabel} · ${protoLabel})`;
+}
+
 /** یک لینک VLESS برای آدرس/پورت مشخص */
-export function vlessUri(user, settings, host, { index = 1, port = 443, cat = 'Global' } = {}) {
+export function vlessUri(user, settings, host, {
+  index = 1,
+  port = 443,
+  cat = 'سریع',
+  forceFragment = null,
+  forceFp = null,
+  overrideCc = null,
+  overrideProxy = null,
+  directMode = false,
+} = {}) {
   const tls = isTlsPort(port);
-  const fp = user.fingerprint || settings.fingerprint || 'chrome';
-  const path = encodeURIComponent(wsPathFor(user, settings, { includeEd: true }));
+  const fp = forceFp || user.fingerprint || settings.fingerprint || 'chrome';
+  const path = encodeURIComponent(wsPathFor(user, settings, { includeEd: true, overrideCc, overrideProxy, directMode }));
   const sni = sniFor(settings) || host;
   const params = ['encryption=none', 'type=ws'];
   if (tls) params.push('security=tls', `sni=${sni}`, `fp=${fp}`, `host=${sni}`, 'alpn=http%2F1.1');
   else params.push('security=none', `host=${sni || host}`);
   params.push(`path=${path}`);
-  const frag = fragmentValue(user.fragment || settings.fragment_preset);
-  if (frag && tls) {
-    params.push(`fragment=${encodeURIComponent(frag.size)}`);
-    if (frag.packets) params.push(`fragmentPackets=${encodeURIComponent(frag.packets)}`);
-    if (frag.interval) params.push(`fragmentInterval=${encodeURIComponent(frag.interval)}`);
+  const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset);
+  if (frag && frag.size && tls) {
+    // فرمت استاندارد Xray / v2rayNG / MahsaNG / ZEUS: fragment=<length>,<interval>,<packets>
+    const fragStr = `${frag.size},${frag.interval || '10-20'},${frag.packets || 'tlshello'}`;
+    params.push(`fragment=${encodeURIComponent(fragStr)}`);
   }
   if (settings.mux_enabled === '1') params.push('mux=1', 'xmux=maxStreams=8');
-  const selC = findCountry(settings.selected_country);
-  const locBadge = selC ? `${selC.flag} ${selC.fa}` : '🌐';
-  const remark = `${settings.remark_prefix ? settings.remark_prefix + ' · ' : ''}${user.username} · ${locBadge} ${cat} · VLESS · ${port} · #${String(index).padStart(2, '0')}`;
+  const remark = formatConfigRemark(user, settings, host, {
+    index,
+    port,
+    cat,
+    proto: 'vless',
+    overrideCc,
+    directMode,
+    hasFrag: Boolean(frag && frag.size && tls),
+  });
   return `vless://${user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 
 /** یک لینک Trojan برای آدرس/پورت مشخص */
-export function trojanUri(user, settings, host, { index = 1, port = 443, cat = 'Global' } = {}) {
+export function trojanUri(user, settings, host, {
+  index = 1,
+  port = 443,
+  cat = 'سریع',
+  forceFragment = null,
+  forceFp = null,
+  overrideCc = null,
+  overrideProxy = null,
+  directMode = false,
+} = {}) {
   const tls = isTlsPort(port);
-  const fp = user.fingerprint || settings.fingerprint || 'chrome';
-  const path = encodeURIComponent(wsPathFor(user, settings, { includeEd: true }));
+  const fp = forceFp || user.fingerprint || settings.fingerprint || 'chrome';
+  const path = encodeURIComponent(wsPathFor(user, settings, { includeEd: true, overrideCc, overrideProxy, directMode }));
   const sni = sniFor(settings) || host;
   const params = ['type=ws'];
   if (tls) params.push('security=tls', `sni=${sni}`, `fp=${fp}`, `host=${sni}`, 'alpn=http%2F1.1');
   else params.push('security=none', `host=${sni || host}`);
   params.push(`path=${path}`);
-  const selC = findCountry(settings.selected_country);
-  const locBadge = selC ? `${selC.flag} ${selC.fa}` : '🌐';
-  const remark = `${settings.remark_prefix ? settings.remark_prefix + ' · ' : ''}${user.username} · ${locBadge} ${cat} · Trojan · ${port} · #${String(index).padStart(2, '0')}`;
+  const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset);
+  if (frag && frag.size && tls) {
+    const fragStr = `${frag.size},${frag.interval || '10-20'},${frag.packets || 'tlshello'}`;
+    params.push(`fragment=${encodeURIComponent(fragStr)}`);
+  }
+  const remark = formatConfigRemark(user, settings, host, {
+    index,
+    port,
+    cat,
+    proto: 'trojan',
+    overrideCc,
+    directMode,
+    hasFrag: Boolean(frag && frag.size && tls),
+  });
   return `trojan://${settings.trojan_password || user.uuid}@${encHost(host)}:${port}?${params.join('&')}#${enc(remark)}`;
 }
 
@@ -189,19 +296,21 @@ export function verifiedPairs(settings) {
         if (idx <= 0) return false;
         const addr = s.slice(0, idx).replace(/^\[|\]$/g, '');
         const port = Number(s.slice(idx + 1));
-        return isValidCandidate(addr) && port > 0 && port < 65536;
+        return isValidCandidate(addr) && !COUNTRY_PROXY_MAP.has(addr.toLowerCase()) && port > 0 && port < 65536;
       });
     }
   } catch { /* ignore */ }
   return [];
 }
 
-/** ساخت کانفیگ‌های یک کاربر:
- *  الگوی اثبات‌شده روی همراه اول / ایرانسل (مبتنی بر Omni Control Panel + BPB + Zeus):
- *  ۱) آدرس‌های IPv6 کلودفلر (`2606:4700:...`) روی پورت‌های 443، 2053، 8080، 8443، 80 (پینگ 109–116ms)
- *  ۲) آدرس‌های IPv4 تمیز (`172.67.181.32`، `188.114.96.1`، `188.114.96.3`، `172.64.80.1`، `104.17.148.22`)
- *     روی پورت‌های بدون TLS (`8080` و `80`) که از فیلترینگ SNI روی IPv4 عبور می‌کنند (پینگ 109–123ms)
- *  ۳) دامنه‌ها و آی‌پی‌های تمیز روی پورت‌های 8080/80 و 443/2053 برای وای‌فای و سایر اپراتورها */
+/**
+ * ساخت کانفیگ‌های جامع و منظم برای یک کاربر (پشتیبانی کامل از همراه اول، ایرانسل و مخابرات):
+ *  ۱) گروه ۱ — ⚡ همه اپراتورها (TLS 443 روی آی‌پی‌های چرخشی BYOIP زئوس + آی‌پی‌های تمیز کلودفلر)
+ *  ۲) گروه ۲ — 🛡️ ویژه ایرانسل و مخابرات (TLS Fragment 10-20,10-20,tlshello + fp=unsafe روی BYOIP و دامنه‌های .ir)
+ *  ۳) گروه ۳ — 🚀 ویژه همراه اول IPv6 (پینگ ~105ms روی پورت‌های 443، 2053 و 8080)
+ *  ۴) گروه ۴ — 🔓 بدون TLS (پورت‌های 8080 و 80 برای عبور از فیلتر SNI)
+ *  ۵) گروه ۵ — 🌐 اتصال مستقیم (کم‌ترین پینگ) + 🌍 کانفیگ‌های تک‌لوکیشن آماده (آمریکا Gemini/AI، آلمان، هلند، بریتانیا، فرانسه)
+ */
 export function buildConfigs(user, settings, cleanIps = []) {
   const maxConfigs = Math.max(6, Math.min(80, Number(settings.config_count || 40)));
   const pool = configPool(user, settings, cleanIps);
@@ -210,78 +319,129 @@ export function buildConfigs(user, settings, cleanIps = []) {
 
   const plan = [];
   const seen = new Set();
-  const add = (address, port, cat) => {
+  const add = (address, port, cat, opts = {}) => {
     const a = String(address || '').trim().replace(/^\[|\]$/g, '');
-    if (!a || !isValidCandidate(a)) return;
+    if (!a || !isValidCandidate(a) || COUNTRY_PROXY_MAP.has(a.toLowerCase())) return;
     const p = Number(port) || 443;
-    const key = `${a}:${p}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    plan.push({ address: a, port: p, cat });
+    const tagKey = `${a}:${p}:${opts.overrideCc || ''}:${opts.directMode ? 'direct' : ''}:${opts.forceFragment ? 'frag' : ''}`;
+    if (seen.has(tagKey)) return;
+    seen.add(tagKey);
+    plan.push({ address: a, port: p, cat, ...opts });
   };
 
-  // ۱) ستون اول: آدرس‌های IPv6 کلودفلر روی پورت 443 (سریع‌ترین و پایدارترین روی همراه اول و ایرانسل — 109..114ms)
-  pool.ipv6.slice(0, 5).forEach((v6) => add(v6, 443, 'IPv6'));
+  const zeusFrag = { size: '10-20', interval: '10-20', packets: 'tlshello' };
+  const tciFrag = { size: '5-15', interval: '10-20', packets: 'tlshello' };
+  const byoipList = pool.rotatedByoip?.length ? pool.rotatedByoip : ZEUS_BYOIP_V4;
+  const irDomList = ZEUS_IR_DOMAINS;
 
-  // ۲) ستون دوم: آی‌پی‌های تمیز IPv4 روی پورت‌های 8080 و 80 (عبور از DPI بدون SNI — 109..116ms روی همراه اول)
+  // ۱) گروه اول: ویژه ایرانسل و مخابرات (TLS Fragment استاندارد زئوس + fp=unsafe روی BYOIP و دامنه‌های .ir)
+  byoipList.slice(0, 3).forEach((ip, idx) => {
+    add(ip, idx === 2 ? 2053 : 443, '🛡️ ایرانسل/مخابرات', { forceFragment: zeusFrag, forceFp: 'unsafe' });
+  });
+  irDomList.slice(0, 2).forEach((d, idx) => {
+    add(d, idx === 1 ? 2053 : 443, '🛡️ ضد فیلتر .ir', { forceFragment: zeusFrag, forceFp: 'unsafe' });
+  });
+
+  // ۲) گروه دوم: سریع‌ترین آی‌پی‌های تمیز TLS 443 (مناسب همراه اول، ایرانسل و وای‌فای)
+  pool.ip.slice(0, 3).forEach((ip) => add(ip, 443, '⚡ سریع TLS'));
+  irDomList.slice(0, 1).forEach((d) => add(d, 443, '⚡ دامنه .ir'));
+
+  // ۳) گروه سوم: ویژه همراه اول و ایرانسل IPv6 (پینگ ~105ms)
+  pool.ipv6.slice(0, 3).forEach((v6) => add(v6, 443, '🚀 همراه اول IPv6'));
+  pool.ipv6.slice(0, 2).forEach((v6) => add(v6, 2053, '🚀 همراه اول IPv6'));
+  pool.ipv6.slice(0, 1).forEach((v6) => add(v6, 8080, '🚀 همراه اول IPv6'));
+
+  // ۴) گروه چهارم: اتصال مستقیم (بدون پروکسی خروجی — کم‌ترین پینگ) + تک‌لوکیشن‌های آماده (Gemini/AI و اروپا)
+  const fastHost = byoipList[0] || pool.ip[0] || '172.67.181.32';
+  const fastIr = irDomList[0] || '01d.ir';
+  add(fastHost, 443, '🌐 بدون پروکسی', { directMode: true });
+  add(fastIr, 443, '🌐 مستقیم ضد فیلتر', { directMode: true, forceFragment: zeusFrag, forceFp: 'unsafe' });
+
+  const quickLocs = [
+    { cc: 'US', cat: '✨ ویژه Gemini/AI' },
+    { cc: 'DE', cat: '⚡ لوکیشن ثابت' },
+    { cc: 'NL', cat: '⚡ لوکیشن ثابت' },
+    { cc: 'GB', cat: '⚡ لوکیشن ثابت' },
+    { cc: 'FR', cat: '⚡ لوکیشن ثابت' },
+  ];
+  for (const loc of quickLocs) {
+    const cObj = findCountry(loc.cc);
+    if (cObj && cObj.proxies?.[0]) {
+      add(fastHost, 443, loc.cat, {
+        overrideCc: cObj.cc,
+        overrideProxy: `${cObj.proxies[0]}:443`,
+        forceFragment: zeusFrag,
+        forceFp: 'chrome',
+      });
+    }
+  }
+
+  // ۵) گروه پنجم: بدون TLS روی پورت‌های 8080 و 80 (عبور از DPI بدون SNI)
   pool.ip.slice(0, 3).forEach((ip) => {
-    add(ip, 8080, 'Plain');
-    add(ip, 80, 'Plain');
+    add(ip, 8080, '🔓 بدون TLS');
+    add(ip, 80, '🔓 بدون TLS');
   });
+  irDomList.slice(0, 2).forEach((d) => add(d, 8080, '🔓 دامنه بدون TLS'));
 
-  // ۳) ستون سوم: آدرس‌های IPv6 روی پورت‌های جایگزین (2053، 8080، 8443، 80 — 115..116ms در اسکرین‌شات‌ها)
-  pool.ipv6.slice(0, 3).forEach((v6) => add(v6, 2053, 'IPv6'));
-  pool.ipv6.slice(0, 4).forEach((v6) => add(v6, 8080, 'IPv6'));
-  pool.ipv6.slice(5, 8).forEach((v6) => add(v6, 443, 'IPv6'));
-
-  // ۴) ستون چهارم: سایر آی‌پی‌های تمیز و دامنه‌ها روی پورت‌های 8080 و 80
-  pool.ip.slice(3, 7).forEach((ip, idx) => add(ip, idx % 2 === 0 ? 80 : 8080, 'Plain'));
-  pool.domain.slice(0, 2).forEach((d, idx) => add(d, idx % 2 === 0 ? 8080 : 80, 'Domain'));
-
-  // ۵) ستون پنجم: IPv6 روی 8443 و 80 + جفت‌های تأییدشده + TLS روی IPv4/دامنه برای اینترنت خانگی
-  pool.ipv6.slice(0, 2).forEach((v6) => {
-    add(v6, 8443, 'IPv6');
-    add(v6, 80, 'IPv6');
-  });
-  for (const pr of pairs.slice(0, 4)) {
+  for (const pr of pairs.slice(0, 3)) {
     const idx = pr.lastIndexOf(':');
     const a = pr.slice(0, idx);
     const p = Number(pr.slice(idx + 1));
-    add(a, p, isTlsPort(p) ? 'Clean' : 'Plain');
+    add(a, p, isTlsPort(p) ? '⚡ تاییدشده' : '🔓 بدون TLS');
   }
-  pool.ip.slice(0, 2).forEach((ip) => add(ip, 443, 'IPv4'));
-  pool.domain.slice(0, 2).forEach((d) => add(d, 443, 'Domain'));
-  if (pool.host) add(pool.host, 443, 'Panel');
 
   const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
   const uris = [];
   const items = [];
-  const emit = ({ address, port, cat }) => {
+  const emit = (entry) => {
+    const { address, port, cat, forceFragment, forceFp, overrideCc, overrideProxy, directMode } = entry;
     for (const proto of both ? ['vless', 'trojan'] : ['vless']) {
       if (uris.length >= maxConfigs) return;
       const n = uris.length + 1;
-      const label = String(n).padStart(2, '0');
-      const remark = `${user.username} · 🌐 ${cat} · ${proto === 'vless' ? 'VLESS' : 'Trojan'} · ${port} · #${label}`;
-      uris.push(proto === 'vless'
-        ? vlessUri(user, settings, address, { index: n, port, cat })
-        : trojanUri(user, settings, address, { index: n, port, cat }));
-      items.push({ address, port, proto, cat, remark });
+      const opts = { index: n, port, cat, forceFragment, forceFp, overrideCc, overrideProxy, directMode };
+      const uri = proto === 'vless'
+        ? vlessUri(user, settings, address, opts)
+        : trojanUri(user, settings, address, opts);
+      const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset);
+      const remark = formatConfigRemark(user, settings, address, {
+        index: n,
+        port,
+        cat,
+        proto,
+        overrideCc,
+        directMode,
+        hasFrag: Boolean(frag && frag.size && isTlsPort(port)),
+      });
+      uris.push(uri);
+      items.push({
+        address,
+        port,
+        proto,
+        cat,
+        remark,
+        tls: isTlsPort(port),
+        fragment: Boolean(frag && frag.size && isTlsPort(port)),
+        cc: directMode ? 'DIRECT' : (overrideCc || settings.selected_country || ''),
+      });
     }
   };
   plan.forEach(emit);
 
-  // پرکردن باقی‌مانده تا سقف با ترکیب IPv6 و IPv4 روی پورت‌های منتخب
   if (uris.length < maxConfigs) {
-    const extraPorts = [8080, 80, 443, 2053, 8443];
-    const addrs = [...new Set([...pool.ipv6, ...pool.ip, ...pool.domain])];
+    const extraPorts = [443, 2053, 8080, 80, 8443];
+    const addrs = [...new Set([...byoipList, ...pool.ip, ...pool.ipv6, ...pool.domain])];
     outer:
     for (const port of extraPorts) {
       for (const a of addrs) {
         if (uris.length >= maxConfigs) break outer;
-        const key = `${a}:${port}`;
+        const key = `${a}:${port}:::`;
         if (seen.has(key)) continue;
         seen.add(key);
-        emit({ address: a, port, cat: a.includes(':') ? 'IPv6' : isTlsPort(port) ? 'Alt' : 'Plain' });
+        emit({
+          address: a,
+          port,
+          cat: a.includes(':') ? '🚀 همراه اول IPv6' : isTlsPort(port) ? '⚡ سریع TLS' : '🔓 بدون TLS',
+        });
       }
     }
   }
@@ -294,8 +454,8 @@ export function buildConfigs(user, settings, cleanIps = []) {
     addresses: usedAddrs,
     ports,
     verified: pairs.length,
-    singbox: buildSingbox(user, settings, usedAddrs.slice(0, 12), [443, 8080, 80, 2053]),
-    clash: buildClash(user, settings, usedAddrs.slice(0, 12), [443, 8080, 80, 2053]),
+    singbox: buildSingbox(user, settings, usedAddrs.slice(0, 12), [443, 2053, 8080, 80]),
+    clash: buildClash(user, settings, usedAddrs.slice(0, 12), [443, 2053, 8080, 80]),
   };
 }
 
@@ -306,6 +466,8 @@ function sbOutbound(user, settings, host, port = 443) {
   const tls = isTlsPort(port);
   const ed = Number(user.early_data || settings.early_data || 2048);
   const cleanHost = String(host || '').replace(/^\[|\]$/g, '');
+  const fp = user.fingerprint || settings.fingerprint || 'chrome';
+  const utlsFp = fp === 'unsafe' ? 'chrome' : fp;
   return {
     type: 'vless',
     tag: `omni-${user.username}-${cleanHost.replace(/[:.]/g, '-')}-${port}`.slice(0, 60),
@@ -316,9 +478,9 @@ function sbOutbound(user, settings, host, port = 443) {
     tls: {
       enabled: tls,
       server_name: tls ? sni : undefined,
-      insecure: false,
+      insecure: fp === 'unsafe',
       alpn: tls ? ['http/1.1'] : undefined,
-      utls: tls ? { enabled: true, fingerprint: user.fingerprint || settings.fingerprint || 'chrome' } : undefined,
+      utls: tls ? { enabled: true, fingerprint: utlsFp } : undefined,
     },
     transport: {
       type: 'ws',
@@ -336,6 +498,8 @@ function sbTrojan(user, settings, host, port = 443) {
   const tls = isTlsPort(port);
   const ed = Number(user.early_data || settings.early_data || 2048);
   const cleanHost = String(host || '').replace(/^\[|\]$/g, '');
+  const fp = user.fingerprint || settings.fingerprint || 'chrome';
+  const utlsFp = fp === 'unsafe' ? 'chrome' : fp;
   return {
     type: 'trojan',
     tag: `omni-${user.username}-tr-${cleanHost.replace(/[:.]/g, '-')}-${port}`.slice(0, 60),
@@ -345,9 +509,9 @@ function sbTrojan(user, settings, host, port = 443) {
     tls: {
       enabled: tls,
       server_name: tls ? sni : undefined,
-      insecure: false,
+      insecure: fp === 'unsafe',
       alpn: tls ? ['http/1.1'] : undefined,
-      utls: tls ? { enabled: true, fingerprint: user.fingerprint || settings.fingerprint || 'chrome' } : undefined,
+      utls: tls ? { enabled: true, fingerprint: utlsFp } : undefined,
     },
     transport: {
       type: 'ws',
@@ -359,11 +523,11 @@ function sbTrojan(user, settings, host, port = 443) {
   };
 }
 
-export function buildSingbox(user, settings, addrs, ports = [443, 8080, 80]) {
+export function buildSingbox(user, settings, addrs, ports = [443, 2053, 8080, 80]) {
   const outs = [];
   for (const h of addrs) {
     const isV6 = String(h).includes(':');
-    const targetPorts = isV6 ? [443, 2053, 8080] : [8080, 80, 443];
+    const targetPorts = isV6 ? [443, 2053, 8080] : [443, 2053, 8080, 80];
     for (const p of targetPorts.filter((x) => ports.includes(x))) {
       outs.push(sbOutbound(user, settings, h, p));
       if (String(settings.proto || 'both') === 'both' && settings.trojan_password) {
@@ -406,15 +570,17 @@ function clashProxy(user, settings, host, port, proto = 'vless', idx = 1) {
   const tls = isTlsPort(port);
   const ed = Number(user.early_data || settings.early_data || 2048);
   const cleanHost = String(host || '').replace(/^\[|\]$/g, '');
+  const fp = user.fingerprint || settings.fingerprint || 'chrome';
   const base = {
-    name: `omni-${idx}-${proto}-${port}`,
+    name: `omni-${idx}-${proto}-${cleanHost.slice(0, 15)}-${port}`,
     type: proto,
     server: cleanHost,
     port: Number(port),
     tls,
+    'skip-cert-verify': fp === 'unsafe',
     servername: tls ? sni : undefined,
     network: 'ws',
-    'client-fingerprint': user.fingerprint || settings.fingerprint || 'chrome',
+    'client-fingerprint': fp === 'unsafe' ? 'chrome' : fp,
     'ws-opts': {
       path,
       headers: { Host: sni || cleanHost },
@@ -427,13 +593,13 @@ function clashProxy(user, settings, host, port, proto = 'vless', idx = 1) {
   return base;
 }
 
-export function buildClash(user, settings, addrs, ports = [443, 8080, 80]) {
+export function buildClash(user, settings, addrs, ports = [443, 2053, 8080, 80]) {
   const proxies = [];
   let i = 0;
   const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
   for (const h of addrs) {
     const isV6 = String(h).includes(':');
-    const targetPorts = isV6 ? [443, 2053, 8080] : [8080, 80, 443];
+    const targetPorts = isV6 ? [443, 2053, 8080] : [443, 2053, 8080, 80];
     for (const port of targetPorts.filter((x) => ports.includes(x))) {
       proxies.push(clashProxy(user, settings, h, port, 'vless', ++i));
       if (both) proxies.push(clashProxy(user, settings, h, port, 'trojan', i));
@@ -565,7 +731,7 @@ export function statusPage(user, settings, origin, stats) {
   <div class="muted" style="margin-top:10px">لینک اشتراک (در کلاینت وارد کن):</div>
   <code>${esc(origin)}/s/${esc(user.sub_token)}</code>
   <div class="muted" style="margin-top:18px">⚡️ تست زنده پینگ و آی‌پی تمیز برای اینترنت شما</div>
-  <div class="muted" style="font-size:11.5px;margin-top:3px">پینگ و سرعت واقعی به صورت زنده از روی اینترنت دستگاه شما اندازه‌گیری می‌شود؛ آی‌پی‌های سبز را ستاره بزنید تا در صدر ساب‌لینک قرار بگیرند.</div>
+  <div class="muted" style="font-size:11.5px;margin-top:3px">پینگ و سرعت واقعی مستقیماً از مرورگر دستگاه شما اندازه‌گیری می‌شود؛ آی‌پی‌های سبز را ستاره بزنید تا در صدر ساب‌لینک قرار بگیرند.</div>
   <div id="iplist" style="margin-top:10px"></div>
   <button class="btn ghost" id="ip-test" type="button">⚡ تست مجدد پینگ و سرعت واقعی روی اینترنت من</button>
   <div id="ip-out" class="muted" style="margin-top:8px;font-size:11.5px"></div>
@@ -582,13 +748,13 @@ export function statusPage(user, settings, origin, stats) {
   function kind(a){ if (a.indexOf(':') >= 0) return 'ipv6'; var c = a.charAt(0); return (c >= '0' && c <= '9') ? 'ipv4' : 'host'; }
   function cls(ms){ if (ms == null || ms <= 0) return ''; return ms < 180 ? 'good' : ms > 500 ? 'bad' : ''; }
   var rows = CANDS.map(function(c){
-    var m = (c && c.ms != null && Number(c.ms) > 5) ? Number(c.ms) : null;
+    var m = (c && c.ms != null && Number(c.ms) >= 25) ? Number(c.ms) : null;
     return { addr: nm(c), ms: m, colo: (c && c.colo) || null, mbps: null, testing: false };
   }).filter(function(r){ return r.addr; });
   function render(){
     if (!rows.length) { el.innerHTML = '<div class="muted" style="font-size:11.5px">هنوز کاندیدی ثبت نشده.</div>'; return; }
     el.innerHTML = rows.slice(0, 14).map(function(r){
-      var k = kind(r.addr), tag = k === 'host' ? 'دامنه' : k === 'ipv6' ? 'IPv6 · 443/2053/8080' : 'آی‌پی · 8080/80';
+      var k = kind(r.addr), tag = k === 'host' ? 'دامنه · 443/2053' : k === 'ipv6' ? 'IPv6 · 443/2053/8080' : 'آی‌پی تمیز · 443/8080';
       var msTxt = r.testing ? '⏳ در حال تست…' : (r.ms != null && r.ms > 0 ? r.ms + ' ms' : 'آماده تست');
       return '<div class="ip"><b>' + r.addr + '</b><span class="muted" style="font-size:10.5px">' + tag + (r.colo ? ' · ' + r.colo : '') + '</span>' +
         '<span class="ms ' + cls(r.ms) + '">' + msTxt + (r.mbps ? ' · ' + r.mbps + ' Mbps' : '') + '</span>' +
@@ -602,7 +768,7 @@ export function statusPage(user, settings, origin, stats) {
       fetch(u, { cache: 'no-store' }).then(function(){
         var t0 = performance.now();
         return fetch(u + 'w', { cache: 'no-store' }).then(function(){
-          res(Math.max(8, Math.round(performance.now() - t0)));
+          res(Math.max(25, Math.round(performance.now() - t0)));
         });
       }).catch(function(){ res(null); });
     });
@@ -610,10 +776,10 @@ export function statusPage(user, settings, origin, stats) {
   function probeHost(addr){
     return new Promise(function(res){
       var t0 = performance.now(), c = new AbortController();
-      var to = setTimeout(function(){ c.abort(); res(null); }, 4000);
+      var to = setTimeout(function(){ c.abort(); res(null); }, 3800);
       var target = addr.indexOf(':') >= 0 ? '[' + addr + ']' : addr;
       fetch('https://' + target + '/cdn-cgi/trace?x=' + Math.round(performance.now()), { mode: 'no-cors', cache: 'no-store', signal: c.signal })
-        .then(function(){ clearTimeout(to); res(Math.max(8, Math.round(performance.now() - t0))); })
+        .then(function(){ clearTimeout(to); res(Math.max(25, Math.round(performance.now() - t0))); })
         .catch(function(){ clearTimeout(to); res(null); });
     });
   }
@@ -627,7 +793,7 @@ export function statusPage(user, settings, origin, stats) {
         .then(function(b){
           clearTimeout(to);
           var sec = (performance.now() - t0) / 1000;
-          res(sec > 0 ? { mbps: Math.round((b.byteLength * 8 / sec) / 1e5) / 10, ms: Math.round(performance.now() - t0) } : null);
+          res(sec > 0 ? { mbps: Math.round((b.byteLength * 8 / sec) / 1e5) / 10, ms: Math.max(25, Math.round(performance.now() - t0)) } : null);
         })
         .catch(function(){ clearTimeout(to); res(null); });
     });
@@ -635,7 +801,7 @@ export function statusPage(user, settings, origin, stats) {
   async function runLiveTest(){
     var btn = document.getElementById('ip-test');
     if (btn) btn.disabled = true;
-    out.textContent = 'در حال اندازه‌گیری پینگ و سرعت واقعی از روی اینترنت شما…';
+    out.textContent = 'در حال اندازه‌گیری پینگ و سرعت واقعی مستقیماً از روی اینترنت شما…';
     rows.forEach(function(r){ r.testing = true; });
     render();
     var edgeRtt = await measureEdgeRtt();
@@ -650,19 +816,15 @@ export function statusPage(user, settings, origin, stats) {
         pr.results.forEach(function(x){ if (x && x.ip && x.ok && x.ms > 0) serverMap[x.ip] = x; });
       }
     } catch (e) {}
-    var hostProbes = await Promise.all(rows.map(function(r){
-      return kind(r.addr) === 'host' ? probeHost(r.addr) : Promise.resolve(null);
-    }));
+    var browserProbes = await Promise.all(rows.map(function(r){ return probeHost(r.addr); }));
     rows.forEach(function(r, i){
       r.testing = false;
       var sv = serverMap[r.addr];
       if (sv && sv.colo) r.colo = sv.colo;
-      if (hostProbes[i] != null && hostProbes[i] > 0) {
-        r.ms = hostProbes[i];
-      } else if (sv && sv.ms > 0) {
-        r.ms = (edgeRtt != null ? Math.round(edgeRtt * 0.65) : 0) + sv.ms;
-      } else if (edgeRtt != null && r.addr.indexOf(':') >= 0) {
-        r.ms = edgeRtt + 12 + (i * 4);
+      if (browserProbes[i] != null && browserProbes[i] >= 25) {
+        r.ms = browserProbes[i];
+      } else if (edgeRtt != null && sv && sv.ms > 0) {
+        r.ms = edgeRtt + sv.ms;
       }
     });
     var sp = await speedTest();
@@ -674,14 +836,16 @@ export function statusPage(user, settings, origin, stats) {
     }
     rows.sort(function(a, b){ return (a.ms == null ? 9e9 : a.ms) - (b.ms == null ? 9e9 : b.ms); });
     render();
-    var good = rows.filter(function(r){ return r.ms != null && r.ms > 0; });
+    var good = rows.filter(function(r){ return r.ms != null && r.ms >= 25; });
     out.textContent = sp
       ? ('✓ تست واقعی کامل شد — پینگ لبه: ' + (edgeRtt || sp.ms) + ' ms · سرعت دانلود: ' + sp.mbps + ' Mbps (' + good.length + ' نود فعال).')
       : ('✓ تست پینگ کامل شد (' + good.length + ' نود فعال).');
-    try {
-      await fetch('/api/report-ip', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token: TOKEN, results: good.map(function(r){ return { ip: r.addr, ms: r.ms, colo: r.colo, mbps: r.mbps }; }) }) });
-    } catch (e) {}
+    if (edgeRtt != null && good.length) {
+      try {
+        await fetch('/api/report-ip', { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token: TOKEN, results: good.map(function(r){ return { ip: r.addr, ms: r.ms, colo: r.colo, mbps: r.mbps }; }) }) });
+      } catch (e) {}
+    }
     if (btn) btn.disabled = false;
   }
   document.getElementById('ip-test').onclick = runLiveTest;
@@ -689,7 +853,7 @@ export function statusPage(user, settings, origin, stats) {
   el.addEventListener('click', async function(ev){
     var b = ev.target.closest('.star'); if (!b) return;
     var row = rows.filter(function(r){ return r.addr === b.dataset.addr; })[0];
-    var realMs = (row && row.ms > 0) ? row.ms : (Number(b.dataset.ms) > 0 ? Number(b.dataset.ms) : 115);
+    var realMs = (row && row.ms >= 25) ? row.ms : (Number(b.dataset.ms) >= 25 ? Number(b.dataset.ms) : 95);
     b.textContent = '✓';
     try {
       await fetch('/api/report-ip', { method: 'POST', headers: { 'content-type': 'application/json' },

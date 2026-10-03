@@ -9,7 +9,29 @@ import {
   settingsCached, ensureRecoveryCode, sessionIdFrom,
 } from './auth.js';
 import { buildConfigs, subscriptionBody, statusPage, FRAGMENT_PRESETS, FINGERPRINTS, safeArray, esc } from './links.js';
-import { rankIps, rankIpsHttp, probeNode, tcpProbe, fetchCfCidrs, sampleIPs, SEED_IPS, CF_GOOD_IPS, IPV6_SEEDS, PORTS_PLAIN, PORTS_TLS, isValidCandidate, isCloudflareIp, httpProbe, WORLD_COUNTRIES, findCountry } from './scan.js';
+import {
+  rankIps,
+  rankIpsHttp,
+  probeNode,
+  tcpProbe,
+  fetchCfCidrs,
+  sampleIPs,
+  SEED_IPS,
+  CF_GOOD_IPS,
+  IPV6_SEEDS,
+  PORTS_PLAIN,
+  PORTS_TLS,
+  isValidCandidate,
+  isCloudflareIp,
+  httpProbe,
+  WORLD_COUNTRIES,
+  findCountry,
+  scanAllCountries,
+  COUNTRY_PROXY_MAP,
+  ZEUS_BYOIP_V4,
+  ZEUS_IR_DOMAINS,
+  VERIFIED_ZEUS_POOL,
+} from './scan.js';
 import { userStatus, safeJsonArray, invalidateUser } from './core.js';
 
 const GB = 1024 ** 3;
@@ -188,11 +210,12 @@ export async function handleApi(request, env, ctx, url) {
       const addr = normalizeAddr(r?.addr ?? r?.ip);
       const ms = Number(r?.ms);
       const mbps = Number(r?.mbps);
-      if (!addr || !Number.isFinite(ms) || ms <= 0 || ms > 20000) continue;
+      // رد مقادیر دیتاسنتری (< 25ms) و رد سرورهای خروجی ProxyIP تا مخزن آی‌پی ورودی تمیز بماند
+      if (!addr || COUNTRY_PROXY_MAP.has(addr.toLowerCase()) || !Number.isFinite(ms) || ms < 25 || ms > 20000) continue;
       await env.DB.prepare(
         `INSERT INTO clean_ips(ip, ms, colo, ok, hits, mbps, checked_at) VALUES(?,?,?,1,1,?,datetime('now'))
          ON CONFLICT(ip) DO UPDATE SET
-           ms = CASE WHEN clean_ips.ms IS NULL OR excluded.ms < clean_ips.ms THEN excluded.ms ELSE clean_ips.ms END,
+           ms = excluded.ms,
            colo = COALESCE(excluded.colo, clean_ips.colo),
            mbps = CASE WHEN excluded.mbps IS NULL THEN clean_ips.mbps
                        WHEN clean_ips.mbps IS NULL OR excluded.mbps > clean_ips.mbps THEN excluded.mbps ELSE clean_ips.mbps END,
@@ -273,18 +296,18 @@ export async function handleApi(request, env, ctx, url) {
     const conns = await env.DB.prepare(`SELECT COALESCE(SUM(conns),0) c FROM usage_daily WHERE username = ?`).bind(u.username).first();
     const view = userView(u, settings);
     const ipRows = await env.DB.prepare('SELECT ip, ms, colo FROM clean_ips WHERE ok = 1 ORDER BY (hits * 1000) DESC, ms ASC LIMIT 16').all();
-    // کاندیدها = همان چیزهایی که در کانفیگ‌ها به‌کار می‌روند: آی‌پی‌های تأییدشده، دامنه‌ها،
-    // IPv6 و دامنه‌ی پنل — تا دستگاه کاربر دقیقاً همان‌ها را بسنجد و نتیجه در D1 بنشیند.
     const cands = [];
     const seenAddr = new Set();
     const pushCand = (addr, ms, colo) => {
       const a = normalizeAddr(addr);
-      if (!a || seenAddr.has(a)) return;
+      if (!a || seenAddr.has(a) || COUNTRY_PROXY_MAP.has(a.toLowerCase())) return;
       seenAddr.add(a);
-      const validMs = (ms !== null && ms !== undefined && ms !== '' && Number(ms) > 5) ? Number(ms) : null;
+      const validMs = (ms !== null && ms !== undefined && ms !== '' && Number(ms) >= 25) ? Number(ms) : null;
       cands.push({ addr: a, ms: validMs, colo: colo || null });
     };
     (ipRows.results || []).forEach((r) => pushCand(r.ip, r.ms, r.colo));
+    ZEUS_BYOIP_V4.slice(0, 4).forEach((ip) => pushCand(ip, null, null));
+    ZEUS_IR_DOMAINS.slice(0, 3).forEach((d) => pushCand(d, null, null));
     safeArray(settings.address_domains).forEach((d) => pushCand(d, null, null));
     pushCand(String(settings.public_host || '').replace(/^https?:\/\//, '').replace(/\/.*$/, ''), null, null);
     safeArray(settings.ipv6_pool).forEach((v) => pushCand(v, null, null));
@@ -638,6 +661,49 @@ export async function handleApi(request, env, ctx, url) {
     return json({ ok: true, total: WORLD_COUNTRIES.length, count: WORLD_COUNTRIES.length, countries: WORLD_COUNTRIES });
   }
 
+  /* ───────── اسکن یکجای همه کشورها (تست واقعی TCP 443 روی لوکیشن‌های خروجی) ───────── */
+  if (p === '/api/diag/scan-countries' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const results = await scanAllCountries({
+      ccs: Array.isArray(body.ccs) ? body.ccs : null,
+      onlyPrimary: body.onlyPrimary !== false,
+      concurrency: Number(body.concurrency || 12),
+      timeoutMs: Number(body.timeout || 2000),
+    });
+    const aliveCount = results.filter((r) => r.alive).length;
+    await logEvent(env, 'info', `اسکن یکجای کشورها: ${aliveCount} لوکیشن فعال از ${results.length}`);
+    return json({ ok: true, total: results.length, alive: aliveCount, results });
+  }
+
+  /* ───────── چرخش فوری آی‌پی‌های تمیز از مخزن تاییدشده زئوس (BYOIP + دامنه‌های .ir) ───────── */
+  if (p === '/api/diag/rotate-ips' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const offset = Math.floor(Math.random() * Math.max(1, ZEUS_BYOIP_V4.length - 8));
+    const pickedByoip = [];
+    for (let i = 0; i < 8; i++) {
+      pickedByoip.push(ZEUS_BYOIP_V4[(offset + i) % ZEUS_BYOIP_V4.length]);
+    }
+    const pickedIr = ZEUS_IR_DOMAINS.slice(0, 3);
+    const candidates = [
+      '172.67.181.32',
+      '188.114.96.1',
+      ...pickedByoip,
+      ...pickedIr,
+    ];
+    const probed = await rankIpsHttp(candidates, { concurrency: 10, timeoutMs: 2200 });
+    const aliveIps = probed.filter((r) => r.alive).map((r) => r.ip);
+    const finalClean = [...new Set([...aliveIps, ...pickedByoip.slice(0, 5), '172.67.181.32', '188.114.96.1'])].slice(0, 12);
+    const finalPool = [...new Set([...finalClean, ...CF_GOOD_IPS.slice(0, 8), ...pickedIr])].join('\n');
+    if (body.apply !== false) {
+      await putSettingsBulk(env, {
+        clean_ips: JSON.stringify(finalClean),
+        ip_pool: finalPool,
+      });
+    }
+    await logEvent(env, 'info', `چرخش مخزن آی‌پی زئوس: ${finalClean.length} آی‌پی تمیز جدید جایگزین شد`);
+    return json({ ok: true, clean_ips: finalClean, ip_pool: finalPool, results: probed });
+  }
+
   /* ───────── تست واقعی سرورهای DNS (RFC 8484 DoH + JSON + IR Domestic Fallback) ───────── */
   if (p === '/api/diag/dns') {
     let rawUrl = String(url.searchParams.get('url') || settings.dns_upstream || 'https://cloudflare-dns.com/dns-query').trim();
@@ -936,14 +1002,19 @@ export async function handleApi(request, env, ctx, url) {
     const rejected = [];
     for (const r of edge) {
       if (isValidCandidate(r.ip) && r.alive) {
+        const pxCountry = COUNTRY_PROXY_MAP.get(r.ip.toLowerCase());
         merged.set(r.ip.toLowerCase(), {
           ip: r.ip,
           alive: true,
           is_cf: true,
+          is_proxy: Boolean(r.is_proxy || pxCountry),
+          country: r.country || pxCountry?.cc || null,
+          country_fa: r.country_fa || pxCountry?.fa || null,
+          flag: r.flag || pxCountry?.flag || null,
           edge_ms: r.edge_ms ?? r.ms ?? null,
           ms: null,
           client_ms: null,
-          colo: r.colo || (r.ip.includes(':') ? 'CF6' : 'CF4'),
+          colo: r.colo || pxCountry?.colo || (r.ip.includes(':') ? 'CF6' : 'CF4'),
           src: 'edge',
           hits: 0,
         });

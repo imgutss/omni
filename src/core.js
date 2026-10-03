@@ -1,27 +1,25 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Omni — src/core.js
    هسته‌ی تونل WebSocket برای VLESS و Trojan روی Cloudflare Workers
-   - پشتیبانی از 0-RTT early-data (Sec-WebSocket-Protocol)
-   - پشتیبانی از VLESS TCP (cmd=1)، VLESS UDP DNS over HTTPS (cmd=2) و Trojan
-   - فالبک هوشمند ProxyIP + NAT64 در صورت خطای اتصال مستقیم یا دریافت ۰ بایت
-     (الگوی ترکیبی Omni Control Panel + BPB + Zeus + Nahan برای عبور از محدودیت کلودفلر)
-   - شمارش دقیق ترافیک (up/down)، تعداد درخواست‌ها، فعال‌سازی با اولین اتصال،
-     سقف دستگاه، بلاک تبلیغات/NSFW/دامنه‌های دلخواه، صفحه‌ی پوششی (decoy)
+   - پشتیبانی کامل از TLS Fragmentation ایرانسل و مخابرات با صف سریال‌شده‌ی بدون ریزش
+     (حفظ تا ۲۵۶ قطعه / ۶۴ کیلوبایت ClientHello بدون تداخل و بدون دوباره‌نویسی)
+   - پشتیبانی از SOCKS5 و HTTP CONNECT (از مخزن VIP زئوس) برای باز کردن Google Gemini و هوش مصنوعی
+   - کش هوشمند مقاصد غیرکلودفلر (NON_CF_HOST_CACHE) برای حذف کامل پرش پینگ فرانسه و سایر کشورها
+   - پشتیبانی از حالت اتصال مستقیم (Direct Mode) و تک‌لوکیشن (?cc=DE, ?cc=US, ?mode=direct)
    ══════════════════════════════════════════════════════════════════════════ */
 import { connect } from 'cloudflare:sockets';
-import { findCountry } from './countries.js';
+import { findCountry, GEMINI_VIP_PROXIES, COUNTRY_VIP_PROXIES } from './countries.js';
 
 const dec = new TextDecoder();
 const enc = new TextEncoder();
 
-/* ─────────── استخر ProxyIP و پیشوندهای NAT64 (الگوی BPB / Zeus / Omni) ─────────── */
+/* ─────────── استخر ProxyIP و پیشوندهای NAT64 (الگوی ZEUS v2.2.5 / BPB / Omni) ─────────── */
 export const DEFAULT_PROXY_IPS = [
   '103.228.170.234:443',
   '103.137.248.227:443',
   '103.13.208.242:443',
-  '43.169.18.179:443',
-  'bpb.yousef.isegaro.com:443',
-  'di.nscl.ir:443',
+  '163.172.189.205:443',
+  '135.181.84.31:443',
 ];
 
 export const NAT64_PREFIXES = [
@@ -29,6 +27,109 @@ export const NAT64_PREFIXES = [
   '2602:fc59:11:64::',
   '2a02:898:146:64::',
 ];
+
+/** کش دامنه‌هایی که پشت کلودفلر نیستند و ProxyIP روی آن‌ها TLS Alert 0x15 برمی‌گرداند.
+    این کش باعث می‌شود پینگ فرانسه و سایر کشورها روی گوگل، اینستاگرام، تلگرام و یوتیوب
+    هرگز از ۱۱۰ms به ۱۰۰۰ms نپرد! */
+const NON_CF_HOST_CACHE = new Set([
+  'www.google.com',
+  'google.com',
+  'accounts.google.com',
+  'apis.google.com',
+  'www.gstatic.com',
+  'ssl.gstatic.com',
+  'fonts.gstatic.com',
+  'play.googleapis.com',
+  'www.googleapis.com',
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'i.ytimg.com',
+  'yt3.ggpht.com',
+  'instagram.com',
+  'www.instagram.com',
+  'i.instagram.com',
+  'graph.instagram.com',
+  'telegram.org',
+  'core.telegram.org',
+  'web.telegram.org',
+  't.me',
+]);
+
+/** دامنه‌های Google Gemini و هوش مصنوعی که به آی‌پی تمیز IPv4 آمریکا/اروپا نیاز دارند */
+const GEMINI_AI_SUFFIXES = [
+  'gemini.google.com',
+  'bard.google.com',
+  'aistudio.google.com',
+  'makersuite.google.com',
+  'generativelanguage.googleapis.com',
+  'alkalimakersuite-pa.clients6.google.com',
+  'aisandbox-pa.googleapis.com',
+  'notebooklm.google.com',
+  'notebooklm.google',
+  'labs.google',
+  'jules.google.com',
+  'opal.google',
+  'deepmind.google',
+  'chatgpt.com',
+  'openai.com',
+  'oaistatic.com',
+  'oaiusercontent.com',
+  'claude.ai',
+  'anthropic.com',
+  'copilot.microsoft.com',
+  'perplexity.ai',
+];
+
+export function isGeminiOrAiHost(host) {
+  const h = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+  if (!h) return false;
+  return GEMINI_AI_SUFFIXES.some((suf) => h === suf || h.endsWith('.' + suf));
+}
+
+function isKnownNonCfHost(host) {
+  const h = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+  if (!h) return false;
+  if (NON_CF_HOST_CACHE.has(h)) return true;
+  if (
+    h.endsWith('.googlevideo.com') ||
+    h.endsWith('.googleusercontent.com') ||
+    h.endsWith('.gvt1.com') ||
+    h.endsWith('.cdninstagram.com') ||
+    h.endsWith('.fbcdn.net') ||
+    h.endsWith('.whatsapp.net') ||
+    h.endsWith('.whatsapp.com')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/* ─────────── کش DNS-over-HTTPS برای تبدیل دامنه‌های حساس گوگل به IPv4 خالص ───────────
+   کلودفلر ورکرز در اتصال مستقیم به google.com از IPv6 رنج 2a05:f480:... استفاده می‌کند که
+   توسط گوگل ایران تشخیص داده می‌شود. با تبدیل به IPv4، اتصال مستقیم از IPv4 کلودفلر انجام می‌شود. */
+const DOH_IPV4_CACHE = new Map(); // host -> { ip, exp }
+
+async function resolveIPv4DoH(hostname) {
+  const h = String(hostname || '').trim().toLowerCase();
+  if (!h || /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(':')) return null;
+  const cached = DOH_IPV4_CACHE.get(h);
+  if (cached && cached.exp > Date.now()) return cached.ip;
+  try {
+    const res = await fetch(`https://1.1.1.1/dns-query?name=${encodeURIComponent(h)}&type=A`, {
+      headers: { accept: 'application/dns-json' },
+      signal: AbortSignal.timeout(1800),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const ans = (data?.Answer || []).find((a) => a.type === 1 && /^\d{1,3}(\.\d{1,3}){3}$/.test(a.data));
+    if (ans?.data) {
+      DOH_IPV4_CACHE.set(h, { ip: ans.data, exp: Date.now() + 300_000 });
+      return ans.data;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
 
 const CF_IPV4_CIDRS = [
   [0x6715f400, 0xfffffc00], // 103.21.244.0/22
@@ -78,26 +179,139 @@ export function ipv4ToNat64(ip, prefix = '2602:fc59:b0:64::') {
 export function parseProxyEntry(entry, defaultPort = 443) {
   const s = String(entry || '').trim();
   if (!s) return null;
+  // پشتیبانی از socks5://user:pass@host:port و http://user:pass@host:port
+  const schemeMatch = /^(socks5|http):\/\/(?:([^:@]+):([^@]+)@)?([^:/]+)(?::(\d+))?$/i.exec(s);
+  if (schemeMatch) {
+    return {
+      type: schemeMatch[1].toLowerCase(),
+      username: schemeMatch[2] ? decodeURIComponent(schemeMatch[2]) : '',
+      password: schemeMatch[3] ? decodeURIComponent(schemeMatch[3]) : '',
+      hostname: schemeMatch[4].trim(),
+      port: Number(schemeMatch[5]) || (schemeMatch[1].toLowerCase() === 'socks5' ? 1080 : 8080),
+      raw: s,
+    };
+  }
   if (s.startsWith('[')) {
     const idx = s.indexOf(']');
     if (idx < 0) return null;
     const host = s.slice(0, idx + 1);
     const rest = s.slice(idx + 1);
     const port = rest.startsWith(':') ? Number(rest.slice(1)) || defaultPort : defaultPort;
-    return { hostname: host, port };
+    return { type: 'proxyip', hostname: host, port };
   }
   const lastColon = s.lastIndexOf(':');
   if (lastColon > 0 && !s.slice(0, lastColon).includes(':')) {
     const host = s.slice(0, lastColon).trim();
     const port = Number(s.slice(lastColon + 1)) || defaultPort;
-    return { hostname: host, port };
+    return { type: 'proxyip', hostname: host, port };
   }
-  return { hostname: s, port: defaultPort };
+  return { type: 'proxyip', hostname: s, port: defaultPort };
+}
+
+/* ─────────── شماره‌گیر SOCKS5 و HTTP CONNECT (مبتنی بر ZEUS v2.2.5) ─────────── */
+async function connectSocks5(spec, destHost, destPort, timeoutMs = 2800) {
+  const sock = connect({ hostname: spec.hostname, port: spec.port });
+  let timer = null;
+  const withTimeout = (p) => Promise.race([
+    p,
+    new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('socks5-timeout')), timeoutMs); }),
+  ]).finally(() => clearTimeout(timer));
+
+  try {
+    if (sock.opened) await withTimeout(sock.opened);
+    const writer = sock.writable.getWriter();
+    const reader = sock.readable.getReader();
+    try {
+      const hasAuth = Boolean(spec.username);
+      await writer.write(hasAuth ? new Uint8Array([0x05, 0x02, 0x00, 0x02]) : new Uint8Array([0x05, 0x01, 0x00]));
+      const { value: g } = await withTimeout(reader.read());
+      if (!g || g.byteLength < 2 || g[0] !== 0x05) throw new Error('socks5-bad-greeting');
+      if (g[1] === 0x02) {
+        const uBytes = enc.encode(spec.username || '');
+        const pBytes = enc.encode(spec.password || '');
+        const authReq = new Uint8Array(3 + uBytes.length + pBytes.length);
+        authReq[0] = 0x01;
+        authReq[1] = uBytes.length;
+        authReq.set(uBytes, 2);
+        authReq[2 + uBytes.length] = pBytes.length;
+        authReq.set(pBytes, 3 + uBytes.length);
+        await writer.write(authReq);
+        const { value: ar } = await withTimeout(reader.read());
+        if (!ar || ar.byteLength < 2 || ar[1] !== 0x00) throw new Error('socks5-auth-failed');
+      } else if (g[1] !== 0x00) {
+        throw new Error('socks5-unsupported-auth');
+      }
+
+      const cleanDest = String(destHost || '').replace(/^\[|\]$/g, '');
+      const ip4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(cleanDest);
+      let req;
+      if (ip4) {
+        req = new Uint8Array([0x05, 0x01, 0x00, 0x01, Number(ip4[1]), Number(ip4[2]), Number(ip4[3]), Number(ip4[4]), (destPort >> 8) & 0xff, destPort & 0xff]);
+      } else {
+        const dBytes = enc.encode(cleanDest);
+        req = new Uint8Array(5 + dBytes.length + 2);
+        req[0] = 0x05; req[1] = 0x01; req[2] = 0x00; req[3] = 0x03; req[4] = dBytes.length;
+        req.set(dBytes, 5);
+        req[5 + dBytes.length] = (destPort >> 8) & 0xff;
+        req[6 + dBytes.length] = destPort & 0xff;
+      }
+      await writer.write(req);
+      const { value: rep } = await withTimeout(reader.read());
+      if (!rep || rep.byteLength < 4 || rep[1] !== 0x00) throw new Error('socks5-connect-rejected');
+    } finally {
+      try { writer.releaseLock(); } catch { /* ignore */ }
+      try { reader.releaseLock(); } catch { /* ignore */ }
+    }
+    return sock;
+  } catch (e) {
+    try { sock.close(); } catch { /* ignore */ }
+    throw e;
+  }
+}
+
+async function connectHttpTunnel(spec, destHost, destPort, timeoutMs = 2800) {
+  const sock = connect({ hostname: spec.hostname, port: spec.port });
+  let timer = null;
+  const withTimeout = (p) => Promise.race([
+    p,
+    new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('http-proxy-timeout')), timeoutMs); }),
+  ]).finally(() => clearTimeout(timer));
+
+  try {
+    if (sock.opened) await withTimeout(sock.opened);
+    const writer = sock.writable.getWriter();
+    const reader = sock.readable.getReader();
+    try {
+      const target = `${destHost}:${destPort}`;
+      const lines = [
+        `CONNECT ${target} HTTP/1.1`,
+        `Host: ${target}`,
+        'Proxy-Connection: keep-alive',
+      ];
+      if (spec.username) {
+        const b64 = btoa(`${spec.username}:${spec.password || ''}`);
+        lines.push(`Proxy-Authorization: Basic ${b64}`);
+      }
+      lines.push('', '');
+      await writer.write(enc.encode(lines.join('\r\n')));
+      const { value } = await withTimeout(reader.read());
+      if (!value || !value.byteLength) throw new Error('http-proxy-empty');
+      const text = dec.decode(value);
+      if (!/^HTTP\/1\.[01]\s+200\b/i.test(text)) throw new Error('http-proxy-rejected');
+    } finally {
+      try { writer.releaseLock(); } catch { /* ignore */ }
+      try { reader.releaseLock(); } catch { /* ignore */ }
+    }
+    return sock;
+  } catch (e) {
+    try { sock.close(); } catch { /* ignore */ }
+    throw e;
+  }
 }
 
 /* ─────────── کش کاربران در حافظه (برای سرعت هندشیک) ─────────── */
-const USER_CACHE = new Map();       // key: uuid → { at, user }
-const PASS_CACHE = new Map();       // key: sha224(pass) → { at, user }
+const USER_CACHE = new Map();
+const PASS_CACHE = new Map();
 let ALL_USERS_AT = 0;
 
 export function invalidateUser(uuid = null) {
@@ -181,7 +395,6 @@ async function warmPasswordMap(env, trojanGlobalPass) {
   ALL_USERS_AT = Date.now();
 }
 
-/* ─────────── بررسی وضعیت کاربر (فعال/منقضی/محدود) ─────────── */
 export function userStatus(u) {
   if (!u) return 'missing';
   if (!u.is_active) return 'disabled';
@@ -195,7 +408,6 @@ export function userStatus(u) {
   return 'active';
 }
 
-/* ─────────── فیلتر دامنه (تبلیغات / NSFW / لیست سفارشی) ─────────── */
 const ADS_SUFFIX = [
   'doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'adnxs.com',
   'taboola.com', 'outbrain.com', 'criteo.com', 'scorecardresearch.com', 'zedo.com',
@@ -230,10 +442,6 @@ export function safeJsonArray(v) {
   }
 }
 
-/* ─────────── پارسر هدر VLESS ───────────
-   فرمت: [version(1)] [uuid(16)] [optLen(1)] [opt(optLen)] [cmd(1)] [port(2)] [atyp(1)] [addr...] [payload...]
-   cmd: 1 = TCP, 2 = UDP (DNS), 3 = Mux
-   atyp: 1 = IPv4(4)  2 = domain(len+str)  3 = IPv6(16) */
 function parseVlessHeader(buf) {
   if (buf.byteLength < 24) return null;
   const v = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
@@ -260,9 +468,6 @@ function parseVlessHeader(buf) {
   };
 }
 
-/* ─────────── پارسر هدر Trojan ───────────
-   فرمت: [hex(sha224(password)) (56 bytes)] [CRLF (2)] [cmd(1)] [atyp(1)] [addr...] [port(2)] [CRLF (2)] [payload...]
-   atyp (SOCKS5): 1 = IPv4  3 = domain  4 = IPv6 */
 function parseTrojanHeader(buf) {
   if (buf.byteLength < 66) return null;
   if (buf[56] !== 0x0d || buf[57] !== 0x0a) return null;
@@ -309,7 +514,6 @@ function readAddress(buf, off, atyp, { vless }) {
   return null;
 }
 
-/* ─────────── early-data از Sec-WebSocket-Protocol ─────────── */
 function readEarlyData(request) {
   const hdr = request.headers.get('sec-websocket-protocol') || '';
   if (!hdr) return null;
@@ -327,7 +531,6 @@ function readEarlyData(request) {
   }
 }
 
-/* ─────────── بررسی کاربر، دستگاه و فعال‌سازی ─────────── */
 async function authorizeRequest(env, settings, request, cred) {
   let user = null;
   if (cred.proto === 'vless') {
@@ -340,7 +543,6 @@ async function authorizeRequest(env, settings, request, cred) {
   }
   if (!user) return { ok: false, reason: 'unknown-user' };
 
-  // فعال‌سازی با اولین اتصال
   if (user.first_connect && !user.activated_at) {
     const days = Number(user.pending_days || settings.default_expiry_days || 30);
     const expires = new Date(Date.now() + days * 864e5).toISOString().slice(0, 19).replace('T', ' ');
@@ -359,7 +561,6 @@ async function authorizeRequest(env, settings, request, cred) {
   return { ok: true, user };
 }
 
-/* ─────────── هندلر UDP DNS over HTTPS (VLESS cmd=2 / پورت 53) ─────────── */
 async function handleUdpDns(ws, cred, dnsUpstream, stat) {
   let vlessHeaderSent = false;
   const upstream = dnsUpstream || 'https://1.1.1.1/dns-query';
@@ -415,74 +616,123 @@ async function handleUdpDns(ws, cred, dnsUpstream, stat) {
   return processDnsChunk;
 }
 
-/* ─────────── ساخت لیست کاندیدهای ProxyIP + NAT64 برای فالبک و خروجی کشور ─────────── */
-function buildDialCandidates(request, settings, user, hostname, port, reqUrl) {
+/* ─────────── ساخت لیست کاندیدهای اتصال خروجی (Direct / SOCKS5 / HTTP / ProxyIP / NAT64) ─────────── */
+async function buildDialCandidates(request, settings, user, hostname, port, reqUrl) {
   const candidates = [];
   const seen = new Set();
-  const add = (h, p, label) => {
-    const hostStr = String(h || '').trim();
-    const portNum = Number(p) || port || 443;
-    if (!hostStr) return;
-    const key = `${hostStr}:${portNum}`;
+
+  const addRaw = (candObj) => {
+    const key = `${candObj.type}:${candObj.hostname}:${candObj.port}:${candObj.username || ''}`;
     if (seen.has(key)) return;
     seen.add(key);
-    candidates.push({ hostname: hostStr, port: portNum, label });
+    candidates.push(candObj);
+  };
+
+  const addEntry = (rawEntry, defaultPort, label) => {
+    const parsed = parseProxyEntry(rawEntry, defaultPort);
+    if (!parsed || !parsed.hostname) return;
+    // نادیده گرفتن دامنه‌های مرده قدیمی که در دیتابیس ذخیره شده باشند
+    if (parsed.hostname.includes('cmliussss.net') || parsed.hostname === 'bpb.yousef.isegaro.com' || parsed.hostname === 'di.nscl.ir') {
+      return;
+    }
+    addRaw({ ...parsed, label });
   };
 
   const cfTarget = isCloudflareTarget(hostname);
-  const reqProxy = reqUrl?.searchParams?.get('proxyip') || '';
-  const reqCc = (reqUrl?.searchParams?.get('cc') || settings?.selected_country || '').trim().toUpperCase();
-  const selCountry = reqCc ? findCountry(reqCc) : null;
+  const geminiAi = isGeminiOrAiHost(hostname);
+  const nonCfKnown = isKnownNonCfHost(hostname);
 
-  // جمع‌آوری سرورهای خروجی کشور انتخابی و پروکسی‌های اختصاصی پنل/کاربر
+  const reqMode = (reqUrl?.searchParams?.get('mode') || '').trim().toLowerCase();
+  const reqProxy = reqUrl?.searchParams?.get('proxyip') || '';
+  const rawCc = (reqUrl?.searchParams?.get('cc') || settings?.selected_country || '').trim().toUpperCase();
+  const isDirectMode = reqMode === 'direct' || rawCc === 'DIRECT' || rawCc === 'NONE';
+  const selCountry = (!isDirectMode && rawCc) ? findCountry(rawCc) : null;
+
+  // ۱) اگر مقصد Google Gemini یا سرویس‌های هوش مصنوعی (ChatGPT, Claude, AI Studio) است:
+  // همیشه اول از پروکسی‌های SOCKS5/HTTP تاییدشده آمریکا/کانادا/اروپا عبور بده تا خطای ریجن ندهد!
+  if (geminiAi) {
+    const countryVips = selCountry?.vipProxies || COUNTRY_VIP_PROXIES[selCountry?.cc] || [];
+    for (const v of [...countryVips, ...GEMINI_VIP_PROXIES]) {
+      addEntry(v, 1080, 'gemini-vip');
+    }
+    // فالبک دوم برای Gemini/Google: تبدیل دامنه به آی‌پی IPv4 از طریق DoH تا کلودفلر از IPv6 ایران (2a05:f480) استفاده نکند
+    const v4Ip = await resolveIPv4DoH(hostname);
+    if (v4Ip) {
+      addRaw({ type: 'direct', hostname: v4Ip, port, label: 'direct-ipv4' });
+    }
+    addRaw({ type: 'direct', hostname, port, label: 'direct' });
+    return candidates;
+  }
+
+  // ۲) اگر حالت «اتصال مستقیم 🌐 بدون پروکسی خروجی» انتخاب شده و مقصد کلودفلر نیست:
+  // مستقیماً به مقصد وصل شو (کم‌ترین پینگ و بالاترین سرعت دانلود روی اینستاگرام، یوتیوب و تلگرام)
+  if (isDirectMode && !cfTarget) {
+    if (hostname.endsWith('.google.com') || hostname === 'google.com') {
+      const v4Ip = await resolveIPv4DoH(hostname);
+      if (v4Ip) addRaw({ type: 'direct', hostname: v4Ip, port, label: 'direct-ipv4' });
+    }
+    addRaw({ type: 'direct', hostname, port, label: 'direct' });
+    for (const raw of DEFAULT_PROXY_IPS) addEntry(raw, 443, 'pool-proxy');
+    return candidates;
+  }
+
+  // ۳) جمع‌آوری پروکسی‌های کشور انتخابی و پروکسی‌های اختصاصی
   const countryProxies = [
     ...(reqProxy ? reqProxy.split(/[\s,]+/) : []),
     ...(selCountry?.proxies || []),
     ...safeJsonArray(user?.proxies),
-    ...safeJsonArray(settings?.proxy_ips),
+    ...(!isDirectMode ? safeJsonArray(settings?.proxy_ips) : []),
   ].filter(Boolean);
 
-  // ۱) اگر کشور خاصی انتخاب شده (یا پروکسی اختصاصی داریم) و پورت 443 است (یا مقصد کلودفلر است)،
-  // اول از سرور خروجی همان کشور عبور بده تا آی‌پی و کشور خروجی واقعی کاربر تغییر کند!
+  // ۴) اگر مقصد در لیست دامنه‌های غیرکلودفلر شناخته شده است (مثل google.com، instagram.com، youtube.com)،
+  // ارسال آن به ProxyIP کلودفلر همیشه TLS Alert 0x15 برمی‌گرداند و باعث پرش پینگ می‌شود!
+  // پس برای این مقاصد مستقیماً به مقصد (یا برای google.com به IPv4 آن) وصل شو.
+  if (nonCfKnown && !cfTarget) {
+    if (hostname.endsWith('.google.com') || hostname === 'google.com') {
+      const v4Ip = await resolveIPv4DoH(hostname);
+      if (v4Ip) addRaw({ type: 'direct', hostname: v4Ip, port, label: 'direct-ipv4' });
+    }
+    addRaw({ type: 'direct', hostname, port, label: 'direct' });
+    return candidates;
+  }
+
+  // ۵) اگر کشور خاصی انتخاب شده و مقصد کلودفلر یا سایت عمومی ناشناخته است:
+  // حداکثر ۲ سرور خروجی اول کشور را امتحان کن؛ اگر 0x15 برگشت، بلافاصله در حلقه شکسته و مستقیم وصل می‌شود
   if (countryProxies.length && (port === 443 || cfTarget)) {
-    for (const raw of countryProxies) {
-      const parsed = parseProxyEntry(raw, 443);
-      if (parsed) add(parsed.hostname, parsed.port, 'country-proxy');
+    for (const raw of countryProxies.slice(0, 2)) {
+      addEntry(raw, 443, 'country-proxy');
     }
   }
 
-  // ۲) اگر مقصد آی‌پی خود کلودفلر نیست، اتصال مستقیم را هم به عنوان فالبک فوری بگذار
+  // ۶) اتصال مستقیم به عنوان فالبک فوری
   if (!cfTarget) {
-    add(hostname, port, 'direct');
+    addRaw({ type: 'direct', hostname, port, label: 'direct' });
   }
 
-  // ۳) اگر پورت غیر 443 بود، پروکسی‌های اختصاصی را بعد از اتصال مستقیم بگذار
-  for (const raw of countryProxies) {
-    const parsed = parseProxyEntry(raw, port);
-    if (parsed) add(parsed.hostname, parsed.port, 'user-proxy');
+  // ۷) اگر پورت غیر 443 بود، پروکسی‌های اختصاصی را بعد از اتصال مستقیم بگذار
+  for (const raw of countryProxies.slice(0, 2)) {
+    addEntry(raw, port, 'user-proxy');
   }
 
-  // ۴) NAT64 (اگر مقصد IPv4 است — بسیار سریع و بدون نیاز به سرور واسط)
+  // ۸) NAT64 (اگر مقصد IPv4 است)
   for (const pref of NAT64_PREFIXES) {
     const v6 = ipv4ToNat64(hostname, pref);
-    if (v6) add(v6, port, 'nat64');
+    if (v6) addRaw({ type: 'direct', hostname: v6, port, label: 'nat64' });
   }
 
-  // ۵) استخر جهانی ProxyIP روی پورت 443
+  // ۹) استخر جهانی ProxyIP روی پورت 443 (مخصوص مقاصد کلودفلر)
   for (const raw of DEFAULT_PROXY_IPS) {
-    const parsed = parseProxyEntry(raw, 443);
-    if (parsed) add(parsed.hostname, parsed.port, 'pool-proxy');
+    addEntry(raw, 443, 'pool-proxy');
   }
 
-  // ۶) اگر مقصد کلودفلر بود ولی هیچ فالبکی جواب نداد، در آخر اتصال مستقیم را هم بگذار
   if (cfTarget) {
-    add(hostname, port, 'direct-last');
+    addRaw({ type: 'direct', hostname, port, label: 'direct-last' });
   }
 
   return candidates;
 }
 
-/* ─────────── فالبک HTTP روی لبه برای مقاصد کلودفلر روی پورت 80 (مثل cp.cloudflare.com/generate_204) ─────────── */
+/* ─────────── فالبک HTTP روی لبه برای مقاصد کلودفلر روی پورت 80 ─────────── */
 async function tryHttpFetchFallback(ws, cred, chunks, stat, getHeaderSent, setHeaderSent) {
   if (!chunks.length) return false;
   let totalLen = 0;
@@ -543,7 +793,6 @@ async function tryHttpFetchFallback(ws, cred, chunks, stat, getHeaderSent, setHe
 
 /* ─────────── هندلر اصلی WebSocket ─────────── */
 export async function handleProxy(request, env, ctx, url, settings) {
-  // اگر مسیر اختصاصی تنظیم شده و تطابق ندارد، صفحه‌ی پوششی بده
   const cfgPath = (settings.path || '').trim();
   if (cfgPath && cfgPath !== '/' && !url.pathname.startsWith(cfgPath)) {
     return serveDecoy(env, settings);
@@ -561,7 +810,44 @@ export async function handleProxy(request, env, ctx, url, settings) {
   let hasIncomingData = false;
   let udpHandler = null;
   const stat = { up: 0, down: 0, counted: false };
+
+  /* ─────────── صف سریال‌شده‌ی بدون ریزش برای TLS Fragmentation ایرانسل و مخابرات ───────────
+     وقتی کلاینت v2rayNG/MahsaNG/Hiddify قابلیت TLS Fragment را روشن می‌کند (مثلاً قطعات ۱۰ تا ۲۰ بایتی)،
+     یک پکت ClientHello به حدود ۳۵ فریم WebSocket شکسته می‌شود.
+     نگهداری تا ۲۵۶ قطعه (یا ۶۴ کیلوبایت) و نوشتن ترتیبی با اشاره‌گر writtenCount تضمین می‌کند
+     که هیچ بایتی گم یا تکرار نشود و در صورت فالبک به کاندید بعدی، کل ClientHello از بایت ۰ ارسال گردد! */
   const initialClientChunks = [];
+  let initialClientBytes = 0;
+  let writtenCount = 0;
+  let writeChain = Promise.resolve();
+
+  const flushUpstream = () => {
+    writeChain = writeChain.then(async () => {
+      while (remoteWriter && writtenCount < initialClientChunks.length) {
+        const w = remoteWriter;
+        const idx = writtenCount++;
+        const chunk = initialClientChunks[idx];
+        if (chunk?.byteLength) {
+          await w.write(chunk);
+        }
+      }
+    }).catch(() => {});
+    return writeChain;
+  };
+
+  const enqueueClientChunk = async (chunk) => {
+    if (!chunk?.byteLength) return;
+    if (!hasIncomingData && initialClientChunks.length < 256 && initialClientBytes < 65536) {
+      initialClientChunks.push(chunk);
+      initialClientBytes += chunk.byteLength;
+      await flushUpstream();
+    } else if (remoteWriter) {
+      writeChain = writeChain.then(async () => {
+        if (remoteWriter) await remoteWriter.write(chunk);
+      }).catch(() => {});
+      await writeChain;
+    }
+  };
 
   const flushStats = async () => {
     if (!user || (stat.up === 0 && stat.down === 0)) return;
@@ -583,16 +869,20 @@ export async function handleProxy(request, env, ctx, url, settings) {
   const pumpDownstream = async (sock, cred, cand) => {
     const reader = sock.readable.getReader();
     let gotBytes = false;
+    let tlsAlert = false;
     try {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         if (value && value.byteLength) {
           // اگر کاندید فعلی ProxyIP است و کلاینت TLS ClientHello (0x16) فرستاده
-          // ولی سرور ProxyIP با TLS Alert (0x15 = عدم تطابق دامنه) پاسخ داد،
-          // این Alert را دور بریز و سراغ اتصال مستقیم یا ProxyIP بعدی برو!
-          if (!gotBytes && cand?.label?.includes('proxy') && cred.port === 443 && initialClientChunks[0]?.[0] === 0x16 && value[0] === 0x15) {
-            return false;
+          // ولی سرور ProxyIP با TLS Alert (0x15 = عدم تطابق دامنه غیرکلودفلر) پاسخ داد:
+          if (!gotBytes && cand?.type === 'proxyip' && cred.port === 443 && initialClientChunks[0]?.[0] === 0x16 && value[0] === 0x15) {
+            tlsAlert = true;
+            if (cred.hostname && !isCloudflareTarget(cred.hostname)) {
+              NON_CF_HOST_CACHE.add(cred.hostname.toLowerCase());
+            }
+            return { gotBytes: false, tlsAlert: true };
           }
           gotBytes = true;
           hasIncomingData = true;
@@ -612,7 +902,7 @@ export async function handleProxy(request, env, ctx, url, settings) {
     } finally {
       try { reader.releaseLock(); } catch { /* ignore */ }
     }
-    return gotBytes;
+    return { gotBytes, tlsAlert };
   };
 
   const connectAndRelay = async (cred) => {
@@ -624,46 +914,60 @@ export async function handleProxy(request, env, ctx, url, settings) {
       }
     }
 
-    const candidates = buildDialCandidates(request, settings, user, cred.hostname, cred.port, url);
+    const candidates = await buildDialCandidates(request, settings, user, cred.hostname, cred.port, url);
+    let skipProxyIp = false;
+
     for (let i = 0; i < candidates.length; i++) {
       const cand = candidates[i];
+      if (skipProxyIp && cand.type === 'proxyip' && cand.label === 'country-proxy') {
+        continue;
+      }
       let sock = null;
       try {
-        sock = connect({ hostname: cand.hostname, port: cand.port });
-        if (sock.opened) {
-          const openedOk = await Promise.race([
-            sock.opened.then(() => true).catch(() => false),
-            new Promise((r) => setTimeout(() => r(false), i === 0 ? 3500 : 2500)),
-          ]);
-          if (!openedOk) {
-            try { sock.close(); } catch { /* ignore */ }
-            continue;
+        if (cand.type === 'socks5') {
+          sock = await connectSocks5(cand, cred.hostname, cred.port, 2800);
+        } else if (cand.type === 'http') {
+          sock = await connectHttpTunnel(cand, cred.hostname, cred.port, 2800);
+        } else {
+          sock = connect({ hostname: cand.hostname, port: cand.port });
+          if (sock.opened) {
+            const openedOk = await Promise.race([
+              sock.opened.then(() => true).catch(() => false),
+              new Promise((r) => setTimeout(() => r(false), i === 0 ? 2500 : 2000)),
+            ]);
+            if (!openedOk) {
+              try { sock.close(); } catch { /* ignore */ }
+              continue;
+            }
           }
         }
+
+        // بازنشانی اشاره‌گر صف ارسال برای سوکت جدید و نوشتن تمام قطعات انباشته‌شده از بایت صفر
+        writtenCount = 0;
         remote = sock;
         remoteWriter = sock.writable.getWriter();
+        await flushUpstream();
 
-        // ارسال payload اولیه (و هر داده‌ای که کلاینت قبل از برقراری فرستاده)
-        for (const chunk of initialClientChunks) {
-          if (chunk?.byteLength) await remoteWriter.write(chunk);
-        }
-
-        // خواندن از سوکت مقصد؛ اگر بلافاصله با ۰ بایت یا TLS Alert بسته شد، سراغ کاندید بعدی برو
-        const gotBytes = await pumpDownstream(sock, cred, cand);
+        const { gotBytes, tlsAlert } = await pumpDownstream(sock, cred, cand);
         if (gotBytes) {
           try { ws.close(1000, 'normal'); } catch { /* ignore */ }
           return;
         }
-        // ۰ بایت دریافت شد → سوکت فعلی را ببند و با ProxyIP/NAT64 بعدی تلاش کن
-        try { remoteWriter.releaseLock(); } catch { /* ignore */ }
+        // اگر ProxyIP با TLS Alert 0x15 پاسخ داد، بقیه ProxyIPهای کشور را رد کن و مستقیم وصل شو!
+        if (tlsAlert) {
+          skipProxyIp = true;
+        }
+        remote = null;
+        const oldWriter = remoteWriter;
+        remoteWriter = null;
+        try { oldWriter?.releaseLock?.(); } catch { /* ignore */ }
         try { sock.close(); } catch { /* ignore */ }
-        remote = null;
-        remoteWriter = null;
       } catch {
-        try { remoteWriter?.releaseLock?.(); } catch { /* ignore */ }
-        try { sock?.close?.(); } catch { /* ignore */ }
         remote = null;
+        const oldWriter = remoteWriter;
         remoteWriter = null;
+        try { oldWriter?.releaseLock?.(); } catch { /* ignore */ }
+        try { sock?.close?.(); } catch { /* ignore */ }
       }
     }
 
@@ -689,13 +993,11 @@ export async function handleProxy(request, env, ctx, url, settings) {
     }
     user = auth.user;
 
-    // ثبت اتصال در پس‌زمینه تا هندشیک WebSocket کند نشود
     if (!stat.counted) {
       stat.counted = true;
       ctx.waitUntil(registerConnection(env, request, user).catch(() => {}));
     }
 
-    // اگر درخواست UDP DNS (cmd=2 یا پورت 53 روی UDP) بود، از طریق DoH پاسخ بده
     if (cred.cmd === 2 || (cred.port === 53 && cred.proto === 'vless' && cred.cmd !== 1)) {
       udpHandler = await handleUdpDns(ws, cred, settings.dns_upstream, stat);
       return;
@@ -703,6 +1005,7 @@ export async function handleProxy(request, env, ctx, url, settings) {
 
     if (cred.payload?.byteLength) {
       initialClientChunks.push(cred.payload);
+      initialClientBytes += cred.payload.byteLength;
     }
 
     ctx.waitUntil(
@@ -733,19 +1036,16 @@ export async function handleProxy(request, env, ctx, url, settings) {
         await udpHandler(buf);
         return;
       }
-      if (!hasIncomingData && initialClientChunks.length < 8) {
-        initialClientChunks.push(buf);
-      }
-      if (remoteWriter) {
-        await remoteWriter.write(buf);
-      }
+      await enqueueClientChunk(buf);
     } catch {
       try { ws.close(1011, 'write-failed'); } catch { /* ignore */ }
     }
   });
 
   const cleanup = () => {
-    try { remoteWriter?.close?.(); } catch { /* ignore */ }
+    const w = remoteWriter;
+    remoteWriter = null;
+    try { w?.close?.(); } catch { /* ignore */ }
     try { remote?.close?.(); } catch { /* ignore */ }
     ctx.waitUntil(flushStats());
   };
