@@ -138,15 +138,14 @@ export const DEAD_BYOIP_BLACKLIST = new Set([
 
 /** پروکسی‌های SOCKS5/HTTP تاییدشده (IPv4 خالص آمریکا و اروپا) برای باز کردن بدون خطای Google Gemini (وب و اپ اندروید) */
 export const GEMINI_VIP_PROXIES = [
-  'socks5://67.201.33.10:25283',
+  // خروجی واقعی آمریکا (New York, AS212238) — Gemini HTTP 200 با TLS معتبر
   'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
-  'socks5://proxy_d5f92d985c69:vZ0Tx20QiN_QMSUzcDD4WQ@proxy.viktorarsov.com:1080',
+  // فالبک‌های کانادا با Gemini HTTP 200 و TLS معتبر
   'socks5://38.49.210.79:40000',
   'socks5://pqyiblro:BW6cuhhS2U0r@132.145.110.34:1080',
   'socks5://jhreyayp:YtvoFAC0jMDx@192.18.152.237:1080',
-  'socks5://5.255.117.127:1080',
+  // فالبک اروپا با TLS معتبر
   'socks5://31.220.40.59:5080',
-  'http://s6102032620021:fahfah090908@202.28.17.5:8080',
 ];
 
 const V4_GLOBAL = OMNI_QOS_V4.slice(0, 10);
@@ -202,9 +201,7 @@ const REAL_EXIT_PROXIES = {
 /** پروکسی‌های SOCKS5/HTTP اختصاصی کشورها (خروجی IPv4 خالص) */
 export const COUNTRY_VIP_PROXIES = {
   US: [
-    'socks5://67.201.33.10:25283',
     'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
-    'socks5://proxy_d5f92d985c69:vZ0Tx20QiN_QMSUzcDD4WQ@proxy.viktorarsov.com:1080',
   ],
   CA: [
     'socks5://38.49.210.79:40000',

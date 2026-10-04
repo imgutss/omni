@@ -408,7 +408,8 @@ export async function handleApi(request, env, ctx, url) {
       };
     });
 
-    const applicable = discovered.filter((c) => c.alive && c.verified !== 'client-required');
+    // فقط تیغه‌هایی که قبلاً روی خط واقعی ایران تایید شده‌اند اجازهٔ اعمال خودکار دارند؛ پینگ ۲–۶ms دیتاسنتر Edge معیار خط کاربر نیست.
+    const applicable = discovered.filter((c) => c.alive && c.verified === 'iran-line');
     if (body.apply && applicable.length) {
       const topAddrs = applicable.map((d) => d.addr).slice(0, 12);
       if (userRow) {

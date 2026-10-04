@@ -10,7 +10,7 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "omni-db"
-database_id = "8e605a28-6c17-4b7c-bc2d-3c417ba768cf"
+database_id = "9660e603-a4e9-4b2c-8071-788e2539e618"
 
 [vars]
 PANEL_NAME = "Omni"
