@@ -97,6 +97,73 @@ export function normalizeAddr(v) {
 
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
 
+/* ─────────────── Causal Mesh: تاریخچه و امتیازدهی واقعی مسیرها ─────────────── */
+let MESH_SCHEMA_READY = false;
+async function ensureMeshSchema(env) {
+  if (MESH_SCHEMA_READY) return;
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS mesh_measurements(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL, mode TEXT NOT NULL, cc TEXT NOT NULL,
+      proxy TEXT, alive INTEGER DEFAULT 0, edge_ms INTEGER, access_ms INTEGER,
+      colo TEXT, created_at TEXT DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS mesh_policies(
+      mode TEXT PRIMARY KEY, cc TEXT NOT NULL, proxy TEXT, score REAL,
+      updated_at TEXT DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_mesh_mode_cc_at
+      ON mesh_measurements(mode, cc, created_at)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_mesh_run
+      ON mesh_measurements(run_id)`),
+  ]);
+  MESH_SCHEMA_READY = true;
+}
+
+function percentile(values, pct) {
+  const a = values.filter(Number.isFinite).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const i = Math.min(a.length - 1, Math.max(0, Math.ceil((pct / 100) * a.length) - 1));
+  return a[i];
+}
+
+function meshHistoryStats(rows = []) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const cc = String(row.cc || '').toUpperCase();
+    if (!cc) continue;
+    if (!grouped.has(cc)) grouped.set(cc, []);
+    grouped.get(cc).push(row);
+  }
+  const out = new Map();
+  for (const [cc, list] of grouped) {
+    const alive = list.filter((r) => Number(r.alive) === 1 && Number(r.edge_ms) > 0);
+    const ms = alive.map((r) => Number(r.edge_ms));
+    const p50 = percentile(ms, 50);
+    const p95 = percentile(ms, 95);
+    out.set(cc, {
+      samples: list.length,
+      successes: alive.length,
+      success_rate: list.length ? Math.round((alive.length / list.length) * 1000) / 10 : 0,
+      p50,
+      p95,
+      jitter_span: p50 != null && p95 != null ? Math.max(0, p95 - p50) : null,
+      last_at: list[0]?.created_at || null,
+    });
+  }
+  return out;
+}
+
+function meshScore(mode, latest, history) {
+  if (!latest?.alive || !(latest.edge_ms > 0)) return null;
+  const h = history || { samples: 0, success_rate: 100, p50: latest.edge_ms, p95: latest.edge_ms, jitter_span: 0 };
+  const p50 = h.p50 ?? latest.edge_ms;
+  const p95 = h.p95 ?? latest.edge_ms;
+  const jitter = h.jitter_span ?? Math.max(0, p95 - p50);
+  const failure = Math.max(0, 100 - (h.success_rate ?? 100));
+  if (mode === 'game') return Math.round((latest.edge_ms * 0.28 + p50 * 0.22 + p95 * 0.5 + jitter * 1.8 + failure * 4) * 10) / 10;
+  if (mode === 'ai') return Math.round((latest.edge_ms * 0.35 + p50 * 0.3 + p95 * 0.35 + jitter * 0.8 + failure * 5) * 10) / 10;
+  return Math.round((latest.edge_ms * 0.42 + p50 * 0.38 + p95 * 0.2 + jitter * 0.5 + failure * 3) * 10) / 10;
+}
+
 const TOKEN_USER_ALIASES = {
   'JaNLkq-G2hVuoVoD2gJcL0Mu': 'Mmm',
   'sBERuL-cyzWCUijFyv3oo1AT': 'Mmm',
@@ -494,6 +561,108 @@ export async function handleApi(request, env, ctx, url) {
   const account = await currentAccount(env, request);
   if (!account) return bad('unauthorized', 'ابتدا وارد شوید', 401);
   const settings = await settingsCached(env);
+
+  /* ───────── Causal Mesh Brain: race / history / proof-gated apply ───────── */
+  if (p.startsWith('/api/mesh/')) await ensureMeshSchema(env);
+
+  if (p === '/api/mesh/race' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const mode = ['game', 'web', 'ai'].includes(body.mode) ? body.mode : 'web';
+    const requested = Array.isArray(body.ccs)
+      ? [...new Set(body.ccs.map((x) => String(x || '').toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)))].slice(0, 40)
+      : null;
+    const accessRaw = Number(body.access_rtt);
+    const accessMs = Number.isFinite(accessRaw) && accessRaw >= 10 && accessRaw <= 5000 ? Math.round(accessRaw) : null;
+    const accessColo = String(body.access_colo || request?.cf?.colo || '').slice(0, 12) || null;
+    const runId = randomToken(12);
+    const results = await scanAllCountries({
+      ccs: requested,
+      onlyPrimary: false,
+      concurrency: Math.max(2, Math.min(16, Number(body.concurrency || 12))),
+      timeoutMs: Math.max(800, Math.min(5000, Number(body.timeout || 2200))),
+    });
+
+    if (results.length) {
+      await env.DB.batch(results.map((r) => env.DB.prepare(
+        `INSERT INTO mesh_measurements(run_id,mode,cc,proxy,alive,edge_ms,access_ms,colo)
+         VALUES(?,?,?,?,?,?,?,?)`
+      ).bind(runId, mode, r.cc, r.proxy || null, r.alive ? 1 : 0,
+        r.edge_ms > 0 ? Math.round(r.edge_ms) : null, accessMs, accessColo)));
+    }
+
+    const histRows = await env.DB.prepare(
+      `SELECT cc,alive,edge_ms,access_ms,created_at FROM mesh_measurements
+       WHERE mode = ? AND created_at >= datetime('now','-7 days')
+       ORDER BY created_at DESC LIMIT 3000`
+    ).bind(mode).all();
+    const history = meshHistoryStats(histRows.results || []);
+    const ranked = results.map((r) => {
+      const h = history.get(r.cc) || null;
+      return {
+        ...r,
+        run_id: runId,
+        access_ms: accessMs,
+        combined_floor_ms: r.alive && r.edge_ms > 0 && accessMs ? Math.round(r.edge_ms + accessMs) : null,
+        history: h,
+        score: meshScore(mode, r, h),
+        service_proof: mode === 'ai' ? 'pending' : 'not-required',
+      };
+    }).sort((a, b) => {
+      if (a.score == null !== (b.score == null)) return a.score == null ? 1 : -1;
+      return (a.score ?? 999999) - (b.score ?? 999999);
+    });
+
+    ctx?.waitUntil?.(env.DB.prepare(`DELETE FROM mesh_measurements WHERE created_at < datetime('now','-14 days')`).run().catch(() => {}));
+    await logEvent(env, 'info', `Causal Mesh ${mode}: ${ranked.filter((r) => r.alive).length}/${ranked.length} خروجی پاسخ‌گو`);
+    return json({
+      ok: true, run_id: runId, mode, access_ms: accessMs, access_colo: accessColo,
+      measured_at: new Date().toISOString(), results: ranked,
+    });
+  }
+
+  if (p === '/api/mesh/history' && method === 'GET') {
+    const mode = ['game', 'web', 'ai'].includes(url.searchParams.get('mode')) ? url.searchParams.get('mode') : 'web';
+    const days = Math.max(1, Math.min(30, Number(url.searchParams.get('days') || 7)));
+    const rows = await env.DB.prepare(
+      `SELECT cc,alive,edge_ms,access_ms,proxy,colo,created_at FROM mesh_measurements
+       WHERE mode = ? AND created_at >= datetime('now', ?)
+       ORDER BY created_at DESC LIMIT 5000`
+    ).bind(mode, `-${days} days`).all();
+    const stats = [...meshHistoryStats(rows.results || []).entries()].map(([cc, x]) => ({ cc, ...x }))
+      .sort((a, b) => (b.success_rate - a.success_rate) || ((a.p95 ?? 999999) - (b.p95 ?? 999999)));
+    const policies = await env.DB.prepare('SELECT mode,cc,proxy,score,updated_at FROM mesh_policies ORDER BY mode').all();
+    return json({ ok: true, mode, days, stats, policies: policies.results || [] });
+  }
+
+  if (p === '/api/mesh/apply' && method === 'POST') {
+    const body = await request.json().catch(() => ({}));
+    const mode = ['game', 'web', 'ai'].includes(body.mode) ? body.mode : 'web';
+    const cc = String(body.cc || '').toUpperCase();
+    const country = findCountry(cc);
+    if (!country?.verifiedExit) return bad('unverified_country', 'این کشور خروجی تأییدشده ندارد', 409);
+    const proof = await env.DB.prepare(
+      `SELECT cc,proxy,edge_ms,created_at FROM mesh_measurements
+       WHERE mode = ? AND cc = ? AND alive = 1 AND edge_ms > 0
+         AND created_at >= datetime('now','-15 minutes')
+       ORDER BY created_at DESC LIMIT 1`
+    ).bind(mode, cc).first();
+    if (!proof) return bad('fresh_proof_required', 'ابتدا مسابقه واقعی این مسیر را اجرا کنید', 409);
+    const proxy = String(proof.proxy || '').trim();
+    if (!proxy) return bad('missing_proxy', 'خروجی سالم اما آدرس قابل اعمال ندارد', 409);
+    const hRows = await env.DB.prepare(
+      `SELECT cc,alive,edge_ms,created_at FROM mesh_measurements
+       WHERE mode = ? AND cc = ? AND created_at >= datetime('now','-7 days') ORDER BY created_at DESC LIMIT 300`
+    ).bind(mode, cc).all();
+    const h = meshHistoryStats(hRows.results || []).get(cc) || null;
+    const score = meshScore(mode, { alive: true, edge_ms: Number(proof.edge_ms) }, h);
+    await putSettingsBulk(env, { selected_country: cc, proxy_ips: [proxy] });
+    await env.DB.prepare(
+      `INSERT INTO mesh_policies(mode,cc,proxy,score,updated_at) VALUES(?,?,?,?,datetime('now'))
+       ON CONFLICT(mode) DO UPDATE SET cc=excluded.cc,proxy=excluded.proxy,score=excluded.score,updated_at=datetime('now')`
+    ).bind(mode, cc, proxy, score).run();
+    await logEvent(env, 'info', `Causal Mesh ${mode}: خروجی ${cc} با اثبات تازه اعمال شد`);
+    return json({ ok: true, mode, cc, proxy, score, history: h, proof_at: proof.created_at });
+  }
 
   /* ───────── Overview ───────── */
   if (p === '/api/overview') {

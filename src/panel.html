@@ -4641,8 +4641,8 @@ function MeshResults(){
     <div class="mesh-country-row" data-best="${i===0&&r.alive}">
       <div><b>${r.flag||"🌐"} ${a(r.fa||r.cc)}</b><div class="muted mono" style="font-size:10.5px">${a(r.cc)} · ${a(r.colo||"—")}</div></div>
       <div><span class="muted" style="font-size:10px;display:block">Probe خروجی</span><b dir="ltr" style="color:${r.alive?it(r.edge_ms):"var(--danger)"}">${r.alive?r.edge_ms+" ms":"قطع"}</b></div>
-      <div><span class="muted" style="font-size:10px;display:block">ورودی خط</span><b dir="ltr">${MESH.line?MESH.line.rtt+" ms":"—"}</b></div>
-      <div><span class="muted" style="font-size:10px;display:block">کف ترکیبی؛ تخمین، نه RTT واقعی</span><b dir="ltr">${r.alive&&MESH.line?(r.edge_ms+MESH.line.rtt)+" ms":"—"}</b></div>
+      <div><span class="muted" style="font-size:10px;display:block">P95 هفت‌روزه</span><b dir="ltr">${r.history?.p95!=null?r.history.p95+" ms":"—"}</b></div>
+      <div><span class="muted" style="font-size:10px;display:block">پایداری / امتیاز علّی</span><b dir="ltr">${r.history?.success_rate!=null?r.history.success_rate+"% · ":""}${r.score??"—"}</b><small class="muted">کف ترکیبی ${r.combined_floor_ms??"—"}ms؛ تخمینی</small></div>
       <button class="btn btn-sm ${i===0&&r.alive?"btn-primary":""}" type="button" data-action="omni-mesh-apply" data-cc="${a(r.cc)}" ${r.alive?"":"disabled"}>انتخاب</button>
     </div>`).join("")}</div>`;
 }
@@ -4655,10 +4655,11 @@ async function MeshRace(e){
     if(MESH.country==="DIRECT"){
       MESH.line=await measureLineRtt();MESH.results=[];MESH.lastRun=new Date().toLocaleTimeString("fa-IR");return;
     }
-    let [line,res]=await Promise.all([measureLineRtt(),x("POST","/api/diag/scan-countries",{ccs:pool.map(c=>c.cc),onlyPrimary:!1,concurrency:12,timeout:2200})]);
-    MESH.line=line;
-    MESH.results=(Array.isArray(res?.results)?res.results:[]).map(r=>({...r,edge_ms:Number(r.edge_ms||r.ms||0)})).filter(r=>r.alive&&r.edge_ms>0).sort((x,y)=>x.edge_ms-y.edge_ms);
-    MESH.lastRun=new Date().toLocaleTimeString("fa-IR");
+    let line=await measureLineRtt();
+    let res=await x("POST","/api/mesh/race",{mode:MESH.mode,ccs:pool.map(c=>c.cc),access_rtt:line.rtt,access_colo:line.colo,concurrency:12,timeout:2200});
+    MESH.line={rtt:res?.access_ms||line.rtt,colo:res?.access_colo||line.colo};
+    MESH.results=(Array.isArray(res?.results)?res.results:[]).filter(r=>r.alive&&r.edge_ms>0);
+    MESH.lastRun=new Date(res?.measured_at||Date.now()).toLocaleTimeString("fa-IR");
     if(!MESH.results.length)y("هیچ خروجی سالمی در این منطقه تأیید نشد","warn");
   }catch(err){y(String(err?.message||"مسابقه مسیر ناموفق بود"),"err")}
   finally{MESH.running=!1;e.rerenderView("mesh")}
@@ -4667,10 +4668,10 @@ async function MeshApply(e,cc){
   let c=COUNTRY_MAP.get(cc);if(!c||!c.verifiedExit)return y("این کشور هنوز خروجی تأییدشده ندارد","warn");
   let tested=MESH.results.find(r=>r.cc===cc&&r.alive);
   if(!tested)return y("ابتدا این خروجی را در مسابقه واقعی تأیید کن","warn");
-  let first=tested.proxy||tested.host||(c.proxies||[])[0];
-  let patch={selected_country:cc,proxy_ips:first?[String(first).includes(":")?String(first):`${first}:443`]:[]};
-  let saved=await b.saveSettings(patch);e.setSettings(saved?.settings||{...e.settings(),...patch});
-  MESH.country=cc;y(`${c.flag} خروجی ${c.fa} از نتیجه تأییدشده اعمال شد`,"ok");e.rerenderView("mesh");
+  let applied=await x("POST","/api/mesh/apply",{mode:MESH.mode,cc});
+  let patch={selected_country:applied.cc,proxy_ips:[applied.proxy]};
+  e.setSettings({...e.settings(),...patch});
+  MESH.country=cc;y(`${c.flag} خروجی ${c.fa} با اثبات تازه و امتیاز ${applied.score??"—"} اعمال شد`,"ok");e.rerenderView("mesh");
 }
 
 function ze(e){

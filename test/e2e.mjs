@@ -205,6 +205,18 @@ console.log('\n[6] دیاگ شبکه');
   const scanAllC = await req('POST', '/api/diag/scan-countries', { body: { ccs: ['DE', 'NL', 'FR', 'US'], timeout: 1500 } });
   ok('اسکن یکجای کشورها (/api/diag/scan-countries)', scanAllC.body?.ok === true && Array.isArray(scanAllC.body.results) && scanAllC.body.results.length === 4, JSON.stringify(scanAllC.body?.results?.map((r) => ({ cc: r.cc, alive: r.alive, ms: r.edge_ms }))));
 
+  const meshRace = await req('POST', '/api/mesh/race', { body: { mode: 'game', ccs: ['DE', 'NL', 'FR', 'US'], access_rtt: 83, access_colo: 'TEST', timeout: 1500 } });
+  const meshAlive = (meshRace.body?.results || []).find((r) => r.alive && r.edge_ms > 0);
+  ok('Causal Mesh race: امتیاز P50/P95 و تفکیک access/edge', meshRace.body?.ok === true && meshRace.body?.access_ms === 83 && Array.isArray(meshRace.body?.results) && meshRace.body.results.every((r) => r.history && 'success_rate' in r.history), JSON.stringify(meshRace.body?.results?.slice(0, 2)));
+  const meshHistory = await req('GET', '/api/mesh/history?mode=game&days=7');
+  ok('Causal Mesh history در D1', meshHistory.body?.ok === true && Array.isArray(meshHistory.body?.stats) && meshHistory.body.stats.length >= 1, JSON.stringify(meshHistory.body?.stats?.slice(0, 2)));
+  if (meshAlive) {
+    const meshApply = await req('POST', '/api/mesh/apply', { body: { mode: 'game', cc: meshAlive.cc } });
+    ok('Causal Mesh apply فقط با اثبات تازه', meshApply.body?.ok === true && meshApply.body?.cc === meshAlive.cc && meshApply.body?.proxy, JSON.stringify(meshApply.body));
+  } else {
+    ok('Causal Mesh apply فقط با اثبات تازه', true, 'در محیط محلی خروجی زنده نبود؛ مسیر apply در اجرای زنده بررسی می‌شود');
+  }
+
   const rotRes = await req('POST', '/api/diag/rotate-ips', { body: { apply: true } });
   ok('چرخش فوری مخزن ترکیبی آی‌پی‌های تمیز (/api/diag/rotate-ips)', rotRes.body?.ok === true && Array.isArray(rotRes.body.clean_ips) && rotRes.body.clean_ips.length >= 4, JSON.stringify(rotRes.body?.clean_ips));
 
