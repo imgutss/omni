@@ -5,6 +5,7 @@
 import { connect } from 'cloudflare:sockets';
 import {
   WORLD_COUNTRIES,
+  DEFAULT_ECH_CONFIG,
   COUNTRY_BY_CC,
   findCountry,
   VERIFIED_COUNTRIES,
@@ -24,6 +25,7 @@ import {
 
 export {
   WORLD_COUNTRIES,
+  DEFAULT_ECH_CONFIG,
   COUNTRY_BY_CC,
   findCountry,
   VERIFIED_COUNTRIES,
@@ -122,16 +124,14 @@ export const SEED_CIDRS = [
 
 /** آی‌پی‌های IPv6 Anycast کلودفلر (پینگ ~105ms روی همراه اول و ایرانسل) */
 export const IPV6_SEEDS = [
-  '2606:4700::6810:84e5',
-  '2606:4700::6812:1a2e',
   '2606:4700:3030::ac43:b58a',
-  '2606:4700:3037::6815:32a1',
-  '2606:4700:3033::6815:1e29',
-  '2606:4700:3032::6815:3ef9',
-  '2606:4700:3030::ac43:49a1',
-  '2606:4700:3034::6815:4a1',
-  '2606:4700:3035::6815:1a2b',
-  '2606:4700:3031::6815:1e29',
+  '2606:4700::6812:3ed',
+  '2606:4700::6812:1a2e',
+  '2606:4700:3030::ac43:b520',
+  '2606:4700::6812:b58a',
+  '2606:4700:3030::6815:3ed',
+  '2606:4700::6811:9411',
+  '2606:4700::6811:9377',
 ];
 
 /** پورت‌های بدون TLS کلودفلر */
@@ -142,36 +142,22 @@ export const PORTS_TLS = [443, 2053, 8443, 2083, 2087, 2096];
 
 /** دامنه‌های پشت کلودفلر (سایت‌های جهانی Speedtest/Plato/Udemy + دامنه‌های .ir تاییدشده) */
 export const CF_DOMAINS = [
-  'www.speedtest.net',
-  'platoapp.com',
-  'www.udemy.com',
-  'www.fiverr.com',
-  'discord.com',
-  '01d.ir',
-  '0seo.ir',
-  '18m.ir',
-  '1car.ir',
-  '0nlysms.ir',
 ];
 
 /** آی‌پی‌های تمیز پیش‌فرض (نسل جدید QoS IPv4 برای همراه اول، ایرانسل و مخابرات) */
 export const CF_GOOD_IPS = [
   '172.67.181.32',
+  '172.67.181.122',
+  '172.67.181.210',
+  '104.17.148.167',
+  '104.17.148.17',
   '104.17.147.119',
   '104.18.3.91',
   '172.67.163.24',
-  '104.16.142.53',
-  '162.159.137.74',
-  '104.17.148.77',
-  '172.67.217.91',
-  '104.18.2.237',
-  '104.16.142.237',
-  '172.67.181.77',
-  '104.18.113.47',
-  '162.159.192.1',
-  '104.17.148.22',
-  '188.114.96.3',
-  '172.64.80.1',
+  '104.18.181.138',
+  '104.21.3.237',
+  '104.18.26.46',
+  '172.67.181.138',
 ];
 
 export const SEED_IPS = [...OMNI_HYBRID_POOL];
@@ -263,19 +249,7 @@ export async function tcpProbe(host, { port = 443, timeoutMs = 2500 } = {}) {
     return { ip: cleanHost, port: Number(port), ok: true, alive: true, ms, latencyMs: ms };
   } catch (e) {
     const msg = String(e?.message || e);
-    if (msg.includes('1042') || msg.includes('cannot connect to the specified address')) {
-      const cfOk = isValidCandidate(cleanHost) && isCloudflareIp(cleanHost);
-      return {
-        ip: cleanHost,
-        port: Number(port),
-        ok: cfOk,
-        alive: cfOk,
-        ms: cfOk ? Math.max(5, Date.now() - t0) : null,
-        latencyMs: cfOk ? Math.max(5, Date.now() - t0) : null,
-        cfEdge: cfOk,
-        error: cfOk ? undefined : 'رد شد: آی‌پی خارج از شبکه کلودفلر',
-      };
-    }
+    // خطای 1042 محدودیت خود Cloudflare Workers برای اتصال به شبکه خودش است؛ هرگز آن را موفقیت یا پینگ جعلی حساب نکن.
     return { ip: cleanHost, port: Number(port), ok: false, alive: false, ms: null, latencyMs: null, error: msg };
   } finally {
     clearTimeout(timer);
@@ -365,29 +339,17 @@ export async function httpProbe(target, { timeoutMs = 2500 } = {}) {
     }
     return { ip: clean, ok: false, alive: false, is_cf: false, ms: null, colo: null, error: 'پاسخ کلودفلر دریافت نشد' };
   } catch (e) {
-    const elapsed = Math.max(4, Date.now() - t0);
-    if (isRawIp && isCloudflareIp(clean)) {
-      return {
-        ip: clean,
-        ok: true,
-        alive: true,
-        is_cf: true,
-        ms: Math.min(elapsed, 45),
-        edge_ms: Math.min(elapsed, 45),
-        colo: clean.includes(':') ? 'CF6' : 'CF4',
-      };
-    }
-    if (!isRawIp && VERIFIED_BYOIP_SET.has(clean.toLowerCase())) {
-      return { ip: clean, ok: true, alive: true, is_cf: true, ms: Math.min(elapsed, 45), edge_ms: Math.min(elapsed, 45), colo: 'CF' };
-    }
-    return { ip: clean, ok: false, alive: false, is_cf: false, ms: null, colo: null, error: String(e?.message || e) };
+    // شکست fetch/handshake باید قرمز بماند؛ عضویت در ASN کلودفلر دلیل سالم‌بودن مسیر کاربر نیست.
+    return { ip: clean, ok: false, alive: false, is_cf: isCloudflareIp(clean), ms: null, colo: null, error: String(e?.message || e) };
   } finally {
     clearTimeout(timer);
   }
 }
 
 export async function rankIpsHttp(candidates = SEED_IPS, { concurrency = 10, timeoutMs = 2500 } = {}) {
-  const uniq = [...new Set(candidates.map((x) => String(x || '').trim().replace(/^\[|\]$/g, '')).filter(isValidCandidate))];
+  const uniq = [...new Set(candidates
+    .map((x) => String(x || '').trim().replace(/^\[|\]$/g, ''))
+    .filter((x) => isValidCandidate(x) && !DEAD_BYOIP_BLACKLIST.has(x.toLowerCase())))];
   const results = [];
   const queue = [...uniq];
   const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {

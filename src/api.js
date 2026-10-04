@@ -98,10 +98,11 @@ export function normalizeAddr(v) {
 const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || ''));
 
 const TOKEN_USER_ALIASES = {
-  'sBERuL-cyzWCUijFyv3oo1AT': 'Alim',
-  'fFgkSjJTbbkl3BduYftMlk_3': 'Alim',
-  'DiY3eKMXIrXeQdbUNogIfuTv': 'Alim',
-  'ux7V6g3toplQjwURLo8rhxM8': 'Alim',
+  'JaNLkq-G2hVuoVoD2gJcL0Mu': 'Mmm',
+  'sBERuL-cyzWCUijFyv3oo1AT': 'Mmm',
+  'fFgkSjJTbbkl3BduYftMlk_3': 'Mmm',
+  'DiY3eKMXIrXeQdbUNogIfuTv': 'Mmm',
+  'ux7V6g3toplQjwURLo8rhxM8': 'Mmm',
   'lmbMhpKb8WgBATTYfga8RyEx': 'Ali',
   '9DwsMyZB5kz-UuAloPRBMiDG': 'Ali',
   'ZJM-x0LftaMYHbqfetEfiPO7': 'Ali',
@@ -389,20 +390,27 @@ export async function handleApi(request, env, ctx, url) {
     const probed = await rankIpsHttp(rawCands.map((c) => c.addr), { concurrency: 10, timeoutMs: 2200 });
     const probeMap = new Map(probed.map((r) => [r.ip, r]));
 
+    const PROVEN = new Set([
+      '172.67.181.32', '172.67.181.122', '172.67.181.210', '104.17.148.167', '104.17.148.17',
+      '2606:4700:3030::ac43:b58a', '2606:4700::6812:3ed', '2606:4700::6812:1a2e',
+    ]);
     const discovered = rawCands.map((c) => {
       const pr = probeMap.get(c.addr);
+      const provenOnIranLine = PROVEN.has(c.addr);
       return {
         addr: c.addr,
         kind: c.kind,
         source: c.source,
-        alive: pr ? Boolean(pr.alive) : true,
-        edge_ms: pr?.ms || null,
-        colo: pr?.colo || request?.cf?.colo || 'FRA',
+        alive: Boolean(pr?.alive) || provenOnIranLine,
+        verified: provenOnIranLine ? 'iran-line' : (pr?.alive ? 'edge' : 'client-required'),
+        edge_ms: pr?.alive ? (pr.ms || null) : null,
+        colo: pr?.alive ? (pr.colo || request?.cf?.colo || null) : null,
       };
-    }).filter((c) => c.alive);
+    });
 
-    if (body.apply && discovered.length) {
-      const topAddrs = discovered.map((d) => d.addr).slice(0, 12);
+    const applicable = discovered.filter((c) => c.alive && c.verified !== 'client-required');
+    if (body.apply && applicable.length) {
+      const topAddrs = applicable.map((d) => d.addr).slice(0, 12);
       if (userRow) {
         await env.DB.prepare('UPDATE users SET ips = ? WHERE username = ?')
           .bind(JSON.stringify(topAddrs), userRow.username).run();
