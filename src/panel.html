@@ -3777,7 +3777,7 @@ var DEAD_BYOIP_SET=new Set(["31.185.108.22","31.12.75.1","89.117.112.10","170.11
 var PRIMARY_LOCATIONS=["US","DE","NL","GB","FR","TR","AE","FI","SE","CA","SG","JP","CH","AT","IT","ES","NO","PL","CZ","HU","RO","DK","KR","AU"];
 var OMNI_QOS_SET=new Set(OMNI_QOS_V4.map(x=>String(x).toLowerCase()));
 var OMNI_SITES_SET=new Set(OMNI_CLEAN_SITES.map(x=>String(x).toLowerCase()));
-var g={user:"",profile:"mci",cc:"DIRECT",ports:[443],protos:["vless","trojan"],addrs:"hybrid",customAddr:"",fp:"chrome",fragment:!1,fragPreset:"100-200,5-10,tlshello",ipv6:!0,fmt:"uris",out:null};
+var g={user:"",profile:"mci",cc:"",ports:[443],protos:["vless","trojan"],addrs:"hybrid",customAddr:"",fp:"chrome",fragment:!1,fragPreset:"100-200,5-10,tlshello",ipv6:!0,fmt:"uris",out:null};
 function zt(e){
   let t=e.settings?.public_host||location.host||"panel.example",s=[];
   let cleanPool=Oe(e.settings).filter(x=>!DEAD_BYOIP_SET.has(String(x).toLowerCase())&&!COUNTRY_PROXY_MAP.has(String(x).toLowerCase()));
@@ -3981,6 +3981,7 @@ function je(e){
   let autoRot=cfg.auto_rotate==="1"||cfg.auto_rotate===!0;
   let rotMins=Number(cfg.rotate_minutes||15)||15;
   let activeCc=g.cc!==void 0&&g.cc!==""?g.cc:(cfg.selected_country||"");
+  let activeCountry=COUNTRY_MAP.get(activeCc);
   let quickCountries=PRIMARY_LOCATIONS.slice(0,12).map(cc=>COUNTRY_MAP.get(cc)).filter(Boolean);
   setTimeout(()=>{if(!g.out&&t.length){g.out=Bt(e);ct()}},0);
   return`
@@ -3996,6 +3997,11 @@ function je(e){
       <button class="btn btn-primary" data-action="omni-cfg-build">${d("bolt")} بروزرسانی کانفیگ‌ها</button>
     </div>
   </header>
+
+  <div class="notice ok" style="margin-bottom:12px;padding:11px">
+    <b>خروجی فعال کانفیگ‌ها: ${activeCountry?activeCountry.flag+" "+a(activeCountry.fa):activeCc==="DIRECT"?"🌐 مستقیم":"انتخاب نشده"}</b>
+    <div style="font-size:11.5px;margin-top:4px">۱) «بروزرسانی کانفیگ‌ها» را بزن؛ ۲) لینک اشتراک را کپی یا با v2rayNG باز کن؛ ۳) داخل v2rayNG اشتراک را Refresh کن. انتخاب کشور در این صفحه و Causal Mesh از این پس یکی است.</div>
+  </div>
 
   <div class="card" style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px">
@@ -4540,7 +4546,7 @@ function Fe(e){
 }
 
 var MESH_ISO195="AF AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BY BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CN CO KM CG CD CR CI HR CU CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT HN HU IS IN ID IR IQ IE IL IT JM JP JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM PK PS PW PA PG PY PE PH PL PT QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA SS ES LK SD SR SE CH SY TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE GB US UY UZ VU VA VE VN YE ZM ZW".split(" ");
-var MESH={mode:"game",country:"AUTO",region:"all",running:!1,line:null,results:[],history:[],proofs:[],runtime:[],cohort:"unknown",historyLoadedAt:0,lastRun:null};
+var MESH={mode:"game",country:"AUTO",region:"all",running:!1,line:null,results:[],history:[],proofs:[],runtime:[],cohort:"unknown",historyLoadedAt:0,lastRun:null,showAll:!1,message:null,proofCc:null};
 function meshCountries(){
   return WORLD_COUNTRIES.filter(c=>c.verifiedExit&&Array.isArray(c.proxies)&&c.proxies.length);
 }
@@ -4552,6 +4558,7 @@ function meshModeMeta(){
   }[MESH.mode];
 }
 function meshRegionLabel(r){return({all:"همه مناطق",eu:"اروپا",me:"خاورمیانه",as:"آسیا",na:"آمریکای شمالی",oc:"اقیانوسیه",af:"آفریقا",sa:"آمریکای جنوبی"})[r]||r}
+function meshAiReady(cc){return MESH.proofs.some(p=>(!p.cc||p.cc===cc)&&p.accepted&&["gemini_web","gemini_api","ai_studio"].includes(p.service)&&(!p.checked_at||Date.now()-new Date(p.checked_at.replace(" ","T")+(/Z$/.test(p.checked_at)?"":"Z")).getTime()<18e5))}
 function MeshView(e){
   let meta=meshModeMeta(),verified=meshCountries(),all=MESH_ISO195.length;
   if(Date.now()-MESH.historyLoadedAt>30000)setTimeout(()=>MeshLoadHistory(e),0);
@@ -4595,15 +4602,16 @@ function MeshView(e){
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
       <button class="btn btn-primary" type="button" data-action="omni-mesh-race" ${MESH.running?"disabled":""}>${d("play")} ${MESH.running?"در حال مسابقه واقعی…":"اجرای مسابقه مسیرها"}</button>
-      ${best?`<button class="btn" type="button" data-action="omni-mesh-apply" data-cc="${a(best.cc)}">${d("check")} اعمال برنده ${best.flag} ${a(best.fa)}</button>`:""}
-      ${MESH.mode==="ai"&&(best||MESH.country!=="AUTO"&&MESH.country!=="DIRECT")?`<button class="btn" type="button" data-action="omni-mesh-proof" data-cc="${a(best?.cc||MESH.country)}">✦ اثبات زنده سرویس‌های AI</button>`:""}
-      <label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;cursor:pointer"><span class="switch"><input type="checkbox" data-action="omni-mesh-auto" ${String(e.settings?.mesh_auto_failover||"0")==="1"?"checked":""}><span></span></span>Failover خودکار بعد از دو شکست</label>
+      ${best&&(MESH.mode!=="ai"||meshAiReady(best.cc))?`<button class="btn" type="button" data-action="omni-mesh-apply" data-cc="${a(best.cc)}">${d("check")} اعمال به کانفیگ‌ها · ${best.flag} ${a(best.fa)}</button>`:""}
+      ${MESH.mode==="ai"&&(best||MESH.country!=="AUTO"&&MESH.country!=="DIRECT")?`<button class="btn" type="button" data-action="omni-mesh-proof" data-cc="${a(best?.cc||MESH.country)}">✦ ${best&&meshAiReady(best.cc)?"تازه‌سازی اثبات AI":"اول اثبات زنده AI را اجرا کن"}</button>`:""}
+      <label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;cursor:pointer"><span class="switch"><input type="checkbox" data-action="omni-mesh-auto" ${String(e.settings?.mesh_auto_failover||"0")==="1"?"checked":""}><span></span></span>Failover بعد از دو شکست · <b>${String(e.settings?.mesh_auto_failover||"0")==="1"?"روشن":"خاموش"}</b></label>
     </div>
     <details style="margin-top:10px"><summary class="muted" style="cursor:pointer;font-size:11.5px">مسیریابی مستقیم دامنه‌های حساس</summary>
       <div class="field" style="margin-top:8px"><textarea id="mesh-direct-domains" rows="2" dir="ltr" placeholder="bank.example&#10;internal.example">${a(Re(e.settings?.mesh_direct_domains).join("\n"))}</textarea><span class="hint">هر خط یک دامنه؛ فقط در خروجی‌های sing-box و Clash مستقیماً عبور می‌کند.</span></div>
       <button class="btn btn-sm" type="button" data-action="omni-mesh-save-domains">${d("check")} ذخیره دامنه‌ها</button>
     </details>
     <p class="muted" style="font-size:11.5px;margin:9px 0 0">اندازه‌گیری خط از مرورگر است؛ تست خروجی از Worker انجام می‌شود و جدا نمایش داده می‌شود.</p>
+    ${MESH.message?`<div class="notice ${MESH.message.type==="ok"?"ok":"warn"}" style="margin-top:10px;padding:10px"><b>${a(MESH.message.text)}</b>${MESH.message.detail?`<div style="font-size:11.5px;margin-top:4px">${a(MESH.message.detail)}</div>`:""}</div>`:""}
   </div>
 
   <div class="mesh-metric-grid" style="margin-top:12px">
@@ -4634,8 +4642,7 @@ function MeshView(e){
       <div class="mesh-phase live"><i></i><div><b>Service Proof + TLS</b><div class="muted" style="font-size:11.5px">فعال؛ نتیجه شبکه سرویس‌های AI از خروجی واقعی ثبت می‌شود.</div></div></div>
       <div class="mesh-phase live"><i></i><div><b>Cron Failover + Quarantine</b><div class="muted" style="font-size:11.5px">فعال؛ تعویض فقط پس از دو شکست متوالی.</div></div></div>
       <div class="mesh-phase live"><i></i><div><b>Per-App Rules</b><div class="muted" style="font-size:11.5px">فعال در خروجی‌های sing-box و Clash.</div></div></div>
-      <div class="mesh-phase research"><i></i><div><b>Deadline-Gradient / Tick Engine</b><div class="muted" style="font-size:11.5px">نیازمند کلاینت Android و Relay اختصاصی؛ در UI جعل نشده است.</div></div></div>
-      <div class="mesh-phase research"><i></i><div><b>Multipath + Micro-FEC</b><div class="muted" style="font-size:11.5px">مرحله بعدی Data Plane؛ Worker به‌تنهایی قادر به اجرای آن نیست.</div></div></div>
+      <details style="margin-top:8px"><summary class="muted" style="cursor:pointer;font-size:11.5px">قابلیت‌های خارج از توان Worker</summary><div style="padding-top:6px" class="muted">Multipath، Micro-FEC و Tick Engine به کلاینت یا Relay مستقل نیاز دارند و فعال نیستند.</div></details>
     </div>
   </div>
 
@@ -4662,12 +4669,15 @@ function MeshHistoryView(){
   let rows=MESH.history.slice(0,8),max=Math.max(...rows.map(r=>Number(r.p95||r.p50||1)),1);
   return`${alert}<div style="display:flex;flex-direction:column;gap:8px">${rows.map(r=>{
     let c=COUNTRY_MAP.get(r.cc),w=Math.max(4,Math.round((Number(r.p95||r.p50||0)/max)*100));
-    return`<div><div style="display:flex;gap:7px;align-items:center;font-size:11.5px"><b>${c?.flag||"🌐"} ${a(c?.fa||r.cc)}</b><span class="muted" dir="ltr">P50 ${r.p50??"—"} · P95 ${r.p95??"—"} ms</span><span class="spacer"></span><span class="badge ${r.success_rate>=90?"ok":r.success_rate>=60?"warn":"danger"}">${r.success_rate}%</span></div><div class="scan-progress" style="height:4px;margin-top:4px"><i style="width:${w}%;background:${it(Number(r.p95||999))}"></i></div></div>`}).join("")}</div>`;
+    return`<div><div style="display:flex;gap:7px;align-items:center;font-size:11.5px;flex-wrap:wrap"><b>${c?.flag||"🌐"} ${a(c?.fa||r.cc)}</b><span class="muted" dir="ltr">Worker→Exit · P50 ${r.p50??"—"} · P95 ${r.p95??"—"} ms</span><span class="spacer"></span><span class="badge ${r.success_rate>=90?"ok":r.success_rate>=60?"warn":"danger"}">${r.successes||0}/${r.samples||0}${Number(r.samples||0)<3?" · داده کم":""}</span></div><div class="scan-progress" style="height:4px;margin-top:4px"><i style="width:${w}%;background:${it(Number(r.p95||999))}"></i></div></div>`}).join("")}</div>`;
 }
 function MeshProofView(){
   if(!MESH.proofs.length)return'<div class="empty" style="padding:18px"><div>اثبات سرویس اجرا نشده است.</div><small class="muted">در حالت AI یک کشور را مسابقه بده و «اثبات زنده» را بزن.</small></div>';
   let names={gemini_web:"Gemini Web",gemini_api:"Gemini API",ai_studio:"AI Studio",chatgpt:"ChatGPT",claude:"Claude"};
-  return`<div style="display:flex;flex-direction:column;gap:7px">${MESH.proofs.slice(0,8).map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:10px"><b style="flex:1">${a(names[r.service]||r.service)}</b><span class="badge ${r.accepted?"ok":r.ok?"warn":"danger"}">${r.accepted?"پذیرفته":r.ok?"قابل‌دسترسی، ردشده":"ناموفق"}</span>${r.status?`<code>${r.status}</code>`:""}${r.ms?`<span class="muted mono">${r.ms}ms</span>`:""}</div>`).join("")}</div>`;
+  let target=MESH.proofCc||(MESH.country!=="AUTO"&&MESH.country!=="DIRECT"?MESH.country:null)||MESH.results[0]?.cc||MESH.proofs[0]?.cc;
+  let seen=new Set(),rows=MESH.proofs.filter(r=>!target||!r.cc||r.cc===target).filter(r=>!seen.has(r.service)&&seen.add(r.service)).slice(0,5),c=COUNTRY_MAP.get(target);
+  if(!rows.length)return`<div class="empty" style="padding:18px"><div>برای ${a(target||"این کشور")} نتیجه‌ای ثبت نشده است.</div></div>`;
+  return`<div class="muted" style="font-size:11.5px;margin-bottom:8px">آخرین اجرای ${c?.flag||"🌐"} ${a(c?.fa||target||"")}؛ نتایج قدیمی و تکراری مخفی شده‌اند.</div><div style="display:flex;flex-direction:column;gap:7px">${rows.map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:10px"><b style="flex:1">${a(names[r.service]||r.service)}</b><span class="badge ${r.accepted?"ok":r.ok?"warn":"danger"}">${r.accepted?"پذیرفته":r.ok?"رسیده، ولی رد شده":"ناموفق"}</span>${r.status?`<code>${r.status}</code>`:""}${r.ms?`<span class="muted mono">${r.ms}ms</span>`:""}</div>`).join("")}</div>`;
 }
 async function MeshLoadHistory(e,force=!1){
   if(!force&&Date.now()-MESH.historyLoadedAt<30000)return;
@@ -4685,7 +4695,8 @@ async function MeshServiceProof(e,cc){
   y("اثبات TLS و وضعیت سرویس‌ها شروع شد…","info",1800);
   try{
     let r=await x("POST","/api/mesh/service-proof",{cc,services:["gemini_web","gemini_api","ai_studio","chatgpt","claude"],timeout:6500});
-    MESH.proofs=Array.isArray(r?.results)?r.results:[];
+    MESH.proofCc=cc;
+    MESH.proofs=(Array.isArray(r?.results)?r.results:[]).map(p=>({...p,cc,checked_at:r?.checked_at||new Date().toISOString()}));
     MESH.historyLoadedAt=0;
     y(`${MESH.proofs.filter(p=>p.accepted).length}/${MESH.proofs.length} سرویس از خروجی ${cc} پذیرفته شد`,MESH.proofs.some(p=>p.accepted)?"ok":"warn");
     e.rerenderView("mesh");
@@ -4693,18 +4704,19 @@ async function MeshServiceProof(e,cc){
 }
 function MeshResults(){
   if(!MESH.results.length)return'<div class="empty" style="padding:24px"><div style="font-size:24px">◎</div><div>هنوز مسابقه‌ای اجرا نشده است.</div><small class="muted">کشور یا حالت خودکار را انتخاب و «اجرای مسابقه مسیرها» را بزن.</small></div>';
-  return`<div class="mesh-country-list">${MESH.results.map((r,i)=>`
+  let rows=MESH.showAll?MESH.results:MESH.results.slice(0,6);
+  return`<div class="mesh-country-list">${rows.map((r,i)=>`
     <div class="mesh-country-row" data-best="${i===0&&r.alive}">
       <div><b>${r.flag||"🌐"} ${a(r.fa||r.cc)}</b><div class="muted mono" style="font-size:10.5px">${a(r.cc)} · ${a(r.colo||"—")}</div></div>
-      <div><span class="muted" style="font-size:10px;display:block">Probe خروجی</span><b dir="ltr" style="color:${r.alive?it(r.edge_ms):"var(--danger)"}">${r.alive?r.edge_ms+" ms":"قطع"}</b></div>
+      <div><span class="muted" style="font-size:10px;display:block">Worker → خروجی</span><b dir="ltr" style="color:${r.alive?it(r.edge_ms):"var(--danger)"}">${r.alive?r.edge_ms+" ms":"قطع"}</b></div>
       <div><span class="muted" style="font-size:10px;display:block">P95 هفت‌روزه</span><b dir="ltr">${r.history?.p95!=null?r.history.p95+" ms":"—"}</b></div>
-      <div><span class="muted" style="font-size:10px;display:block">پایداری / امتیاز علّی</span><b dir="ltr">${r.history?.success_rate!=null?r.history.success_rate+"% · ":""}${r.score??"—"}</b><small class="muted">کف ترکیبی ${r.combined_floor_ms??"—"}ms؛ تخمینی</small></div>
-      <button class="btn btn-sm ${i===0&&r.alive?"btn-primary":""}" type="button" data-action="omni-mesh-apply" data-cc="${a(r.cc)}" ${r.alive?"":"disabled"}>انتخاب</button>
-    </div>`).join("")}</div>`;
+      <div><span class="muted" style="font-size:10px;display:block">نمونه / امتیاز</span><b dir="ltr">${r.history?.samples||1} · ${r.score??"—"}</b><small class="muted">کف مسیر ${r.combined_floor_ms??"—"}ms؛ تخمینی</small></div>
+      <button class="btn btn-sm ${i===0&&r.alive?"btn-primary":""}" type="button" data-action="omni-mesh-apply" data-cc="${a(r.cc)}" ${r.alive&&(MESH.mode!=="ai"||meshAiReady(r.cc))?"":"disabled"}>${MESH.mode==="ai"&&!meshAiReady(r.cc)?"نیازمند اثبات AI":"اعمال به کانفیگ‌ها"}</button>
+    </div>`).join("")}</div>${MESH.results.length>6?`<button class="btn btn-sm" style="margin-top:10px;width:100%" data-action="omni-mesh-toggle-results">${MESH.showAll?"نمایش ۶ نتیجه برتر":`نمایش همه ${MESH.results.length} کشور`}</button>`:""}`;
 }
 async function MeshRace(e){
   if(MESH.running)return;
-  MESH.running=!0;e.rerenderView("mesh");
+  MESH.running=!0;MESH.message=null;MESH.showAll=!1;e.rerenderView("mesh");
   try{
     let pool=meshCountries().filter(c=>MESH.region==="all"||c.region===MESH.region);
     if(MESH.country!=="AUTO"&&MESH.country!=="DIRECT")pool=pool.filter(c=>c.cc===MESH.country);
@@ -4724,13 +4736,22 @@ async function MeshRace(e){
   finally{MESH.running=!1;e.rerenderView("mesh")}
 }
 async function MeshApply(e,cc){
-  let c=COUNTRY_MAP.get(cc);if(!c||!c.verifiedExit)return y("این کشور هنوز خروجی تأییدشده ندارد","warn");
+  let c=COUNTRY_MAP.get(cc);
+  if(!c||!c.verifiedExit){MESH.message={type:"warn",text:"این کشور خروجی تأییدشده ندارد"};return e.rerenderView("mesh")}
   let tested=MESH.results.find(r=>r.cc===cc&&r.alive);
-  if(!tested)return y("ابتدا این خروجی را در مسابقه واقعی تأیید کن","warn");
-  let applied=await x("POST","/api/mesh/apply",{mode:MESH.mode,cc});
-  let patch={selected_country:applied.cc,proxy_ips:[applied.proxy]};
-  e.setSettings({...e.settings(),...patch});
-  MESH.country=cc;y(`${c.flag} خروجی ${c.fa} با اثبات تازه و امتیاز ${applied.score??"—"} اعمال شد`,"ok");e.rerenderView("mesh");
+  if(!tested){MESH.message={type:"warn",text:"اول مسابقه را اجرا کن",detail:"اعمال فقط تا ۱۰ دقیقه بعد از یک تست زنده معتبر است."};return e.rerenderView("mesh")}
+  try{
+    let applied=await x("POST","/api/mesh/apply",{mode:MESH.mode,cc});
+    let patch={selected_country:applied.cc,proxy_ips:[applied.proxy],mesh_active_mode:MESH.mode};
+    e.setSettings({...e.settings(),...patch});g.cc=applied.cc;g.out=null;MESH.country=cc;
+    MESH.message={type:"ok",text:`${c.flag} ${c.fa} روی کانفیگ‌ها اعمال شد`,detail:"اکنون صفحه کانفیگ‌ها باز می‌شود؛ لینک اشتراک را در v2rayNG به‌روزرسانی کن."};
+    y(`${c.flag} ${c.fa} اعمال شد؛ کانفیگ‌ها در حال بازشدن است`,"ok",2600);
+    e.rerenderView("configs");
+  }catch(err){
+    let msg=String(err?.message||err),ai=MESH.mode==="ai";
+    MESH.message={type:"warn",text:ai?"این خروجی هنوز برای Gemini تأیید نشده است":"اعمال خروجی انجام نشد",detail:msg};
+    y(msg,"err",4500);e.rerenderView("mesh");
+  }
 }
 
 function ze(e){
@@ -4796,13 +4817,15 @@ function ut(e){
     let i=s.dataset.action;
     try{
       if(i==="omni-mesh-mode"){
-        MESH.mode=s.dataset.mode||"game";MESH.history=[];MESH.proofs=[];MESH.historyLoadedAt=0;e.rerenderView("mesh");
+        MESH.mode=s.dataset.mode||"game";MESH.history=[];MESH.proofs=[];MESH.proofCc=null;MESH.message=null;MESH.historyLoadedAt=0;e.rerenderView("mesh");
       }else if(i==="omni-mesh-race"){
         MeshRace(e);
       }else if(i==="omni-mesh-apply"){
         await MeshApply(e,s.dataset.cc||"");
       }else if(i==="omni-mesh-proof"){
         await MeshServiceProof(e,s.dataset.cc||"");
+      }else if(i==="omni-mesh-toggle-results"){
+        MESH.showAll=!MESH.showAll;e.rerenderView("mesh");
       }else if(i==="omni-mesh-auto"){
         let patch={mesh_auto_failover:s.checked?"1":"0",mesh_active_mode:MESH.mode};
         let saved=await b.saveSettings(patch);e.setSettings(saved?.settings||{...e.settings(),...patch});
@@ -4828,8 +4851,8 @@ function ut(e){
         let cObj=COUNTRY_MAP.get(cc);
         let patch={selected_country:cc,proxy_ips:px?[px]:(cObj?.proxies||[]).map(x=>`${x}:443`)};
         let saved=await b.saveSettings(patch);
-        e.setSettings(saved?.settings||{...e.settings(),...patch});
-        y(cObj?`خروجی پنل به ${cObj.flag} ${cObj.fa} (${px||cObj.colo}) تغییر یافت`:n("settings.saved"),"ok");
+        e.setSettings(saved?.settings||{...e.settings(),...patch});g.cc=cc;g.out=null;
+        y(cObj?`خروجی همه کانفیگ‌ها به ${cObj.flag} ${cObj.fa} تغییر یافت`:n("settings.saved"),"ok");
         e.rerenderView("scanner");
       }else if(i==="omni-net-sense"){
         let bd=document.querySelector("#direct-ping-badges");
@@ -5020,8 +5043,11 @@ function ut(e){
         e.rerenderView("configs");
         setTimeout(()=>ct(),0);
       }else if(i==="omni-cfg-cc"){
-        g.cc=s.dataset.cc||"";
+        g.cc=s.dataset.cc||"DIRECT";
+        let saved=await b.saveSettings({selected_country:g.cc});
+        e.setSettings(saved?.settings||{...e.settings(),selected_country:g.cc});
         g.out=Bt(e.S());
+        y(`خروجی سراسری کانفیگ‌ها روی ${COUNTRY_MAP.get(g.cc)?.fa||"مستقیم"} تنظیم شد`,"ok");
         e.rerenderView("configs");
         setTimeout(()=>ct(),0);
       }else if(i==="omni-fmt")g.fmt=s.dataset.fmt,ct();
@@ -5038,7 +5064,7 @@ function ut(e){
     if(s.id==="mesh-region"){
       MESH.region=s.value||"all";MESH.country="AUTO";MESH.results=[];e.rerenderView("mesh");
     }else if(s.id==="mesh-country"){
-      MESH.country=s.value||"AUTO";MESH.results=[];e.rerenderView("mesh");
+      MESH.country=s.value||"AUTO";MESH.results=[];MESH.proofCc=null;MESH.message=null;e.rerenderView("mesh");
     }else if(s.id==="cfg-user"){g.user=s.value;Gt(e.S())}
     else if(s.id==="cfg-ipv6"){g.ipv6=s.checked;Gt(e.S())}
     else if(s.id==="cfg-frag"){g.fragment=s.checked;Gt(e.S())}

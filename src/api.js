@@ -849,12 +849,9 @@ export async function handleApi(request, env, ctx, url) {
     ).bind(mode, cc).all();
     const h = meshHistoryStats(hRows.results || []).get(cc) || null;
     const score = meshScore(mode, { alive: true, edge_ms: Number(proof.edge_ms) }, h);
-    await putSettingsBulk(env, {
-      selected_country: cc,
-      proxy_ips: [proxy],
-      mesh_active_mode: mode,
-      mesh_auto_failover: body.auto_failover === false ? '0' : '1',
-    });
+    const applyPatch = { selected_country: cc, proxy_ips: [proxy], mesh_active_mode: mode };
+    if (typeof body.auto_failover === 'boolean') applyPatch.mesh_auto_failover = body.auto_failover ? '1' : '0';
+    await putSettingsBulk(env, applyPatch);
     await env.DB.prepare(
       `INSERT INTO mesh_policies(mode,cc,proxy,score,updated_at) VALUES(?,?,?,?,datetime('now'))
        ON CONFLICT(mode) DO UPDATE SET cc=excluded.cc,proxy=excluded.proxy,score=excluded.score,updated_at=datetime('now')`
