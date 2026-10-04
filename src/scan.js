@@ -417,6 +417,144 @@ export async function scanAllCountries({ ccs = null, onlyPrimary = false, concur
   return results;
 }
 
+/* ───────── اثبات شبکه سرویس‌های AI از داخل خروجی SOCKS/HTTP ───────── */
+function parseServiceProxy(raw) {
+  const m = /^(socks5|http):\/\/(?:([^:@]+):([^@]+)@)?([^:/]+)(?::(\d+))?$/i.exec(String(raw || '').trim());
+  if (!m) return null;
+  return {
+    type: m[1].toLowerCase(),
+    username: m[2] ? decodeURIComponent(m[2]) : '',
+    password: m[3] ? decodeURIComponent(m[3]) : '',
+    hostname: m[4],
+    port: Number(m[5]) || (m[1].toLowerCase() === 'socks5' ? 1080 : 8080),
+  };
+}
+
+async function readWithTimeout(reader, timeoutMs, label = 'read-timeout') {
+  let timer;
+  return Promise.race([
+    reader.read(),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label)), timeoutMs); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+async function writeWithTimeout(writer, value, timeoutMs, label = 'write-timeout') {
+  let timer;
+  return Promise.race([
+    writer.write(value),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label)), timeoutMs); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+async function openServiceTunnel(spec, targetHost, targetPort, timeoutMs) {
+  const socket = connect({ hostname: spec.hostname, port: spec.port }, { secureTransport: 'starttls' });
+  let timer;
+  const wait = (promise, label) => Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(label)), timeoutMs); }),
+  ]).finally(() => clearTimeout(timer));
+  await wait(socket.opened, 'proxy-open-timeout');
+  const writer = socket.writable.getWriter();
+  const reader = socket.readable.getReader();
+  try {
+    if (spec.type === 'socks5') {
+      const auth = Boolean(spec.username);
+      await writeWithTimeout(writer, auth ? new Uint8Array([5, 2, 0, 2]) : new Uint8Array([5, 1, 0]), timeoutMs, 'socks-greeting-write-timeout');
+      const g = (await readWithTimeout(reader, timeoutMs, 'socks-greeting-timeout')).value;
+      if (!g || g.length < 2 || g[0] !== 5) throw new Error('socks-bad-greeting');
+      if (g[1] === 2) {
+        const ub = new TextEncoder().encode(spec.username || '');
+        const pb = new TextEncoder().encode(spec.password || '');
+        const req = new Uint8Array(3 + ub.length + pb.length);
+        req[0] = 1; req[1] = ub.length; req.set(ub, 2); req[2 + ub.length] = pb.length; req.set(pb, 3 + ub.length);
+        await writeWithTimeout(writer, req, timeoutMs, 'socks-auth-write-timeout');
+        const ar = (await readWithTimeout(reader, timeoutMs, 'socks-auth-timeout')).value;
+        if (!ar || ar.length < 2 || ar[1] !== 0) throw new Error('socks-auth-failed');
+      } else if (g[1] !== 0) throw new Error('socks-auth-unsupported');
+      const hb = new TextEncoder().encode(targetHost);
+      const req = new Uint8Array(7 + hb.length);
+      req[0] = 5; req[1] = 1; req[2] = 0; req[3] = 3; req[4] = hb.length; req.set(hb, 5);
+      req[5 + hb.length] = (targetPort >> 8) & 255; req[6 + hb.length] = targetPort & 255;
+      await writeWithTimeout(writer, req, timeoutMs, 'socks-connect-write-timeout');
+      const rep = (await readWithTimeout(reader, timeoutMs, 'socks-connect-timeout')).value;
+      if (!rep || rep.length < 4 || rep[1] !== 0) throw new Error('socks-connect-rejected');
+    } else {
+      const lines = [`CONNECT ${targetHost}:${targetPort} HTTP/1.1`, `Host: ${targetHost}:${targetPort}`, 'Proxy-Connection: keep-alive'];
+      if (spec.username) lines.push(`Proxy-Authorization: Basic ${btoa(`${spec.username}:${spec.password || ''}`)}`);
+      lines.push('', '');
+      await writeWithTimeout(writer, new TextEncoder().encode(lines.join('\r\n')), timeoutMs, 'http-connect-write-timeout');
+      const rep = (await readWithTimeout(reader, timeoutMs, 'http-connect-timeout')).value;
+      const text = rep ? new TextDecoder().decode(rep) : '';
+      if (!/^HTTP\/1\.[01]\s+200\b/i.test(text)) throw new Error('http-connect-rejected');
+    }
+  } finally {
+    try { writer.releaseLock(); } catch { /* ignore */ }
+    try { reader.releaseLock(); } catch { /* ignore */ }
+  }
+  return socket;
+}
+
+/**
+ * اثبات شبکه‌ی سرویس از خروجی واقعی. موفقیت TLS فقط وقتی ثبت می‌شود که startTls
+ * گواهی targetHost را قبول کند؛ 403/صفحه‌ی عدم پشتیبانی به‌عنوان accepted ثبت نمی‌شود.
+ */
+export async function probeServiceViaProxy(proxyRaw, service, { timeoutMs = 6500 } = {}) {
+  const targets = {
+    gemini_web: { host: 'gemini.google.com', path: '/', ok: [200, 301, 302, 303, 307, 308] },
+    gemini_api: { host: 'generativelanguage.googleapis.com', path: '/', ok: [200, 400, 404] },
+    ai_studio: { host: 'aistudio.google.com', path: '/', ok: [200, 301, 302, 303, 307, 308] },
+    chatgpt: { host: 'chatgpt.com', path: '/', ok: [200, 301, 302, 303, 307, 308] },
+    claude: { host: 'claude.ai', path: '/', ok: [200, 301, 302, 303, 307, 308] },
+  };
+  const target = targets[service];
+  const spec = parseServiceProxy(proxyRaw);
+  if (!target) return { service, ok: false, accepted: false, error: 'unknown-service' };
+  if (!spec) return { service, ok: false, accepted: false, error: 'unsupported-proxy' };
+  const started = Date.now();
+  let socket, tlsValid = false;
+  try {
+    socket = await openServiceTunnel(spec, target.host, 443, timeoutMs);
+    if (typeof socket.startTls !== 'function') throw new Error('starttls-unavailable');
+    const tlsSocket = socket.startTls({ expectedServerHostname: target.host });
+    socket = tlsSocket;
+    if (tlsSocket.opened) {
+      let timer;
+      await Promise.race([
+        tlsSocket.opened,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('tls-timeout')), timeoutMs); }),
+      ]).finally(() => clearTimeout(timer));
+    }
+    tlsValid = true;
+    const writer = tlsSocket.writable.getWriter();
+    await writeWithTimeout(writer, new TextEncoder().encode(
+      `GET ${target.path} HTTP/1.1\r\nHost: ${target.host}\r\nUser-Agent: Mozilla/5.0 Omni-Proof/1\r\nAccept: text/html,application/json\r\nConnection: close\r\n\r\n`
+    ), timeoutMs, 'service-write-timeout');
+    writer.releaseLock();
+    const reader = tlsSocket.readable.getReader();
+    let body = '', total = 0;
+    try {
+      while (total < 49152) {
+        const part = await readWithTimeout(reader, timeoutMs, 'service-read-timeout');
+        if (part.done) break;
+        if (part.value) { total += part.value.byteLength; body += new TextDecoder().decode(part.value, { stream: true }); }
+        if (/\r?\n\r?\n/.test(body) && body.length > 4096) break;
+      }
+    } finally { try { reader.releaseLock(); } catch { /* ignore */ } }
+    const status = Number((/^HTTP\/1\.[01]\s+(\d{3})/i.exec(body) || [])[1] || 0);
+    const blocked = /country\s+(?:isn['’]?t|not)\s+supported|not available in your (?:country|region)|unsupported country|geo(?:graphic)? restriction/i.test(body);
+    const accepted = target.ok.includes(status) && !blocked;
+    return {
+      service, ok: status > 0, tls_valid: true, accepted, status,
+      country_blocked: blocked, ms: Date.now() - started,
+      proxy_host: spec.hostname,
+      proof: accepted ? 'network-accepted' : (status ? 'reachable-not-accepted' : 'failed'),
+    };
+  } catch (e) {
+    const error = String(e?.message || e);
+    return { service, ok: false, tls_valid: tlsValid && !/tls handshake failed/i.test(error), accepted: false, ms: Date.now() - started, error };
+  } finally { try { socket?.close(); } catch { /* ignore */ } }
+}
+
 /** تست سلامت یک نود ProxyIP (host[:port]) */
 export async function probeNode(proxyStr, timeoutMs = 3000) {
   const s = String(proxyStr || '').trim();

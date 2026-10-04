@@ -4540,7 +4540,7 @@ function Fe(e){
 }
 
 var MESH_ISO195="AF AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BY BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CN CO KM CG CD CR CI HR CU CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT HN HU IS IN ID IR IQ IE IL IT JM JP JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM PK PS PW PA PG PY PE PH PL PT QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA SS ES LK SD SR SE CH SY TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE GB US UY UZ VU VA VE VN YE ZM ZW".split(" ");
-var MESH={mode:"game",country:"AUTO",region:"all",running:!1,line:null,results:[],lastRun:null};
+var MESH={mode:"game",country:"AUTO",region:"all",running:!1,line:null,results:[],history:[],proofs:[],runtime:[],cohort:"unknown",historyLoadedAt:0,lastRun:null};
 function meshCountries(){
   return WORLD_COUNTRIES.filter(c=>c.verifiedExit&&Array.isArray(c.proxies)&&c.proxies.length);
 }
@@ -4554,6 +4554,7 @@ function meshModeMeta(){
 function meshRegionLabel(r){return({all:"همه مناطق",eu:"اروپا",me:"خاورمیانه",as:"آسیا",na:"آمریکای شمالی",oc:"اقیانوسیه",af:"آفریقا",sa:"آمریکای جنوبی"})[r]||r}
 function MeshView(e){
   let meta=meshModeMeta(),verified=meshCountries(),all=MESH_ISO195.length;
+  if(Date.now()-MESH.historyLoadedAt>30000)setTimeout(()=>MeshLoadHistory(e),0);
   let filtered=verified.filter(c=>MESH.region==="all"||c.region===MESH.region);
   let line=MESH.line,alive=MESH.results.filter(r=>r.alive),best=alive[0]||null;
   let countryOptions=filtered.map(c=>`<option value="${c.cc}" ${MESH.country===c.cc?"selected":""}>${c.flag} ${a(c.fa)} · ${c.cc}</option>`).join("");
@@ -4592,11 +4593,17 @@ function MeshView(e){
           ${countryOptions}
         </select></div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
       <button class="btn btn-primary" type="button" data-action="omni-mesh-race" ${MESH.running?"disabled":""}>${d("play")} ${MESH.running?"در حال مسابقه واقعی…":"اجرای مسابقه مسیرها"}</button>
       ${best?`<button class="btn" type="button" data-action="omni-mesh-apply" data-cc="${a(best.cc)}">${d("check")} اعمال برنده ${best.flag} ${a(best.fa)}</button>`:""}
-      <span class="muted" style="font-size:11.5px;align-self:center">اندازه‌گیری خط از مرورگر است؛ تست خروجی از Worker انجام می‌شود و جدا نمایش داده می‌شود.</span>
+      ${MESH.mode==="ai"&&(best||MESH.country!=="AUTO"&&MESH.country!=="DIRECT")?`<button class="btn" type="button" data-action="omni-mesh-proof" data-cc="${a(best?.cc||MESH.country)}">✦ اثبات زنده سرویس‌های AI</button>`:""}
+      <label style="display:inline-flex;align-items:center;gap:7px;font-size:12px;cursor:pointer"><span class="switch"><input type="checkbox" data-action="omni-mesh-auto" ${String(e.settings?.mesh_auto_failover||"0")==="1"?"checked":""}><span></span></span>Failover خودکار بعد از دو شکست</label>
     </div>
+    <details style="margin-top:10px"><summary class="muted" style="cursor:pointer;font-size:11.5px">مسیریابی مستقیم دامنه‌های حساس</summary>
+      <div class="field" style="margin-top:8px"><textarea id="mesh-direct-domains" rows="2" dir="ltr" placeholder="bank.example&#10;internal.example">${a(Re(e.settings?.mesh_direct_domains).join("\n"))}</textarea><span class="hint">هر خط یک دامنه؛ فقط در خروجی‌های sing-box و Clash مستقیماً عبور می‌کند.</span></div>
+      <button class="btn btn-sm" type="button" data-action="omni-mesh-save-domains">${d("check")} ذخیره دامنه‌ها</button>
+    </details>
+    <p class="muted" style="font-size:11.5px;margin:9px 0 0">اندازه‌گیری خط از مرورگر است؛ تست خروجی از Worker انجام می‌شود و جدا نمایش داده می‌شود.</p>
   </div>
 
   <div class="mesh-metric-grid" style="margin-top:12px">
@@ -4623,10 +4630,23 @@ function MeshView(e){
     </div>
     <div class="card">
       <div class="card-head">${d("shield")}<h3>وضعیت موتور</h3></div>
-      <div class="mesh-phase live"><i></i><div><b>Country Race + Line RTT</b><div class="muted" style="font-size:11.5px">فعال در همین نسخه؛ داده خط و خروجی از هم جدا هستند.</div></div></div>
-      <div class="mesh-phase live"><i></i><div><b>انتخاب و اعمال خروجی کشور</b><div class="muted" style="font-size:11.5px">فعال؛ برنده در تنظیمات و اشتراک ذخیره می‌شود.</div></div></div>
+      <div class="mesh-phase live"><i></i><div><b>Race + P50/P95 + Cohort</b><div class="muted" style="font-size:11.5px">فعال؛ خط، خروجی و اپراتور جدا ذخیره می‌شوند.</div></div></div>
+      <div class="mesh-phase live"><i></i><div><b>Service Proof + TLS</b><div class="muted" style="font-size:11.5px">فعال؛ نتیجه شبکه سرویس‌های AI از خروجی واقعی ثبت می‌شود.</div></div></div>
+      <div class="mesh-phase live"><i></i><div><b>Cron Failover + Quarantine</b><div class="muted" style="font-size:11.5px">فعال؛ تعویض فقط پس از دو شکست متوالی.</div></div></div>
+      <div class="mesh-phase live"><i></i><div><b>Per-App Rules</b><div class="muted" style="font-size:11.5px">فعال در خروجی‌های sing-box و Clash.</div></div></div>
       <div class="mesh-phase research"><i></i><div><b>Deadline-Gradient / Tick Engine</b><div class="muted" style="font-size:11.5px">نیازمند کلاینت Android و Relay اختصاصی؛ در UI جعل نشده است.</div></div></div>
       <div class="mesh-phase research"><i></i><div><b>Multipath + Micro-FEC</b><div class="muted" style="font-size:11.5px">مرحله بعدی Data Plane؛ Worker به‌تنهایی قادر به اجرای آن نیست.</div></div></div>
+    </div>
+  </div>
+
+  <div class="grid grid-2" style="margin-top:12px">
+    <div class="card">
+      <div class="card-head">${d("activity")}<h3>حافظه هفت‌روزه مسیرها</h3><div class="spacer"></div><span class="badge">${a(MESH.cohort||"unknown")}</span></div>
+      ${MeshHistoryView()}
+    </div>
+    <div class="card">
+      <div class="card-head">${d("shield")}<h3>اثبات سرویس‌ها</h3></div>
+      ${MeshProofView()}
     </div>
   </div>
 
@@ -4634,6 +4654,42 @@ function MeshView(e){
     <div class="card-head">${d("bolt")}<h3>نتیجه مسابقه کشورها</h3><div class="spacer"></div>${MESH.lastRun?`<span class="muted" style="font-size:10.5px">${a(MESH.lastRun)}</span>`:""}</div>
     <div id="mesh-results">${MESH.running?'<div class="skeleton" style="height:130px"></div>':MeshResults()}</div>
   </div>`;
+}
+function MeshHistoryView(){
+  let now=Math.floor(Date.now()/1000),activeQ=MESH.runtime.filter(r=>String(r.key||"").startsWith("quarantine:")&&Number(r.value)>now);
+  let alert=activeQ.length?`<div class="notice warn" style="margin-bottom:8px;padding:8px">قرنطینه فعال: ${activeQ.map(r=>a(String(r.key).slice(11))).join("، ")}</div>`:"";
+  if(!MESH.history.length)return alert+'<div class="empty" style="padding:18px"><div>هنوز تاریخچه کافی وجود ندارد.</div><small class="muted">با هر مسابقه، P50/P95 و نرخ موفقیت واقعی ساخته می‌شود.</small></div>';
+  let rows=MESH.history.slice(0,8),max=Math.max(...rows.map(r=>Number(r.p95||r.p50||1)),1);
+  return`${alert}<div style="display:flex;flex-direction:column;gap:8px">${rows.map(r=>{
+    let c=COUNTRY_MAP.get(r.cc),w=Math.max(4,Math.round((Number(r.p95||r.p50||0)/max)*100));
+    return`<div><div style="display:flex;gap:7px;align-items:center;font-size:11.5px"><b>${c?.flag||"🌐"} ${a(c?.fa||r.cc)}</b><span class="muted" dir="ltr">P50 ${r.p50??"—"} · P95 ${r.p95??"—"} ms</span><span class="spacer"></span><span class="badge ${r.success_rate>=90?"ok":r.success_rate>=60?"warn":"danger"}">${r.success_rate}%</span></div><div class="scan-progress" style="height:4px;margin-top:4px"><i style="width:${w}%;background:${it(Number(r.p95||999))}"></i></div></div>`}).join("")}</div>`;
+}
+function MeshProofView(){
+  if(!MESH.proofs.length)return'<div class="empty" style="padding:18px"><div>اثبات سرویس اجرا نشده است.</div><small class="muted">در حالت AI یک کشور را مسابقه بده و «اثبات زنده» را بزن.</small></div>';
+  let names={gemini_web:"Gemini Web",gemini_api:"Gemini API",ai_studio:"AI Studio",chatgpt:"ChatGPT",claude:"Claude"};
+  return`<div style="display:flex;flex-direction:column;gap:7px">${MESH.proofs.slice(0,8).map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:10px"><b style="flex:1">${a(names[r.service]||r.service)}</b><span class="badge ${r.accepted?"ok":r.ok?"warn":"danger"}">${r.accepted?"پذیرفته":r.ok?"قابل‌دسترسی، ردشده":"ناموفق"}</span>${r.status?`<code>${r.status}</code>`:""}${r.ms?`<span class="muted mono">${r.ms}ms</span>`:""}</div>`).join("")}</div>`;
+}
+async function MeshLoadHistory(e,force=!1){
+  if(!force&&Date.now()-MESH.historyLoadedAt<30000)return;
+  MESH.historyLoadedAt=Date.now();
+  try{
+    let h=await x("GET",`/api/mesh/history?mode=${encodeURIComponent(MESH.mode)}&days=7${MESH.cohort&&MESH.cohort!=="unknown"?`&cohort=${encodeURIComponent(MESH.cohort)}`:""}`);
+    MESH.history=Array.isArray(h?.stats)?h.stats:[];
+    MESH.proofs=Array.isArray(h?.service_proofs)?h.service_proofs:[];
+    MESH.runtime=Array.isArray(h?.runtime)?h.runtime:[];
+    if(l.view==="mesh")X();
+  }catch{}
+}
+async function MeshServiceProof(e,cc){
+  if(!cc||cc==="AUTO"||cc==="DIRECT")return y("ابتدا یک خروجی کشور سالم انتخاب کن","warn");
+  y("اثبات TLS و وضعیت سرویس‌ها شروع شد…","info",1800);
+  try{
+    let r=await x("POST","/api/mesh/service-proof",{cc,services:["gemini_web","gemini_api","ai_studio","chatgpt","claude"],timeout:6500});
+    MESH.proofs=Array.isArray(r?.results)?r.results:[];
+    MESH.historyLoadedAt=0;
+    y(`${MESH.proofs.filter(p=>p.accepted).length}/${MESH.proofs.length} سرویس از خروجی ${cc} پذیرفته شد`,MESH.proofs.some(p=>p.accepted)?"ok":"warn");
+    e.rerenderView("mesh");
+  }catch(err){y(String(err?.message||err),"err")}
 }
 function MeshResults(){
   if(!MESH.results.length)return'<div class="empty" style="padding:24px"><div style="font-size:24px">◎</div><div>هنوز مسابقه‌ای اجرا نشده است.</div><small class="muted">کشور یا حالت خودکار را انتخاب و «اجرای مسابقه مسیرها» را بزن.</small></div>';
@@ -4658,7 +4714,10 @@ async function MeshRace(e){
     let line=await measureLineRtt();
     let res=await x("POST","/api/mesh/race",{mode:MESH.mode,ccs:pool.map(c=>c.cc),access_rtt:line.rtt,access_colo:line.colo,concurrency:12,timeout:2200});
     MESH.line={rtt:res?.access_ms||line.rtt,colo:res?.access_colo||line.colo};
+    MESH.cohort=res?.cohort||"unknown";
     MESH.results=(Array.isArray(res?.results)?res.results:[]).filter(r=>r.alive&&r.edge_ms>0);
+    MESH.history=MESH.results.map(r=>({cc:r.cc,...(r.history||{})}));
+    MESH.historyLoadedAt=Date.now();
     MESH.lastRun=new Date(res?.measured_at||Date.now()).toLocaleTimeString("fa-IR");
     if(!MESH.results.length)y("هیچ خروجی سالمی در این منطقه تأیید نشد","warn");
   }catch(err){y(String(err?.message||"مسابقه مسیر ناموفق بود"),"err")}
@@ -4737,11 +4796,21 @@ function ut(e){
     let i=s.dataset.action;
     try{
       if(i==="omni-mesh-mode"){
-        MESH.mode=s.dataset.mode||"game";e.rerenderView("mesh");
+        MESH.mode=s.dataset.mode||"game";MESH.history=[];MESH.proofs=[];MESH.historyLoadedAt=0;e.rerenderView("mesh");
       }else if(i==="omni-mesh-race"){
         MeshRace(e);
       }else if(i==="omni-mesh-apply"){
         await MeshApply(e,s.dataset.cc||"");
+      }else if(i==="omni-mesh-proof"){
+        await MeshServiceProof(e,s.dataset.cc||"");
+      }else if(i==="omni-mesh-auto"){
+        let patch={mesh_auto_failover:s.checked?"1":"0",mesh_active_mode:MESH.mode};
+        let saved=await b.saveSettings(patch);e.setSettings(saved?.settings||{...e.settings(),...patch});
+        y(s.checked?"Failover خودکار فعال شد":"Failover خودکار خاموش شد","ok");
+      }else if(i==="omni-mesh-save-domains"){
+        let val=(document.querySelector("#mesh-direct-domains")?.value||"").split(/[\n,]+/).map(v=>v.trim().toLowerCase().replace(/^\./,"")).filter(Boolean).slice(0,80);
+        let saved=await b.saveSettings({mesh_direct_domains:val});e.setSettings(saved?.settings||{...e.settings(),mesh_direct_domains:val});
+        y("قواعد مستقیم sing-box و Clash ذخیره شد","ok");
       }else if(i==="omni-scan-tab"){
         O.tab=s.dataset.tab||"ingress";
         O.results=[];

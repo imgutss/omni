@@ -27,6 +27,7 @@ import {
   WORLD_COUNTRIES,
   findCountry,
   scanAllCountries,
+  probeServiceViaProxy,
   COUNTRY_PROXY_MAP,
   OMNI_HYBRID_POOL,
   OMNI_QOS_V4,
@@ -106,15 +107,25 @@ async function ensureMeshSchema(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       run_id TEXT NOT NULL, mode TEXT NOT NULL, cc TEXT NOT NULL,
       proxy TEXT, alive INTEGER DEFAULT 0, edge_ms INTEGER, access_ms INTEGER,
-      colo TEXT, created_at TEXT DEFAULT (datetime('now')))`),
+      colo TEXT, cohort TEXT DEFAULT 'unknown', created_at TEXT DEFAULT (datetime('now')))`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS mesh_policies(
       mode TEXT PRIMARY KEY, cc TEXT NOT NULL, proxy TEXT, score REAL,
       updated_at TEXT DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS mesh_service_proofs(
+      id INTEGER PRIMARY KEY AUTOINCREMENT, cc TEXT NOT NULL, service TEXT NOT NULL,
+      proxy_host TEXT, ok INTEGER DEFAULT 0, accepted INTEGER DEFAULT 0,
+      tls_valid INTEGER DEFAULT 0, status INTEGER, ms INTEGER, detail TEXT,
+      checked_at TEXT DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS mesh_runtime(
+      key TEXT PRIMARY KEY, value TEXT, updated_at TEXT DEFAULT (datetime('now')))`),
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_mesh_mode_cc_at
       ON mesh_measurements(mode, cc, created_at)`),
     env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_mesh_run
       ON mesh_measurements(run_id)`),
+    env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_mesh_service_at
+      ON mesh_service_proofs(cc, service, checked_at)`),
   ]);
+  try { await env.DB.prepare(`ALTER TABLE mesh_measurements ADD COLUMN cohort TEXT DEFAULT 'unknown'`).run(); } catch { /* migrated */ }
   MESH_SCHEMA_READY = true;
 }
 
@@ -193,6 +204,102 @@ async function cleanIpsList(env, settings) {
   if (stored.length) return stored;
   const rows = await env.DB.prepare('SELECT ip, ms, colo, hits FROM clean_ips WHERE ok = 1 ORDER BY (COALESCE(hits,0) * 1000) DESC, ms ASC LIMIT 16').all();
   return (rows.results || []).filter((r) => normalizeAddr(r.ip));
+}
+
+/* ───────── پایش Cron و Failover محافظه‌کارانه (فقط بعد از دو شکست متوالی) ───────── */
+export async function runMeshCron(env, ctx) {
+  await ensureMeshSchema(env);
+  const st = await allSettings(env);
+  if (st.mesh_auto_failover !== '1') return { ok: true, skipped: 'disabled' };
+  const mode = ['game', 'web', 'ai'].includes(st.mesh_active_mode) ? st.mesh_active_mode : 'web';
+  const currentCc = String(st.selected_country || '').toUpperCase();
+  if (!currentCc || currentCc === 'DIRECT') return { ok: true, skipped: 'direct' };
+  const lock = await env.DB.prepare(`SELECT (unixepoch('now')-unixepoch(updated_at)) age FROM mesh_runtime WHERE key='cron-lock'`).first();
+  if (lock && Number(lock.age) < 240) return { ok: true, skipped: 'locked' };
+  await env.DB.prepare(
+    `INSERT INTO mesh_runtime(key,value,updated_at) VALUES('cron-lock',?,datetime('now'))
+     ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=datetime('now')`
+  ).bind(mode).run();
+
+  const fallbackCcs = WORLD_COUNTRIES
+    .filter((c) => c.verifiedExit && c.primary && Array.isArray(c.proxies) && c.proxies.length)
+    .slice(0, 14).map((c) => c.cc);
+  const ccs = [...new Set([currentCc, ...fallbackCcs])];
+  const results = await scanAllCountries({ ccs, onlyPrimary: false, concurrency: 10, timeoutMs: 2200 });
+  const runId = `cron-${randomToken(8)}`;
+  await env.DB.batch(results.map((r) => env.DB.prepare(
+    `INSERT INTO mesh_measurements(run_id,mode,cc,proxy,alive,edge_ms,access_ms,colo,cohort)
+     VALUES(?,?,?,?,?,?,NULL,?,'cron')`
+  ).bind(runId, mode, r.cc, r.proxy || null, r.alive ? 1 : 0, r.edge_ms || null, r.colo || null)));
+
+  const current = results.find((r) => r.cc === currentCc);
+  const recent = await env.DB.prepare(
+    `SELECT alive FROM mesh_measurements WHERE mode=? AND cc=? AND cohort='cron'
+     ORDER BY created_at DESC,id DESC LIMIT 2`
+  ).bind(mode, currentCc).all();
+  const twiceFailed = (recent.results || []).length >= 2 && (recent.results || []).every((r) => Number(r.alive) !== 1);
+  if (current?.alive) {
+    await env.DB.prepare('DELETE FROM mesh_runtime WHERE key=?').bind(`quarantine:${currentCc}`).run();
+  } else if (twiceFailed) {
+    await env.DB.prepare(
+      `INSERT INTO mesh_runtime(key,value,updated_at) VALUES(?,?,datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=datetime('now')`
+    ).bind(`quarantine:${currentCc}`, String(Math.floor(Date.now() / 1000) + 1800)).run();
+  }
+  const quarantineRows = await env.DB.prepare(`SELECT key,value FROM mesh_runtime WHERE key LIKE 'quarantine:%'`).all();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const quarantined = new Set((quarantineRows.results || []).filter((r) => Number(r.value) > nowSec).map((r) => String(r.key).slice(11)));
+  const cooldown = await env.DB.prepare(`SELECT (unixepoch('now')-unixepoch(updated_at)) age FROM mesh_runtime WHERE key='failover-cooldown'`).first();
+  const canSwitch = !cooldown || Number(cooldown.age) >= 900;
+  let switched = false;
+  let selected = current;
+  if (twiceFailed && canSwitch) {
+    const alive = results.filter((r) => r.alive && r.edge_ms > 0 && !quarantined.has(r.cc));
+    const histRows = await env.DB.prepare(
+      `SELECT cc,alive,edge_ms,created_at FROM mesh_measurements
+       WHERE mode=? AND created_at >= datetime('now','-7 days') ORDER BY created_at DESC LIMIT 3000`
+    ).bind(mode).all();
+    const history = meshHistoryStats(histRows.results || []);
+    alive.forEach((r) => { r.score = meshScore(mode, r, history.get(r.cc)); });
+    alive.sort((a, b) => (a.score ?? 999999) - (b.score ?? 999999));
+    selected = alive[0] || null;
+    if (selected && selected.cc !== currentCc && selected.proxy) {
+      await putSettingsBulk(env, { selected_country: selected.cc, proxy_ips: [selected.proxy] });
+      await env.DB.prepare(
+        `INSERT INTO mesh_policies(mode,cc,proxy,score,updated_at) VALUES(?,?,?,?,datetime('now'))
+         ON CONFLICT(mode) DO UPDATE SET cc=excluded.cc,proxy=excluded.proxy,score=excluded.score,updated_at=datetime('now')`
+      ).bind(mode, selected.cc, selected.proxy, selected.score ?? selected.edge_ms).run();
+      await env.DB.prepare(
+        `INSERT INTO mesh_runtime(key,value,updated_at) VALUES('failover-cooldown',?,datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=datetime('now')`
+      ).bind(`${currentCc}->${selected.cc}`).run();
+      switched = true;
+      await logEvent(env, 'warn', `Causal Mesh failover: ${currentCc} → ${selected.cc} بعد از دو شکست متوالی`);
+    }
+  }
+
+  // اثبات شبکه AI حداکثر هر ۳۰ دقیقه؛ فقط برای خروجی دارای VIP و بدون جعل نتیجه.
+  if (mode === 'ai' && selected?.cc && (current?.alive || switched)) {
+    const lastProof = await env.DB.prepare(
+      `SELECT (unixepoch('now')-unixepoch(MAX(checked_at))) age FROM mesh_service_proofs WHERE cc=?`
+    ).bind(selected.cc).first();
+    if (!lastProof?.age || Number(lastProof.age) > 1800) {
+      const c = findCountry(selected.cc);
+      const vip = (c?.vipProxies || []).find((x) => /^(socks5|http):\/\//i.test(String(x)));
+      if (vip) {
+        for (const service of ['gemini_web', 'gemini_api']) {
+          const p = await probeServiceViaProxy(vip, service, { timeoutMs: 6500 });
+          await env.DB.prepare(
+            `INSERT INTO mesh_service_proofs(cc,service,proxy_host,ok,accepted,tls_valid,status,ms,detail)
+             VALUES(?,?,?,?,?,?,?,?,?)`
+          ).bind(selected.cc, service, p.proxy_host || null, p.ok ? 1 : 0, p.accepted ? 1 : 0,
+            p.tls_valid ? 1 : 0, p.status || null, p.ms || null, String(p.error || p.proof || '').slice(0, 180)).run();
+        }
+      }
+    }
+  }
+  ctx?.waitUntil?.(env.DB.prepare(`DELETE FROM mesh_measurements WHERE created_at < datetime('now','-14 days')`).run().catch(() => {}));
+  return { ok: true, mode, current: currentCc, alive: Boolean(current?.alive), twice_failed: twiceFailed, quarantined: [...quarantined], cooldown: !canSwitch, switched, selected: selected?.cc || null };
 }
 
 /* ══════════════════════════ روتر اصلی ══════════════════════════ */
@@ -565,9 +672,27 @@ export async function handleApi(request, env, ctx, url) {
   /* ───────── Causal Mesh Brain: race / history / proof-gated apply ───────── */
   if (p.startsWith('/api/mesh/')) await ensureMeshSchema(env);
 
+  if (p === '/api/mesh/monitor' && method === 'POST') {
+    return json(await runMeshCron(env, ctx));
+  }
+
   if (p === '/api/mesh/race' && method === 'POST') {
     const body = await request.json().catch(() => ({}));
     const mode = ['game', 'web', 'ai'].includes(body.mode) ? body.mode : 'web';
+    const limiterKey = `race:${account.id}`;
+    const limiter = await env.DB.prepare(
+      `SELECT (unixepoch('now') - unixepoch(updated_at)) age FROM mesh_runtime WHERE key = ?`
+    ).bind(limiterKey).first();
+    if (limiter && Number(limiter.age) < 12) {
+      return json({ ok: false, code: 'rate_limited', error: 'مسابقه قبلی هنوز تازه است', retry_after: 12 - Number(limiter.age) }, 429);
+    }
+    await env.DB.prepare(
+      `INSERT INTO mesh_runtime(key,value,updated_at) VALUES(?, ?, datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=datetime('now')`
+    ).bind(limiterKey, mode).run();
+    const clientIp = request.headers.get('cf-connecting-ip') || '';
+    const sensed = detectIranIsp(request?.cf || {}, clientIp);
+    const cohort = String(body.cohort || sensed?.key || sensed?.name || 'unknown').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 40) || 'unknown';
     const requested = Array.isArray(body.ccs)
       ? [...new Set(body.ccs.map((x) => String(x || '').toUpperCase()).filter((x) => /^[A-Z]{2}$/.test(x)))].slice(0, 40)
       : null;
@@ -584,17 +709,17 @@ export async function handleApi(request, env, ctx, url) {
 
     if (results.length) {
       await env.DB.batch(results.map((r) => env.DB.prepare(
-        `INSERT INTO mesh_measurements(run_id,mode,cc,proxy,alive,edge_ms,access_ms,colo)
-         VALUES(?,?,?,?,?,?,?,?)`
+        `INSERT INTO mesh_measurements(run_id,mode,cc,proxy,alive,edge_ms,access_ms,colo,cohort)
+         VALUES(?,?,?,?,?,?,?,?,?)`
       ).bind(runId, mode, r.cc, r.proxy || null, r.alive ? 1 : 0,
-        r.edge_ms > 0 ? Math.round(r.edge_ms) : null, accessMs, accessColo)));
+        r.edge_ms > 0 ? Math.round(r.edge_ms) : null, accessMs, accessColo, cohort)));
     }
 
     const histRows = await env.DB.prepare(
       `SELECT cc,alive,edge_ms,access_ms,created_at FROM mesh_measurements
-       WHERE mode = ? AND created_at >= datetime('now','-7 days')
+       WHERE mode = ? AND cohort = ? AND created_at >= datetime('now','-7 days')
        ORDER BY created_at DESC LIMIT 3000`
-    ).bind(mode).all();
+    ).bind(mode, cohort).all();
     const history = meshHistoryStats(histRows.results || []);
     const ranked = results.map((r) => {
       const h = history.get(r.cc) || null;
@@ -615,7 +740,7 @@ export async function handleApi(request, env, ctx, url) {
     ctx?.waitUntil?.(env.DB.prepare(`DELETE FROM mesh_measurements WHERE created_at < datetime('now','-14 days')`).run().catch(() => {}));
     await logEvent(env, 'info', `Causal Mesh ${mode}: ${ranked.filter((r) => r.alive).length}/${ranked.length} خروجی پاسخ‌گو`);
     return json({
-      ok: true, run_id: runId, mode, access_ms: accessMs, access_colo: accessColo,
+      ok: true, run_id: runId, mode, cohort, access_ms: accessMs, access_colo: accessColo,
       measured_at: new Date().toISOString(), results: ranked,
     });
   }
@@ -623,15 +748,74 @@ export async function handleApi(request, env, ctx, url) {
   if (p === '/api/mesh/history' && method === 'GET') {
     const mode = ['game', 'web', 'ai'].includes(url.searchParams.get('mode')) ? url.searchParams.get('mode') : 'web';
     const days = Math.max(1, Math.min(30, Number(url.searchParams.get('days') || 7)));
-    const rows = await env.DB.prepare(
-      `SELECT cc,alive,edge_ms,access_ms,proxy,colo,created_at FROM mesh_measurements
-       WHERE mode = ? AND created_at >= datetime('now', ?)
-       ORDER BY created_at DESC LIMIT 5000`
-    ).bind(mode, `-${days} days`).all();
+    const cohort = String(url.searchParams.get('cohort') || '').toLowerCase().replace(/[^a-z0-9_-]/g, '-').slice(0, 40);
+    const rows = cohort
+      ? await env.DB.prepare(
+        `SELECT cc,alive,edge_ms,access_ms,proxy,colo,cohort,created_at FROM mesh_measurements
+         WHERE mode = ? AND cohort = ? AND created_at >= datetime('now', ?)
+         ORDER BY created_at DESC LIMIT 5000`).bind(mode, cohort, `-${days} days`).all()
+      : await env.DB.prepare(
+        `SELECT cc,alive,edge_ms,access_ms,proxy,colo,cohort,created_at FROM mesh_measurements
+         WHERE mode = ? AND created_at >= datetime('now', ?)
+         ORDER BY created_at DESC LIMIT 5000`).bind(mode, `-${days} days`).all();
     const stats = [...meshHistoryStats(rows.results || []).entries()].map(([cc, x]) => ({ cc, ...x }))
       .sort((a, b) => (b.success_rate - a.success_rate) || ((a.p95 ?? 999999) - (b.p95 ?? 999999)));
     const policies = await env.DB.prepare('SELECT mode,cc,proxy,score,updated_at FROM mesh_policies ORDER BY mode').all();
-    return json({ ok: true, mode, days, stats, policies: policies.results || [] });
+    const proofs = await env.DB.prepare(
+      `SELECT cc,service,ok,accepted,tls_valid,status,ms,detail,checked_at
+       FROM mesh_service_proofs WHERE checked_at >= datetime('now','-7 days')
+       ORDER BY checked_at DESC LIMIT 200`
+    ).all();
+    const runtime = await env.DB.prepare(
+      `SELECT key,value,updated_at FROM mesh_runtime
+       WHERE key LIKE 'quarantine:%' OR key='failover-cooldown' ORDER BY updated_at DESC LIMIT 50`
+    ).all();
+    return json({ ok: true, mode, days, cohort: cohort || null, stats, policies: policies.results || [], service_proofs: proofs.results || [], runtime: runtime.results || [] });
+  }
+
+  if (p === '/api/mesh/service-proof' && method === 'POST') {
+    const proofKey = `service-proof:${account.id}`;
+    const lastProofRun = await env.DB.prepare(`SELECT (unixepoch('now')-unixepoch(updated_at)) age FROM mesh_runtime WHERE key=?`).bind(proofKey).first();
+    if (lastProofRun && Number(lastProofRun.age) < 20) return bad('rate_limited', 'اثبات سرویس حداکثر هر ۲۰ ثانیه اجرا می‌شود', 429);
+    await env.DB.prepare(
+      `INSERT INTO mesh_runtime(key,value,updated_at) VALUES(?, 'running', datetime('now'))
+       ON CONFLICT(key) DO UPDATE SET value='running',updated_at=datetime('now')`
+    ).bind(proofKey).run();
+    const body = await request.json().catch(() => ({}));
+    const cc = String(body.cc || '').toUpperCase();
+    const country = findCountry(cc);
+    if (!country?.verifiedExit) return bad('unverified_country', 'این کشور خروجی تأییدشده ندارد', 409);
+    const allowed = ['gemini_web', 'gemini_api', 'ai_studio', 'chatgpt', 'claude'];
+    const services = Array.isArray(body.services)
+      ? [...new Set(body.services.filter((x) => allowed.includes(x)))].slice(0, 5)
+      : allowed;
+    const candidates = (country.vipProxies || []).filter((x) => /^(socks5|http):\/\//i.test(String(x))).slice(0, 2);
+    if (!candidates.length) {
+      return json({ ok: true, cc, status: 'unavailable', results: services.map((service) => ({ service, ok: false, accepted: false, proof: 'no-service-exit' })) });
+    }
+    const results = new Array(services.length);
+    const queue = services.map((service, index) => ({ service, index }));
+    await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+      while (queue.length) {
+        const { service, index } = queue.shift();
+        let best = null;
+        for (const proxy of candidates) {
+          const proof = await probeServiceViaProxy(proxy, service, { timeoutMs: Math.max(2500, Math.min(9000, Number(body.timeout || 6500))) });
+          if (!best || proof.accepted || (!best.ok && proof.ok)) best = proof;
+          if (proof.accepted) break;
+        }
+        best ||= { service, ok: false, accepted: false, error: 'no-result' };
+        results[index] = best;
+        await env.DB.prepare(
+          `INSERT INTO mesh_service_proofs(cc,service,proxy_host,ok,accepted,tls_valid,status,ms,detail)
+           VALUES(?,?,?,?,?,?,?,?,?)`
+        ).bind(cc, service, best.proxy_host || null, best.ok ? 1 : 0, best.accepted ? 1 : 0,
+          best.tls_valid ? 1 : 0, best.status || null, best.ms || null,
+          String(best.error || best.proof || '').slice(0, 180)).run();
+      }
+    }));
+    await logEvent(env, 'info', `Service Proof ${cc}: ${results.filter((r) => r.accepted).length}/${results.length} پذیرفته`);
+    return json({ ok: true, cc, checked_at: new Date().toISOString(), results });
   }
 
   if (p === '/api/mesh/apply' && method === 'POST') {
@@ -649,13 +833,28 @@ export async function handleApi(request, env, ctx, url) {
     if (!proof) return bad('fresh_proof_required', 'ابتدا مسابقه واقعی این مسیر را اجرا کنید', 409);
     const proxy = String(proof.proxy || '').trim();
     if (!proxy) return bad('missing_proxy', 'خروجی سالم اما آدرس قابل اعمال ندارد', 409);
+    if (mode === 'ai') {
+      const serviceProof = await env.DB.prepare(
+        `SELECT COUNT(*) c FROM mesh_service_proofs
+         WHERE cc = ? AND accepted = 1 AND service IN ('gemini_web','gemini_api','ai_studio')
+           AND checked_at >= datetime('now','-30 minutes')`
+      ).bind(cc).first();
+      if (Number(serviceProof?.c || 0) < 1) {
+        return bad('service_proof_required', 'برای حالت AI ابتدا اثبات زنده Gemini/AI را اجرا کنید', 409);
+      }
+    }
     const hRows = await env.DB.prepare(
       `SELECT cc,alive,edge_ms,created_at FROM mesh_measurements
        WHERE mode = ? AND cc = ? AND created_at >= datetime('now','-7 days') ORDER BY created_at DESC LIMIT 300`
     ).bind(mode, cc).all();
     const h = meshHistoryStats(hRows.results || []).get(cc) || null;
     const score = meshScore(mode, { alive: true, edge_ms: Number(proof.edge_ms) }, h);
-    await putSettingsBulk(env, { selected_country: cc, proxy_ips: [proxy] });
+    await putSettingsBulk(env, {
+      selected_country: cc,
+      proxy_ips: [proxy],
+      mesh_active_mode: mode,
+      mesh_auto_failover: body.auto_failover === false ? '0' : '1',
+    });
     await env.DB.prepare(
       `INSERT INTO mesh_policies(mode,cc,proxy,score,updated_at) VALUES(?,?,?,?,datetime('now'))
        ON CONFLICT(mode) DO UPDATE SET cc=excluded.cc,proxy=excluded.proxy,score=excluded.score,updated_at=datetime('now')`
@@ -887,7 +1086,8 @@ export async function handleApi(request, env, ctx, url) {
       'default_quota_gb', 'default_expiry_days', 'rotate_minutes', 'signup_max_per_ip', 'signup_max_per_day',
       'public_signup', 'maintenance', 'auto_rotate', 'mux_enabled', 'block_ads', 'block_nsfw', 'block_list',
       'clean_ips', 'ip_pool', 'device_limit', 'dns_upstream', 'proto', 'path', 'early_data', 'decoy_url', 'announce',
-      'trojan_password', 'ports_mode', 'ports_custom', 'config_count', 'ipv6_enabled', 'ipv6_pool', 'verified_pairs', 'address_domains', 'selected_country', 'proxy_ips'];
+      'trojan_password', 'ports_mode', 'ports_custom', 'config_count', 'ipv6_enabled', 'ipv6_pool', 'verified_pairs', 'address_domains', 'selected_country', 'proxy_ips',
+      'mesh_auto_failover', 'mesh_active_mode', 'mesh_direct_domains'];
     const patch = {};
     for (const k of allowed) {
       const v = body[k];

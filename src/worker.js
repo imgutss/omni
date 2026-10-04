@@ -4,7 +4,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import PANEL_HTML from './panel.html';
 import { bootstrap, settingsCached, settingsCachedSync, allSettings } from './auth.js';
-import { handleApi } from './api.js';
+import { handleApi, runMeshCron } from './api.js';
 import { handleProxy, serveDecoy } from './core.js';
 import { handleUpdate, scheduledTasks } from './bot.js';
 
@@ -103,5 +103,6 @@ export default {
     const pub = st.public_host || host;
     const origin = pub.startsWith('http') ? pub : 'https://' + pub;
     await scheduledTasks(env, ctx, origin);
+    await runMeshCron(env, ctx).catch(() => {});
   },
 };

@@ -444,6 +444,17 @@ export function buildConfigs(user, settings, cleanIps = []) {
 }
 
 /* ─────────────── sing-box / clash ─────────────── */
+const MESH_AI_DOMAINS = [
+  'gemini.google.com', 'generativelanguage.googleapis.com', 'aistudio.google.com',
+  'chatgpt.com', 'openai.com', 'claude.ai', 'anthropic.com',
+];
+const MESH_GAME_DOMAINS = [
+  'steampowered.com', 'steamcommunity.com', 'steamcontent.com', 'epicgames.com',
+  'riotgames.com', 'ea.com', 'ubisoft.com', 'battle.net',
+];
+function meshDirectDomains(settings) {
+  return safeArray(settings.mesh_direct_domains).map((x) => String(x || '').trim().toLowerCase().replace(/^\./, '')).filter(Boolean).slice(0, 80);
+}
 function sbOutbound(user, settings, host, port = 443) {
   const path = wsPathFor(user, settings, { includeEd: false });
   const sni = sniFor(settings) || host;
@@ -540,8 +551,12 @@ export function buildSingbox(user, settings, addrs, ports = [443, 2053, 8080, 80
       rules: [
         { protocol: 'dns', outbound: 'dns-out' },
         { ip_is_private: true, outbound: 'direct' },
+        { domain_suffix: meshDirectDomains(settings), outbound: 'direct' },
         { domain_suffix: ['.ir'], outbound: 'direct' },
-      ],
+        { package_name: ['com.google.android.googlequicksearchbox'], outbound: 'select' },
+        { domain_suffix: MESH_AI_DOMAINS, outbound: 'select' },
+        { domain_suffix: MESH_GAME_DOMAINS, outbound: 'select' },
+      ].filter((r) => !Array.isArray(r.domain_suffix) || r.domain_suffix.length),
       final: 'select',
       auto_detect_interface: true,
     },
@@ -600,7 +615,15 @@ export function buildClash(user, settings, addrs, ports = [443, 2053, 8080, 80])
       { name: '🚀 Omni', type: 'select', proxies: proxies.map((p) => p.name) },
       { name: '♻️ Auto', type: 'url-test', proxies: proxies.map((p) => p.name), url: 'http://www.gstatic.com/generate_204', interval: 300 },
     ],
-    rules: ['DOMAIN-SUFFIX,ir,DIRECT', 'GEOIP,IR,DIRECT', 'MATCH,🚀 Omni'],
+    rules: [
+      ...meshDirectDomains(settings).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`),
+      'DOMAIN-SUFFIX,ir,DIRECT',
+      'GEOIP,IR,DIRECT',
+      'PROCESS-NAME,com.google.android.googlequicksearchbox,🚀 Omni',
+      ...MESH_AI_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},🚀 Omni`),
+      ...MESH_GAME_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},🚀 Omni`),
+      'MATCH,🚀 Omni',
+    ],
   };
 }
 
