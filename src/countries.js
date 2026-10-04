@@ -214,7 +214,6 @@ export const COUNTRY_VIP_PROXIES = {
   ],
   DE: [
     'http://s6102032620021:fahfah090908@202.28.17.5:8080',
-    'socks5://zeus-de3:pnyyu5cfv5kx@ze3.day1404.dpdns.org:11080',
     'socks5://167.86.86.221:9050',
   ],
   GB: [
