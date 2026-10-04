@@ -11,7 +11,7 @@ const req = async (m, p, body) => {
   const h = {};
   if (body) h['content-type'] = 'application/json';
   if (cookie) h.cookie = cookie;
-  if (m !== 'GET') h['x-kaveh-csrf'] = '1';
+  if (m !== 'GET') h['x-omni-csrf'] = '1';
   const r = await fetch(BASE + p, { method: m, headers: h, body: body ? JSON.stringify(body) : undefined });
   const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
   let b = null; try { b = await r.json(); } catch {}

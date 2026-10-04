@@ -6,12 +6,17 @@ import PANEL_HTML from './panel.html';
 import { bootstrap, settingsCached, settingsCachedSync, allSettings } from './auth.js';
 import { handleApi, runMeshCron } from './api.js';
 import { handleProxy, serveDecoy } from './core.js';
-import { handleUpdate, scheduledTasks } from './bot.js';
+import { handleUpdate, scheduledTasks, CF_TOKEN_URL } from './bot.js';
 
 export default {
   async fetch(request, env, ctx) {
     try {
       const url = new URL(request.url);
+
+      /* لینک کوتاه برای جلوگیری از بریده‌شدن URL بلند مجوزهای Cloudflare در تلگرام */
+      if (url.pathname === '/cf-token') {
+        return Response.redirect(CF_TOKEN_URL, 302);
+      }
 
       /* ── پینگ واقعی لبه برای اسکنر و صفحه وضعیت (بدون کش و بدون درگیر کردن D1) ── */
       if (url.pathname === '/healthz') {

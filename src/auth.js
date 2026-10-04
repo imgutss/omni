@@ -7,7 +7,8 @@ import { CF_GOOD_IPS } from './scan.js';
 
 const enc = new TextEncoder();
 const SESSION_COOKIE = 'omni_sid';
-const CSRF_HEADER = 'x-kaveh-csrf';
+const CSRF_HEADER = 'x-omni-csrf';
+const SESSION_IDLE_MS = 15 * 60 * 1000;
 
 /* ─────────── رمز عبور ─────────── */
 /* نکته: Cloudflare Workers سقف ۱۰۰٬۰۰۰ تکرار برای PBKDF2 دارد
@@ -112,16 +113,19 @@ export async function currentAccount(env, request) {
   const sid = sessionIdFrom(request);
   if (!sid) return null;
   const row = await env.DB.prepare(
-    `SELECT s.id AS sid, s.expires_at, a.id, a.username, a.role, a.pass_hash, a.pass_salt
+    `SELECT s.id AS sid, s.expires_at, s.last_seen, a.id, a.username, a.role, a.pass_hash, a.pass_salt
      FROM sessions s JOIN accounts a ON a.id = s.account_id WHERE s.id = ?`
   ).bind(sid).first();
   if (!row) return null;
-  if (new Date(String(row.expires_at).replace(' ', 'T') + 'Z') < new Date()) {
+  const absoluteExpired = new Date(String(row.expires_at).replace(' ', 'T') + 'Z').getTime() <= Date.now();
+  const lastSeen = new Date(String(row.last_seen || '').replace(' ', 'T') + 'Z').getTime();
+  const idleExpired = !Number.isFinite(lastSeen) || Date.now() - lastSeen >= SESSION_IDLE_MS;
+  if (absoluteExpired || idleExpired) {
     await env.DB.prepare('DELETE FROM sessions WHERE id = ?').bind(sid).run();
     return null;
   }
-  // به‌روزرسانی حداکثر یک‌بار در دقیقه
-  await env.DB.prepare(`UPDATE sessions SET last_seen = datetime('now') WHERE id = ? AND last_seen < datetime('now','-1 minutes')`)
+  // هر درخواست معتبر، مهلت بی‌کاری پانزده‌دقیقه‌ای را تازه می‌کند.
+  await env.DB.prepare(`UPDATE sessions SET last_seen = datetime('now') WHERE id = ? AND last_seen < datetime('now','-30 seconds')`)
     .bind(sid).run();
   return { id: row.id, username: row.username, role: row.role, sid: row.sid };
 }
@@ -134,7 +138,7 @@ export async function revokeAllSessions(env, accountId, exceptSid = null) {
   else await env.DB.prepare('DELETE FROM sessions WHERE account_id = ?').bind(accountId).run();
 }
 
-/* ─────────── CSRF (هدر x-kaveh-csrf از فرانت ارسال می‌شود) ─────────── */
+/* ─────────── CSRF (هدر x-omni-csrf از فرانت ارسال می‌شود) ─────────── */
 export function csrfOk(request) {
   const method = request.method.toUpperCase();
   if (method === 'GET' || method === 'HEAD') return true;

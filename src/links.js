@@ -446,7 +446,12 @@ export function buildConfigs(user, settings, cleanIps = []) {
 /* ─────────────── sing-box / clash ─────────────── */
 const MESH_AI_DOMAINS = [
   'gemini.google.com', 'generativelanguage.googleapis.com', 'aistudio.google.com',
+  'googleapis.com', 'googleusercontent.com', 'gstatic.com', 'accounts.google.com',
   'chatgpt.com', 'openai.com', 'claude.ai', 'anthropic.com',
+];
+const MESH_AI_PACKAGES = [
+  'com.google.android.googlequicksearchbox', 'com.google.android.gms',
+  'com.google.android.gsf', 'com.android.vending',
 ];
 const MESH_GAME_DOMAINS = [
   'steampowered.com', 'steamcommunity.com', 'steamcontent.com', 'epicgames.com',
@@ -545,6 +550,7 @@ export function buildSingbox(user, settings, addrs, ports = [443, 2053, 8080, 80
       { type: 'selector', tag: 'select', outbounds: ['auto', ...outs.map((o) => o.tag)] },
       { type: 'urltest', tag: 'auto', outbounds: outs.map((o) => o.tag), url: 'http://www.gstatic.com/generate_204', interval: '3m' },
       { type: 'direct', tag: 'direct' },
+      { type: 'block', tag: 'block' },
       ...outs,
     ],
     route: {
@@ -553,7 +559,9 @@ export function buildSingbox(user, settings, addrs, ports = [443, 2053, 8080, 80
         { ip_is_private: true, outbound: 'direct' },
         { domain_suffix: meshDirectDomains(settings), outbound: 'direct' },
         { domain_suffix: ['.ir'], outbound: 'direct' },
-        { package_name: ['com.google.android.googlequicksearchbox'], outbound: 'select' },
+        { package_name: MESH_AI_PACKAGES, network: 'udp', port: 443, outbound: 'block' },
+        { package_name: MESH_AI_PACKAGES, outbound: 'select' },
+        { domain_suffix: MESH_AI_DOMAINS, network: 'udp', port: 443, outbound: 'block' },
         { domain_suffix: MESH_AI_DOMAINS, outbound: 'select' },
         { domain_suffix: MESH_GAME_DOMAINS, outbound: 'select' },
       ].filter((r) => !Array.isArray(r.domain_suffix) || r.domain_suffix.length),
@@ -585,7 +593,8 @@ function clashProxy(user, settings, host, port, proto = 'vless', idx = 1) {
       headers: { Host: sni || cleanHost },
       ...(ed > 0 ? { 'max-early-data': ed, 'early-data-header-name': 'Sec-WebSocket-Protocol' } : {}),
     },
-    udp: true,
+    // Worker WebSocket transports TCP; disabling UDP forces QUIC-capable apps back to TCP.
+    udp: false,
   };
   if (proto === 'vless') base.uuid = user.uuid;
   else base.password = settings.trojan_password || user.uuid;
@@ -619,7 +628,8 @@ export function buildClash(user, settings, addrs, ports = [443, 2053, 8080, 80])
       ...meshDirectDomains(settings).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`),
       'DOMAIN-SUFFIX,ir,DIRECT',
       'GEOIP,IR,DIRECT',
-      'PROCESS-NAME,com.google.android.googlequicksearchbox,🚀 Omni',
+      'AND,((NETWORK,UDP),(DST-PORT,443)),REJECT',
+      ...MESH_AI_PACKAGES.map((p) => `PROCESS-NAME,${p},🚀 Omni`),
       ...MESH_AI_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},🚀 Omni`),
       ...MESH_GAME_DOMAINS.map((d) => `DOMAIN-SUFFIX,${d},🚀 Omni`),
       'MATCH,🚀 Omni',

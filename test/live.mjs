@@ -14,7 +14,7 @@ async function req(method, path, { body, csrf = true, raw = false, headers = {} 
   const h = { ...headers };
   if (body !== undefined) h['content-type'] = 'application/json';
   if (cookie) h['cookie'] = cookie;
-  if (method !== 'GET' && csrf) h['x-kaveh-csrf'] = '1';
+  if (method !== 'GET' && csrf) h['x-omni-csrf'] = '1';
   const r = await fetch(BASE + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) });
   const sc = r.headers.get('set-cookie');
   if (sc) cookie = sc.split(';')[0];
