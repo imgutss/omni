@@ -9070,10 +9070,21 @@ function scanMerge(row, edge, rejected) {
   row.worker_error=String(edge?.error || rejected?.error || '');
   row.colo=edge?.colo || null;
   if (proxy) {
-    row.ms=Boolean(edge?.tcp_reachable) ? row.worker_ms : null;
+    row.ms=Boolean(edge?.tcp_reachable) ? (edge?.worker_tcp_ms || edge?.edge_ms || row.worker_ms) : null;
     row.healthy=Boolean(edge?.tcp_reachable) && row.ms !== null;
     row.err=row.healthy ? '' : (edge?.error || 'پورت TCP پاسخ نداد');
-  } else row.healthy=row.browser_state === 'measured' && Number.isFinite(row.ms) && row.ms > 0;
+  } else {
+    if (row.browser_state === 'measured' && Number.isFinite(row.ms) && row.ms > 0) {
+      row.healthy = true;
+    } else if (edge?.alive && edge?.is_cf && Number.isFinite(row.attempt_ms) && row.attempt_ms > 0 && row.attempt_ms < 2100) {
+      row.healthy = true;
+      row.ms = row.attempt_ms;
+      row.err = '';
+    } else {
+      row.healthy = false;
+      row.err = row.err || edge?.error || 'پاسخ دریافت نشد';
+    }
+  }
   row.done=true; row.checked_at=Date.now();
 }
 
@@ -9134,8 +9145,9 @@ function scanMerge(row, edge, rejected) {
       await fetch(`https://${urlHost}/cdn-cgi/trace?r=${Math.random()}`,{mode:'no-cors',cache:'no-store',signal:ctrl.signal});
       samples.push(Math.max(1,Math.round(performance.now()-started)));
     }catch(err) {
-      attempts.push(Math.max(1,Math.round(performance.now()-started)));
-      error=ctrl.signal.aborted?'مهلت پاسخ تمام شد':'خطای TLS / شبکه';
+      const elapsed = Math.max(1, Math.round(performance.now() - started));
+      attempts.push(elapsed);
+      error = ctrl.signal.aborted ? 'مهلت پاسخ تمام شد' : 'خطای TLS / شبکه';
     }finally{clearTimeout(timer);}
   }
   if(!samples.length)return {ms:null,samples:0,state:'failed',error,attempt_ms:attempts.length?Math.min(...attempts):null};
