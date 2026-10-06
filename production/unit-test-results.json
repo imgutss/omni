@@ -1,0 +1,74 @@
+[
+  {
+    "name": "raw IPv4 invokes two real fetch attempts; failures never become ping",
+    "ok": true
+  },
+  {
+    "name": "IPv6 URL uses one bracket pair",
+    "ok": true
+  },
+  {
+    "name": "failed domain fetch stays failed",
+    "ok": true
+  },
+  {
+    "name": "success is measured without scaling",
+    "ok": true
+  },
+  {
+    "name": "failed attempt excluded from mean",
+    "ok": true
+  },
+  {
+    "name": "country proxy skips misleading browser HTTPS timing",
+    "ok": true
+  },
+  {
+    "name": "Worker reachability cannot convert browser failure to success",
+    "ok": true
+  },
+  {
+    "name": "browser opaque success is not Cloudflare identity verification",
+    "ok": true
+  },
+  {
+    "name": "country TCP success works independently of legacy alive field",
+    "ok": true
+  },
+  {
+    "name": "failed country TCP never borrows browser ping",
+    "ok": true
+  },
+  {
+    "name": "CIDR /32 returns one exact address",
+    "ok": true
+  },
+  {
+    "name": "CIDR aligns to network boundary",
+    "ok": true
+  },
+  {
+    "name": "invalid CIDR rejected",
+    "ok": true
+  },
+  {
+    "name": "empty IPv6-filtered selection has no IPv4 fallback",
+    "ok": true
+  },
+  {
+    "name": "failed result is never saved",
+    "ok": true
+  },
+  {
+    "name": "fresh IPv4 merges existing pool without forcing IPv6",
+    "ok": true
+  },
+  {
+    "name": "stale results cannot be saved",
+    "ok": true
+  },
+  {
+    "name": "IPv6 saves preserve IPv4 and enable IPv6",
+    "ok": true
+  }
+]
