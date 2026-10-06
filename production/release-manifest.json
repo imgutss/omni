@@ -1,15 +1,75 @@
 {
-  "release": "scanner-fix-2026-10-06.1",
-  "files": {
+  "release": "classic-restore-2026-10-06.3",
+  "scope": [
+    "omni",
+    "omni-ali",
+    "bot-install-release",
+    "canonical-github-production"
+  ],
+  "backend_change": "none; panel literal only",
+  "tests": {
+    "unit": 18,
+    "mock_browser_panels": 2,
+    "mock_browser_workflows_each": 16
+  },
+  "artifacts": {
     "main": {
-      "worker_sha256": "a57ce45b9310927b8ac7b06de934190793aec303f56ec738a4611d5a68d98938",
-      "panel_sha256": "49fd9dd2584c1670ed068af8f687d05efd2b0cf4d6d15bd5287237915d4ee084",
-      "backend_unchanged": true
+      "worker_sha256": "5612f774db1989fd3e501406c779e0e06f5591688da496616f107e040d3be434",
+      "panel_sha256": "854df099416c76b6d238e592c3c73c82a4b715d33d12c474e97ddaae1668f636"
     },
     "ali": {
-      "worker_sha256": "893653029ef3e2dec6be8193403a0f1176aaa5bad2fa9f74226e01a389b60f32",
-      "panel_sha256": "e7b630e17c261e7f95f70870b1ce48c837354e78039be1b8f079d02cf74b4a65",
-      "backend_unchanged": true
+      "worker_sha256": "b6f33771256721da241bc688fa014f3aa2fd95ef5debad07de5e68d7bbcbf7ca",
+      "panel_sha256": "076f8c07128d1a0f18e4ffb9fbb65f9a551ea6db49f0734e8a9a7eea807bd5b5"
     }
+  },
+  "deployment": {
+    "release": "classic-restore-2026-10-06.3",
+    "targets": [
+      {
+        "key": "ali",
+        "name": "omni-ali",
+        "prior_version": "6f8dacf0-8b5e-45f7-be1a-7b1b967d4d64",
+        "new_version": "4238ff4b-9836-41b8-940b-fc91883a57a4",
+        "staged": true,
+        "activated": true,
+        "smoke": {
+          "/": {
+            "status": 200,
+            "sha256": "076f8c07128d1a0f18e4ffb9fbb65f9a551ea6db49f0734e8a9a7eea807bd5b5"
+          },
+          "propagation_attempts": 2,
+          "/healthz": {
+            "status": 200
+          },
+          "/api/whoami": {
+            "status": 200
+          }
+        },
+        "bindings_preserved": true
+      },
+      {
+        "key": "main",
+        "name": "omni",
+        "prior_version": "ab7d9d84-9aa0-4fdf-850a-e97514b2baf2",
+        "new_version": "784aae99-3f0d-47d9-84c8-9bd58ff58f46",
+        "staged": true,
+        "activated": true,
+        "smoke": {
+          "/": {
+            "status": 200,
+            "sha256": "854df099416c76b6d238e592c3c73c82a4b715d33d12c474e97ddaae1668f636"
+          },
+          "propagation_attempts": 2,
+          "/healthz": {
+            "status": 200
+          },
+          "/api/whoami": {
+            "status": 200
+          }
+        },
+        "bindings_preserved": true
+      }
+    ],
+    "kv_updated": true
   }
 }

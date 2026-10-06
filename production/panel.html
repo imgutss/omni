@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="fa" dir="rtl" data-theme="omni">
 <head>
-<meta name="omni-release" content="scanner-fix-2026-10-06.1">
+<meta name="omni-release" content="classic-restore-2026-10-06.3">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#06070a">
@@ -3524,7 +3524,7 @@ var qrcode = function() {
           desc: "اندازه‌گیری HTTPS در مرورگر و پاسخ Cloudflare از Worker جدا ثبت می‌شوند؛ RTT این دو مسیر هرگز با هم جمع نمی‌شود.",
           start: "\u0634\u0631\u0648\u0639 \u0627\u0633\u06A9\u0646",
           rank: "\u0631\u062a\u0628\u0647\u200c\u0628\u0646\u062f\u06cc \u0628\u0631 \u0627\u0633\u0627\u0633 \u0646\u062a\u06cc\u062c\u0647\u0654 Worker",
-          apply: "ذخیره candidateهای اندازه‌گیری‌شده",
+          apply: "ذخیره آدرس‌های اندازه‌گیری‌شده",
           hint: "آماده — RTT مرورگر، دسترسی TCP از Worker و تأیید Cloudflare جدا گزارش می‌شوند؛ هر endpoint بعد از سنجش، برچسب ✅ می‌گیرد.",
           empty:
             "\u0647\u0646\u0648\u0632 \u0646\u062A\u06CC\u062C\u0647\u200C\u0627\u06CC \u0646\u06CC\u0633\u062A.",
@@ -3861,7 +3861,7 @@ var qrcode = function() {
           fromClean: "Saved IP candidates",
           fromHost: "Panel host",
           fromCustom: "Custom",
-          ipv6: "Add Cloudflare IPv6 candidates",
+          ipv6: "Add Cloudflare IPv6s",
           cleanAvailable: "saved candidates available",
           proxyips: "Proxy IPs",
           protoPorts: "Protocols & ports",
@@ -5700,68 +5700,18 @@ function pattCcStats(c, pool){ let total=(c?.proxies||[]).length;
   let ok=(c?.proxies||[]).filter((p)=>{ let k=String(p).trim().toLowerCase(); return pool.has(k) || pool.has(k.split(":")[0]); }).length;
   return { total, ok }; }
 function zt(e) {
-    let t = e.settings?.public_host || location.host || "panel.example",
-      s = [];
-    let cleanPool = Oe(e.settings).filter(
-      (x) =>
-        !DEAD_BYOIP_SET.has(String(x).toLowerCase()) &&
-        !COUNTRY_PROXY_MAP.has(String(x).toLowerCase()),
-    );
-    if (g.addrs === "host") {
-      s = [t];
-    } else if (g.addrs === "custom") {
-      s = g.customAddr.split(/[,\s]+/).filter(Boolean);
-    } else if (g.addrs === "sites") {
-      s = [
-        ...OMNI_CLEAN_SITES,
-        ...OMNI_CLEAN_IR.slice(0, 4),
-        ...OMNI_QOS_V4.slice(0, 4),
-      ];
-    } else if (g.addrs === "qos") {
-      s = [...OMNI_QOS_V4.slice(0, 10), ...OMNI_CLEAN_SITES.slice(0, 3)];
-    } else {
-      s = [
-        ...OMNI_QOS_V4.slice(0, 5),
-        ...OMNI_CLEAN_SITES.slice(0, 3),
-        ...OMNI_CLEAN_V6.slice(0, 3),
-        ...OMNI_CLEAN_IR.slice(0, 2),
-        ...cleanPool.slice(0, 4),
-      ];
-    }
-    if ((g.profile === "irancell" || g.profile === "tci") && g.addrs !== "custom" && g.addrs !== "host") {
-      s = [
-        ...OMNI_QOS_V4.slice(0, 6),
-        ...OMNI_CLEAN_SITES.slice(0, 3),
-        ...OMNI_CLEAN_IR.slice(0, 3),
-        ...OMNI_CLEAN_V6.slice(0, 2),
-      ];
-    } else if (g.profile === "mci" && g.addrs !== "custom" && g.addrs !== "host") {
-      s = [
-        ...OMNI_CLEAN_V6.slice(0, 5),
-        ...OMNI_QOS_V4.slice(0, 5),
-        ...OMNI_CLEAN_SITES.slice(0, 3),
-      ];
-    } else if (!g.ipv6 && g.addrs !== "custom") {
-      s = s.filter((x) => !String(x).includes(":"));
-    }
-    let filtered = [
-      ...new Set(
-        s
-          .map((x) =>
-            String(x || "")
-              .trim()
-              .replace(/^\[|\]$/g, ""),
-          )
-          .filter(
-            (x) =>
-              x &&
-              !COUNTRY_PROXY_MAP.has(x.toLowerCase()) &&
-              !DEAD_BYOIP_SET.has(x.toLowerCase()),
-          ),
-      ),
-    ];
-    return { host: t, list: filtered.slice(0, 14) };
-  }
+  const host=String(e.settings?.public_host||location.host).replace(/^https?:\/\//,'').replace(/\/.*$/,'');
+  const pool=Oe(e.settings).filter(x=>!DEAD_BYOIP_SET.has(String(x).toLowerCase())&&!COUNTRY_PROXY_MAP.has(String(x).toLowerCase()));
+  let items=[];
+  if(g.addrs==='host')items=[host];
+  else if(g.addrs==='custom')items=String(g.customAddr||'').split(/[,\s]+/).filter(Boolean);
+  else if(g.addrs==='sites')items=[...OMNI_CLEAN_SITES,...OMNI_CLEAN_IR];
+  else if(g.addrs==='qos')items=[...OMNI_QOS_V4];
+  else items=g.profile==='mci'?[...Re(e.settings?.ipv6_pool),...OMNI_CLEAN_V6,...pool,...OMNI_QOS_V4,...OMNI_CLEAN_SITES]:[...pool,...OMNI_QOS_V4,...OMNI_CLEAN_SITES,...Re(e.settings?.ipv6_pool),...OMNI_CLEAN_V6];
+  if(!g.ipv6&&g.addrs!=='custom')items=items.filter(x=>!String(x).includes(':'));
+  const unique=[...new Set(items.map(x=>String(x).trim().replace(/^\[|\]$/g,'')).filter(x=>x&&!DEAD_BYOIP_SET.has(x.toLowerCase())&&!COUNTRY_PROXY_MAP.has(x.toLowerCase())))];
+  return {host,list:unique.slice(0,14)};
+}
   function shortAddrTag(p) {
     let c = String(p || "")
       .trim()
@@ -5793,7 +5743,9 @@ function zt(e) {
       qs0.push("mode=direct");
     } else if (selC0) {
       qs0.push("cc=" + selC0.cc);
-      if (selC0.proxies?.[0]) qs0.push("proxyip=" + selC0.proxies[0] + ":443");
+      const savedExit = String(e.settings?.selected_country || '') === String(activeCc) ? Re(e.settings?.proxy_ips)[0] : '';
+      const chosenExit = savedExit || selC0.proxies?.[0];
+      if (chosenExit) qs0.push("proxyip=" + encodeURIComponent(/:\d+$/.test(chosenExit) ? chosenExit : chosenExit + ":443"));
     }
     let S = qs0.length ? `${bp}?${qs0.join("&")}` : bp,
       r = [];
@@ -5801,15 +5753,15 @@ function zt(e) {
       ? (Array.isArray(selC0.proxies) && selC0.proxies.length
         ? `endpoint ${selC0.fa} ${selC0.flag} · برچسب کاتالوگ` : `برچسب ${selC0.fa} ${selC0.flag} · بدون endpoint کاتالوگ`)
       : "🌐 direct";
-    let activePorts = [443];
+    let activePorts = [...new Set((g.ports || []).map(Number))].filter(p => [443,2053,8443,8080,80].includes(p));
     for (let p of i)
       for (let $ of activePorts) {
-        if (r.length >= 28) break;
+        if (r.length >= 140) break;
         let M = we.includes(Number($)),
           hp = p.includes(":") ? `[${p}]` : p;
         if (!M && /[a-z]/i.test(p) && !p.includes(":")) continue;
         for (let k of g.protos) {
-          if (r.length >= 28) break;
+          if (r.length >= 140) break;
           let L = k === "vless" ? t.uuid : o;
           let useFrag = Boolean(g.fragment);
           let fpVal = g.fp || "chrome";
@@ -6080,8 +6032,8 @@ function zt(e) {
       !ccQuery || String(c.fa).includes(ccQuery) || String(c.en).toLowerCase().includes(ccQuery) || String(c.cc).toLowerCase().includes(ccQuery));
     let activeStats = activeCountry ? pattCcStats(activeCountry, verifiedPool) : null;
     setTimeout(() => {
-      if (!g.out && t.length) {
-        g.out = Bt(e);
+      if (l.view === "configs" && t.length) {
+        if (!g.out) g.out = Bt(e);
         ct();
       }
     }, 0);
@@ -6089,7 +6041,7 @@ function zt(e) {
   <header class="view-head">
     <div>
       <h2>${d("qr")} کانفیگ‌ساز هوشمند و مخزن آی‌پی چرخشی</h2>
-      <p class="muted">فهرست candidateهای IPv4/IPv6، ECH و SIIT-Hex64؛ دسترس‌پذیری، سازگاری اپراتور و کیفیت تونل با این فهرست تضمین نمی‌شود.</p>
+      <p class="muted">ساخت کانفیگ با IPv4/IPv6، ECH، پورت و سرور خروجی انتخابی شما.</p>
     </div>
     <div class="head-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <select id="cfg-user" data-action-change="omni-cfg-user" class="input" style="min-width:140px">
@@ -6100,7 +6052,7 @@ function zt(e) {
   </header>
 
   <div class="notice warn" style="margin-bottom:12px;padding:11px">
-    <b>تنظیم فعلی کانفیگ‌ها: ${activeCountry ? `برچسب خروجی ${activeCountry.flag} ${a(activeCountry.fa)} (از کاتالوگ)` : activeCc === "DIRECT" ? "🌐 اتصال مستقیم" : "برچسبی انتخاب نشده"}</b>
+    <b>تنظیم فعلی کانفیگ‌ها: ${activeCountry ? `خروجی انتخاب‌شده: ${activeCountry.flag} ${a(activeCountry.fa)}` : activeCc === "DIRECT" ? "🌐 اتصال مستقیم" : "برچسبی انتخاب نشده"}</b>
         ${activeCountry && activeStats ? `<div style="font-size:11.5px;margin-top:4px">${activeStats.ok ? `✅ ${v(activeStats.ok)} آدرس از این کشور در فهرست تو ذخیره است؛ ذخیره‌بودن به معنی تست موفق نیست.` : `⏳ ${v(activeStats.total)} endpoint آمادهٔ سنجش است؛ هنوز چیزی از این کشور سنجیده نشده.`}</div>` : ""}
     <div style="font-size:11.5px;margin-top:4px">این برچسب از کاتالوگ می‌آید (برچسب خروجی، نه اندازه‌گیری جغرافیا). سنجش اتصال را همین‌جا انجام بده؛ تأیید نهایی سرویس با یک کلاینت واقعی است.</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-sm btn-primary" type="button" data-action="omni-go-scan">${d("play")} سنجش و تأیید endpointها</button></div>
@@ -6110,21 +6062,21 @@ function zt(e) {
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px">
         ${d("refresh")}
-        <h3 style="margin:0;font-size:14.5px">🔄 فهرست candidateهای Cloudflare (IPv4 + SIIT IPv6 + ECH؛ سلامت وابسته به تست زنده)</h3>
+        <h3 style="margin:0;font-size:14.5px">🔄 مخزن آی‌پی اومنی (IPv4 + SIIT IPv6 + ECH)</h3>
       </div>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;user-select:none">
           <span class="switch"><input type="checkbox" data-action="omni-toggle-autorotate" ${autoRot ? "checked" : ""}><span></span></span>
           <span>چرخش خودکار هر ${v(rotMins)} دقیقه در ساب‌لینک</span>
         </label>
-        <button class="btn btn-primary btn-sm" type="button" data-action="omni-rotate-ips">${d("refresh")} تست زنده و چرخش candidateها</button>
+        <button class="btn btn-primary btn-sm" type="button" data-action="omni-rotate-ips">${d("refresh")} چرخش فوری مخزن آی‌پی</button>
       </div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
       ${OMNI_QOS_V4.slice(0, 5)
         .map(
           (ip) =>
-            `<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">⚡ candidate IPv4: ${a(ip)}</span>`,
+            `<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">⚡ IPv4: ${a(ip)}</span>`,
         )
         .join("")}
       ${OMNI_CLEAN_SITES.slice(0, 4)
@@ -6136,13 +6088,13 @@ function zt(e) {
       ${OMNI_CLEAN_V6.slice(0, 2)
         .map(
           (v6) =>
-            `<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🚀 candidate IPv6: ${a(v6)}</span>`,
+            `<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🚀 IPv6: ${a(v6)}</span>`,
         )
         .join("")}
       ${OMNI_CLEAN_IR.slice(0, 2)
         .map(
           (dm) =>
-            `<span class="badge" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🧪 candidate IPv4: ${a(dm)}</span>`,
+            `<span class="badge" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🧪 IPv4: ${a(dm)}</span>`,
         )
         .join("")}
     </div>
@@ -6150,7 +6102,7 @@ function zt(e) {
 
   <div class="grid grid-2">
     <div class="card">
-      <div class="card-head">${d("shield")}<h3>۱) پروفایل اپراتور و برچسب candidate کشور</h3></div>
+      <div class="card-head">${d("shield")}<h3>۱) پروفایل اپراتور و لوکیشن خروجی</h3></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px">
         ${[
           [ "irancell", "💛 ایرانسل (MTN)", "F&F: unsafe + semi-python + tlshello-0-len", "100-200,5-10,tlshello", ],
@@ -6223,10 +6175,10 @@ function zt(e) {
       <div class="card-head">${d("key")}<h3>۲) منبع آدرس ورودی، پورت‌ها و تنظیمات TLS</h3></div>
       <div class="chips" style="margin-bottom:8px">
         ${[
-          ["hybrid", "⚡ ترکیبی از فهرست candidateها (IPv4 + IPv6)"],
-          ["sites", "🧪 candidateهای ECH/SIIT"],
-          ["qos", "📋 فقط candidateهای IPv4 از فهرست Cloudflare"],
-          ["host", "☁️ دامنهٔ پنل"],
+          ["hybrid", "⚡ ترکیبی (QoS + سایت‌ها + IPv6)"],
+          ["sites", "🛡️ همزادهای ECH/SIIT"],
+          ["qos", "🛡️ فقط آی‌پی‌های QoS کلودفلر"],
+          ["host", "☁️ دامنهٔ اصلی ورکر"],
           ["custom", "🎯 آدرس دلخواه"],
         ]
           .map(
@@ -6281,7 +6233,7 @@ function zt(e) {
         </label>
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;user-select:none">
           <span class="switch"><input type="checkbox" id="cfg-ipv6" ${g.ipv6 ? "checked" : ""}><span></span></span>
-          <span>افزودن candidateهای IPv6</span>
+          <span>افزودن آدرس‌های IPv6</span>
         </label>
       </div>
     </div>
@@ -9026,11 +8978,14 @@ function Vt(e, t) {
       if (k && !COUNTRY_PROXY_MAP.has(k)) COUNTRY_PROXY_MAP.set(k, c);
     }
   }
-  var SCAN_PRESETS = {
-    all: [...new Set([...OMNI_QOS_V4, ...OMNI_CLEAN_SITES, ...OMNI_CLEAN_V6, ...OMNI_CLEAN_IR])],
-    sites: [...OMNI_CLEAN_SITES], qos: [...OMNI_QOS_V4], ipv6: [...OMNI_CLEAN_V6], ir: [...OMNI_CLEAN_IR],
-  };
-  var O = {
+  var SCAN_PRESETS={
+  all:[...OMNI_QOS_V4.slice(0,7),...OMNI_CLEAN_SITES.slice(0,4),...OMNI_CLEAN_V6.slice(0,3),...OMNI_CLEAN_IR.slice(0,2)],
+  sites:[...OMNI_CLEAN_SITES,...OMNI_CLEAN_IR.slice(0,4),...OMNI_QOS_V4.slice(0,4)],
+  qos:[...OMNI_QOS_V4],
+  ipv6:[...OMNI_CLEAN_V6],
+  ir:[...OMNI_CLEAN_IR,...OMNI_CLEAN_SITES.slice(0,4)]
+};
+var O = {
     running: !1,
     tab: "ingress",
     scanMode: "preset",
@@ -9057,68 +9012,20 @@ function Vt(e, t) {
     t && (t.textContent = e);
   }
   function renderCountryGrid() {
-    let el = document.querySelector("#country-grid");
-    if (!el) return;
-    let q = (O.countryQuery || "").trim().toLowerCase();
-    let list = WORLD_COUNTRIES.filter((c) => {
-        if (q)
-          return (
-            c.fa.toLowerCase().includes(q) ||
-            c.en.toLowerCase().includes(q) ||
-            c.cc.toLowerCase().includes(q) ||
-            c.colo.toLowerCase().includes(q)
-          );
-        if (O.region === "primary") return !!c.primary;
-        if (O.region !== "all" && c.region !== O.region) return !1;
-        return !0;
-      });
-      let withEndpoints = list.filter((c) => Array.isArray(c.proxies) && c.proxies.length).length;
-      let pool = pattPool((window.__omniLastCfg || {}));
-    let cntEl = document.querySelector("#country-count-lbl");
-    if (cntEl) cntEl.textContent = `${list.length} کشور · ${withEndpoints} با endpoint کاتالوگ`;
-    el.innerHTML =
-      list
-        .map((c) => {
-          let active = O.country === c.cc;
-          return `<button type="button" class="chip" data-action="omni-country" data-cc="${c.cc}" aria-pressed="${active}" style="display:inline-flex;align-items:center;gap:6px;padding:6px 11px;font-size:12px;${active ? "border-color:var(--accent);background:var(--accent-soft);font-weight:700" : ""}">
-      <span>${c.flag}</span><span>${a(c.fa)}</span><small class="muted mono" style="font-size:10px">${c.cc} ${
-              (c.proxies || []).length
-                ? `(${v(pattCcStats(c, pool).ok)}✅ / ${v((c.proxies || []).length)})`
-                : "(بدون endpoint کاتالوگ)"
-            }</small>
-    </button>`;
-        })
-        .join("") ||
-      '<div class="muted" style="padding:8px;font-size:12px">کشوری با این مشخصات پیدا نشد.</div>';
-  }
+  const el=document.querySelector('#country-grid');if(!el)return;
+  const q=String(O.countryQuery||'').toLowerCase();
+  const list=WORLD_COUNTRIES.filter(c=>Array.isArray(c.proxies)&&c.proxies.length).filter(c=>q ? `${c.fa} ${c.en} ${c.cc}`.toLowerCase().includes(q) : O.region==='primary'?c.primary:O.region==='all'||c.region===O.region);
+  const count=document.querySelector('#country-count-lbl');if(count)count.textContent=`${list.length} کشور`;
+  el.innerHTML=list.map(c=>`<button type="button" class="chip" data-action="omni-country" data-cc="${a(c.cc)}" aria-pressed="${O.country===c.cc}">${c.flag} ${a(c.fa)} <small dir="ltr">${a(c.cc)} (${c.proxies.length})</small></button>`).join('');
+}
   function renderAllCountriesScanResults() {
-    const out = document.querySelector("#scan-out");
-    if (!out) return;
-    if (!O.countryResults.length) {
-      out.innerHTML = '<div class="muted" style="font-size:13px">دسترسی TCP 443 از Worker اومنی بررسی می‌شود؛ این تست پینگ دستگاه تو یا تست سرویس پروکسی نیست.</div>';
-      return;
-    }
-    out.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-        <b>🌍 candidateهای endpoint تنظیم‌شده</b>
-        <span class="muted" style="font-size:11.5px">برچسب کشورها از کاتالوگ می‌آید؛ TCP 443 از Worker اومنی آزمایش می‌شود و سرویس پروکسی و موقعیت واقعی تأیید نمی‌شوند.</span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        ${O.countryResults.map((r) => {
-          const reachable = Boolean(r.tcp_reachable);
-          const ms = r.worker_tcp_ms ?? r.edge_ms;
-          return `<div class="scan-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 11px;border:1px solid var(--border);border-radius:10px;background:var(--bg-elev)">
-            <span style="font-size:18px">${r.flag}</span>
-            <b style="min-width:135px;font-size:13px">${a(r.fa)} <small class="muted mono">(${a(r.cc)} · catalog)</small></b>
-            <code dir="ltr" class="muted" style="font-size:11.5px;min-width:155px">Candidate: ${a(r.host || "—")}:443</code>
-            ${r.hasVip ? '<span class="badge info" style="font-size:10.5px">candidate پروکسی AI ثبت‌شده · آزمایش‌نشده</span>' : ""}
-            <span class="scan-bar" style="flex:1;min-width:60px"><i style="width:${reachable && ms > 0 ? Math.min(100, Math.max(8, 100 - ms / 5)) : 100}%;background:${reachable ? it(ms) : "var(--danger)"}"></i></span>
-            <span class="badge ${reachable ? "ok" : "danger"}" style="font-size:11px" dir="ltr">${reachable && ms > 0 ? `TCP از Worker: ${ms} ms` : "پاسخی از TCP 443 نیامد"}</span>
-            ${reachable ? `<button type="button" class="btn btn-sm" data-action="omni-pick-country-exit" data-cc="${a(r.cc)}" data-proxy="${a(r.proxy || "")}">${d("check")} انتخاب candidate</button>` : ""}
-          </div>`;
-        }).join("")}
-      </div>`;
-  }
+  const out=document.querySelector('#scan-out');if(!out)return;
+  if(!O.countryResults.length){out.innerHTML=`<div class="muted">${O.running?'در حال تست TCP سرورهای خروجی…':'نتیجه‌ای دریافت نشد.'}</div>`;return;}
+  out.innerHTML=[...O.countryResults].sort((l,r)=>(l.worker_tcp_ms??1e9)-(r.worker_tcp_ms??1e9)).map(r=>{
+    const ok=Boolean(r.tcp_reachable),ms=Number.isFinite(r.worker_tcp_ms)?r.worker_tcp_ms:null;
+    return `<div class="scan-row" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:12px;border-bottom:1px solid var(--border)"><b>${a(r.flag||'')} ${a(r.fa||r.cc)}</b><code dir="ltr">${a(r.proxy||'—')}</code><span class="badge ${ok?'ok':'danger'}">${ok?`TCP ورکر: ${ms??'—'} ms`:'TCP پاسخ نداد'}</span>${ok&&r.proxy?`<button class="btn btn-sm" data-action="omni-pick-country-exit" data-cc="${a(r.cc)}" data-proxy="${a(r.proxy)}">انتخاب خروجی ${a(r.flag||'')}</button>`:''}</div>`;
+  }).join('');
+}
   // OMNI scanner repair 2026-10-06. A Worker response is not a client tunnel test.
 document.addEventListener('input', (event) => {
     if (event.target?.id !== 'scan-ranges' || O.running) return;
@@ -9134,68 +9041,56 @@ function scanFreshRows() {
   return O.results.filter((r) => r.done && Date.now() - (r.checked_at || 0) < 300000 && !COUNTRY_PROXY_MAP.has(r.ip.toLowerCase()));
 }
 function scanControls() {
-  document.querySelectorAll('[data-action="omni-scan"], [data-action="omni-preset"], [data-action="omni-ipver"], [data-action="omni-clear-custom"], [data-action="omni-underground-hunt"], [data-action="omni-scan-all-countries"], [data-action="omni-country"]').forEach((el) => { el.disabled = Boolean(O.running); });
-  const input = document.querySelector('#scan-ranges');
-  if (input) input.disabled = Boolean(O.running);
-  const apply = document.querySelector('#scan-apply');
-  if (apply) {
-    apply.disabled = O.running || !scanFreshRows().some((r) => r.healthy);
-    apply.textContent = 'ذخیرهٔ نتایج HTTPS';
+  document.querySelectorAll('[data-action="omni-scan-tab"], [data-action="omni-scan"], [data-action="omni-preset"], [data-action="omni-ipver"], [data-action="omni-clear-custom"], [data-action="omni-underground-hunt"], [data-action="omni-scan-all-countries"], [data-action="omni-country"]').forEach((el) => { el.disabled = Boolean(O.running); });
+  const input = document.querySelector('#scan-ranges'); if (input) input.disabled = Boolean(O.running);
+  const button = document.querySelector('#scan-apply');
+  if (button) {
+    button.disabled = O.running || !O.results.some((r) => r.healthy && Date.now() - (r.checked_at || 0) < 300000);
+    button.textContent = O.tab === 'countries' ? 'انتخاب سریع‌ترین خروجی پاسخ‌گو' : 'ذخیرهٔ نتایج پاسخ‌گو در پنل';
   }
-  const trial = document.querySelector('#scan-save-trial');
-  if (trial) trial.disabled = O.running || !scanFreshRows().some((r) => r.worker_reachable || r.cloudflare_verified);
-  const copy = document.querySelector('#scan-copy-list');
-  if (copy) copy.disabled = O.running || !O.results.length;
 }
 function scanFinish() {
-  O.running = false;
-  xe(O.results.length);
-  scanControls();
-  const rows = O.results;
-  if (O.tab === 'countries') {
-    se(`بررسی تمام شد: ${rows.filter((r) => r.worker_reachable).length} از ${rows.length} آدرس، TCP باز از سمت ورکر دارد. اتصال پروکسی باید در کلاینت آزمایش شود.`);
-    return;
-  }
-  const web = rows.filter((r) => r.healthy).length;
-  const edge = rows.filter((r) => r.worker_reachable).length;
-  const native = rows.filter((r) => r.browser_state === 'native-required').length;
-  const failures = rows.filter((r) => r.browser_state === 'failed').length;
-  se(`بررسی ${rows.length} آدرس تمام شد: ${edge} پاسخ از ورکر، ${web} نتیجهٔ HTTPS مرورگر با هویت Cloudflare${native ? `؛ ${native} آی‌پی نیاز به تست در کلاینت دارد` : ''}${failures ? `؛ ${failures} درخواست مرورگر ناموفق` : ''}. پینگ ورکر، پینگ اینترنت شما نیست.${O.scanError ? ' خطای بررسی ورکر: ' + O.scanError : ''}`);
+  O.running = false; xe(O.results.length); scanControls();
+  const good=O.results.filter((r) => r.healthy && r.ms > 0);
+  const best=good.length ? Math.min(...good.map((r) => r.ms)) : null;
+  se(`تست کامل شد — ${good.length}/${O.results.length} پاسخ‌گو${best !== null ? ` · کم‌ترین زمان ${O.tab === 'countries' ? 'TCP ورکر' : 'HTTPS مرورگر'}: ${best} ms` : ''}${O.scanError ? ' · '+O.scanError : ''}`);
 }
 function scanMerge(row, edge, rejected) {
-  row.worker_ms = Number.isFinite(edge?.edge_ms) && edge.edge_ms > 0 ? edge.edge_ms : null;
-  row.worker_reachable = Boolean(edge?.worker_reachable || edge?.tcp_reachable || edge?.edge_reachable || edge?.alive);
-  row.cloudflare_verified = Boolean(edge?.alive && edge?.is_cf && !edge?.is_proxy);
-  row.colo = edge?.colo || null;
-  row.worker_error = String(edge?.error || rejected?.error || '');
-  row.http_status = edge?.http_status || null;
-  row.healthy = !COUNTRY_PROXY_MAP.has(row.ip.toLowerCase()) && row.browser_state === 'measured' && row.cloudflare_verified && Number.isFinite(row.ms) && row.ms > 0;
-  row.done = true;
-  row.checked_at = Date.now();
+  const proxy=COUNTRY_PROXY_MAP.has(row.ip.toLowerCase());
+  row.worker_ms=Number.isFinite(edge?.edge_ms) && edge.edge_ms > 0 ? edge.edge_ms : null;
+  row.worker_reachable=Boolean(edge?.tcp_reachable || edge?.worker_reachable || edge?.alive);
+  row.cloudflare_verified=Boolean(edge?.alive && edge?.is_cf && !edge?.is_proxy);
+  row.worker_error=String(edge?.error || rejected?.error || '');
+  row.colo=edge?.colo || null;
+  if (proxy) {
+    row.ms=Boolean(edge?.tcp_reachable) ? row.worker_ms : null;
+    row.healthy=Boolean(edge?.tcp_reachable) && row.ms !== null;
+    row.err=row.healthy ? '' : (edge?.error || 'پورت TCP پاسخ نداد');
+  } else row.healthy=row.browser_state === 'measured' && Number.isFinite(row.ms) && row.ms > 0;
+  row.done=true; row.checked_at=Date.now();
 }
 
   function xe(total) {
-  const out = document.querySelector('#scan-out');
-  if (!out) return;
-  const progress = document.querySelector('#scan-bar');
-  if (progress) progress.style.width = `${total ? Math.round(O.results.filter((r) => r.done).length / total * 100) : 0}%`;
-  const order = (r) => r.healthy ? r.ms : r.worker_reachable ? 100000 + (r.worker_ms || 0) : 200000;
-  out.innerHTML = O.results.length ? [...O.results].sort((l, r) => order(l) - order(r)).map((r) => {
-    const proxy = COUNTRY_PROXY_MAP.get(r.ip.toLowerCase());
-    const raw = scanIsIp(r.ip);
-    const type = proxy ? `${proxy.flag} ${proxy.fa} · آدرس خروجی` : r.ip.includes(':') ? 'آدرس IPv6' : raw ? 'آدرس IPv4' : 'دامنه';
-    const browser = proxy ? 'تست تونل در کلاینت' : r.browser_state === 'native-required' ? 'تست با SNI در کلاینت' : r.browser_state === 'measured' ? `HTTPS مرورگر: ${r.ms} ms` : r.browser_state === 'failed' ? (r.err || 'درخواست مرورگر ناموفق') : 'در حال بررسی…';
-    const browserClass = r.healthy ? 'ok' : r.browser_state === 'failed' ? 'warn' : '';
-    let worker = !r.done ? 'ورکر: در حال بررسی…' : r.cloudflare_verified ? `هویت Cloudflare: پاسخ زنده${r.worker_ms ? ' · ' + r.worker_ms + ' ms از ورکر' : ''}` : r.worker_reachable ? `${proxy ? 'TCP ورکر باز است' : 'ورکر پاسخ HTTP گرفت؛ هویت مقصد مشخص نشد'}${r.worker_ms ? ' · ' + r.worker_ms + ' ms' : ''}` : 'ورکر: پاسخی ثبت نشد';
-    const detail = raw && !proxy ? 'مرورگر نمی‌تواند برای IP خام، SNI دامنهٔ شما را تنظیم کند؛ این نتیجه به معنی خرابی کانفیگ نیست.' : '';
-    const source = r.source ? String(r.source).replace(/configured IPv[46] seed candidate; untested/g, 'فهرست اولیه').replace(/neighbor candidate/g, 'آدرس همسایه').replace(/candidate/g, 'آدرس') : '';
-    return `<div class="scan-row" style="display:grid;gap:8px;padding:14px 8px;border-bottom:1px solid var(--border);min-width:0">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><code dir="ltr" style="font-size:14px;overflow-wrap:anywhere">${a(r.ip)}</code><span class="badge">${a(type)}</span></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="badge ${browserClass}" style="white-space:normal">${a(browser)}</span><span class="badge ${r.cloudflare_verified ? 'info' : ''}" style="white-space:normal">${a(worker)}</span></div>
-      ${detail ? `<small class="muted">${a(detail)}</small>` : ''}
-      ${r.done && r.worker_error ? `<details><summary class="muted">جزئیات پاسخ ورکر</summary><small dir="auto" style="overflow-wrap:anywhere">${a(r.worker_error)}</small></details>` : ''}
-      ${source ? `<small class="muted">منبع: ${a(source)}</small>` : ''}
-      ${proxy && r.worker_reachable ? `<button type="button" class="btn btn-sm" data-action="omni-pick-country-exit" data-cc="${a(proxy.cc)}" data-proxy="${a(r.ip)}:443">انتخاب برای آزمایش اتصال</button>` : ''}
+  const out=document.querySelector('#scan-out');if(!out)return;
+  const progress=document.querySelector('#scan-bar');
+  if(progress)progress.style.width=`${total ? Math.round(O.results.filter((r)=>r.done||r.browser_done).length/total*100) : 0}%`;
+  const sorted=[...O.results].sort((l,r)=>(l.healthy ? l.ms : 1e8)-(r.healthy ? r.ms : 1e8));
+  out.innerHTML=sorted.length ? sorted.map((r)=>{
+    const proxy=COUNTRY_PROXY_MAP.get(r.ip.toLowerCase()), v6=r.ip.includes(':'), raw=scanIsIp(r.ip);
+    const ok=r.healthy && r.ms>0, finished=r.done||r.browser_done;
+    const kind=proxy ? `${proxy.flag} خروجی ${proxy.fa}` : v6 ? '🚀 ورودی IPv6' : OMNI_QOS_SET.has(r.ip.toLowerCase()) ? '⚡ ورودی QoS کلودفلر' : raw ? '⚡ ورودی IPv4' : '🌐 دامنه';
+    const message=ok ? `${r.ms} ms` : !finished ? '…' : r.err || 'پاسخ HTTPS دریافت نشد';
+    const color=ok ? it(r.ms) : finished ? 'var(--danger)' : 'var(--text-faint)';
+    const source=String(r.source||'').replace(/configured IPv[46] seed candidate; untested/g,'فهرست اولیه').replace(/candidate/g,'آدرس');
+    return `<div class="scan-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 8px;border-bottom:1px solid var(--border)">
+      <code dir="ltr" style="font-size:13px;font-weight:700;min-width:165px;overflow-wrap:anywhere">${a(r.ip)}</code>
+      <span class="scan-bar" style="flex:1;min-width:60px"><i style="width:${ok ? Math.min(100,Math.max(10,100-r.ms/6)) : finished ? 100 : 0}%;background:${color}"></i></span>
+      <b dir="auto" style="color:${color};font-size:12px">${a(message)}</b>
+      <span class="badge ${ok?'ok':''}" style="font-size:11px">${a(kind)}${ok ? proxy ? ' · TCP ورکر' : ' · HTTPS مرورگر' : ''}</span>
+      ${r.sample_range>0 && ok ? `<span class="badge" dir="ltr">بازه: ${r.sample_range} ms</span>`:''}
+      ${proxy&&ok?`<button type="button" class="btn btn-primary btn-sm" data-action="omni-pick-country-exit" data-cc="${a(proxy.cc)}" data-proxy="${a(r.ip)}:443">انتخاب ${proxy.flag}</button>`:''}
+      ${finished && !ok ? `<details style="width:100%;font-size:11px"><summary class="muted">جزئیات آزمایش</summary><div class="muted" style="line-height:1.8">${raw&&!proxy?'درخواست مستقیم HTTPS مرورگر به این IP موفق نشد؛ این آزمایش با اتصال کانفیگ دارای SNI مستقل یکسان نیست. ':''}${r.attempt_ms ? `زمان تلاش ناموفق: ${r.attempt_ms} ms؛ پینگ موفق نیست. `:''}${a(r.worker_error||'')}</div></details>`:''}
+      ${source?`<small class="muted" style="width:100%">${a(source)}</small>`:''}
     </div>`;
   }).join('') : '<div class="muted">هنوز نتیجه‌ای نیست.</div>';
 }
@@ -9221,28 +9116,24 @@ function scanMerge(row, edge, rejected) {
     O.lineRtt = rtt;
     return { rtt, colo };
   }
-  async function Zt(value, timeoutMs) {
-  const host = String(value || '').trim().replace(/^\[|\]$/g, '');
-  if (COUNTRY_PROXY_MAP.has(host.toLowerCase())) return { ms: null, samples: 0, state: 'proxy-client' };
-  // Browser fetch cannot override SNI/Host. Do not misclassify raw IP TLS as an outage.
-  if (scanIsIp(host)) return { ms: null, sample_range: null, samples: 0, state: 'native-required' };
-  const samples = [];
-  let error = '';
-  for (let round = 0; round < 3; round++) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs || 2400);
-    const started = performance.now();
+  async function Zt(value, timeoutMs=2200) {
+  const host=String(value||'').trim().replace(/^\[|\]$/g,'');
+  if(COUNTRY_PROXY_MAP.has(host.toLowerCase()))return {ms:null,samples:0,state:'proxy-client'};
+  const urlHost=host.includes(':')?`[${host}]`:host;
+  const samples=[],attempts=[];let error='';
+  for(let round=0;round<2;round++) {
+    const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),timeoutMs),started=performance.now();
     try {
-      await fetch(`https://${host}/cdn-cgi/trace?r=${Math.random()}`, { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal });
-      samples.push(Math.max(1, Math.round(performance.now() - started)));
-    } catch (err) {
-      error = ctrl.signal.aborted ? 'مهلت HTTPS مرورگر تمام شد' : 'HTTPS مرورگر برقرار نشد؛ شبکه یا TLS را بررسی کنید';
-    } finally { clearTimeout(timer); }
+      await fetch(`https://${urlHost}/cdn-cgi/trace?r=${Math.random()}`,{mode:'no-cors',cache:'no-store',signal:ctrl.signal});
+      samples.push(Math.max(1,Math.round(performance.now()-started)));
+    }catch(err) {
+      attempts.push(Math.max(1,Math.round(performance.now()-started)));
+      error=ctrl.signal.aborted?'مهلت پاسخ تمام شد':'خطای TLS / شبکه';
+    }finally{clearTimeout(timer);}
   }
-  if (!samples.length) return { ms: null, samples: 0, sample_range: null, state: 'failed', error };
-  samples.sort((l, r) => l - r);
-  const mid = Math.floor(samples.length / 2);
-  return { ms: samples.length % 2 ? samples[mid] : Math.round((samples[mid - 1] + samples[mid]) / 2), samples: samples.length, sample_range: samples[samples.length - 1] - samples[0], state: 'measured', measurement_scope: 'browser-https-fetch' };
+  if(!samples.length)return {ms:null,samples:0,state:'failed',error,attempt_ms:attempts.length?Math.min(...attempts):null};
+  samples.sort((l,r)=>l-r);
+  return {ms:Math.round(samples.reduce((s,x)=>s+x,0)/samples.length),samples:samples.length,state:'measured',sample_range:samples.at(-1)-samples[0]};
 }
   function dt(cfg) {
   if (O.tab === 'countries' && O.country) return (COUNTRY_MAP.get(O.country)?.proxies || []).map((p) => String(p).split(':')[0]);
@@ -9260,60 +9151,34 @@ function scanMerge(row, edge, rejected) {
   return [...result].slice(0, 36);
 }
   async function WtAllCountries(e) {
-    if (O.running) return;
-    O.running = true;
-    O.tab = "countries";
-    O.scanMode = "all-countries";
-    O.country = "";
-    O.countryResults = [];
-    const bar = document.querySelector("#scan-bar");
-    if (bar) bar.style.width = "8%";
-    renderAllCountriesScanResults();
-    se("در حال آزمایش TCP 443 از Worker اومنی؛ این تست دستگاه تو، پروتکل پروکسی یا موقعیت جغرافیایی را نمی‌سنجد…");
-    try {
-      const response = await x("POST", "/api/diag/scan-countries", {
-        onlyPrimary: false,
-        concurrency: 14,
-        timeout: 2000,
-      });
-      if (bar) bar.style.width = "100%";
-      O.countryResults = Array.isArray(response?.results) ? response.results : [];
-      renderAllCountriesScanResults();
-      const reachable = O.countryResults.filter((row) => row.tcp_reachable);
-      const best = [...reachable]
-        .filter((row) => Number.isFinite(row.worker_tcp_ms) && row.worker_tcp_ms > 0)
-        .sort((a, b) => a.worker_tcp_ms - b.worker_tcp_ms)[0];
-      se(`دسترسی TCP 443 از Worker: ${reachable.length}/${O.countryResults.length}${best ? ` · سریع‌ترین TCP از Worker: ${best.flag} ${best.fa} (${best.worker_tcp_ms} ms)` : ""}. نتیجه برای هر endpoint ذخیره شد و برچسب ✅ گرفت.`);
-    } catch (error) {
-      se(String(error?.message || "سنجش endpoint کشورها شکست خورد"));
-    } finally {
-      O.running = false;
-    }
-  }
-  async function scanRun(candidates, cfg, sources = new Map()) {
-  O.scanError = '';
-  O.results = candidates.map((ip) => ({ ip, ms: null, worker_ms: null, done: false, healthy: false, browser_state: 'pending', source: sources.get(ip) || '', worker_reachable: false, cloudflare_verified: false }));
-  xe(candidates.length);
-  scanControls();
-  se(`در حال بررسی ${candidates.length} آدرس؛ نتیجهٔ مرورگر و ورکر جدا نمایش داده می‌شود…`);
-  const edgePromise = b.rankIps(candidates, cfg.public_host || '').catch((err) => { O.scanError = String(err?.message || 'API در دسترس نیست'); return { results: [] }; });
-  const queue = [...O.results];
-  await Promise.all(Array.from({ length: Math.min(6, queue.length) }, async () => {
-    while (queue.length) {
-      const row = queue.shift();
-      const probe = await Zt(row.ip, 2400);
-      row.ms = probe.ms;
-      row.browser_state = probe.state;
-      row.sample_range = probe.sample_range;
-      row.samples = probe.samples || 0;
-      row.err = probe.error || '';
-      xe(candidates.length);
-    }
-  }));
-  const response = await edgePromise;
-  const results = new Map((response?.results || []).map((r) => [String(r.ip).toLowerCase(), r]));
-  const rejected = new Map((response?.rejected || []).map((r) => [String(r.ip).toLowerCase(), r]));
-  O.results.forEach((row) => scanMerge(row, results.get(row.ip.toLowerCase()), rejected.get(row.ip.toLowerCase())));
+  if(O.running)return;O.running=true;O.tab='countries';O.scanMode='all-countries';O.country='';O.countryResults=[];O.results=[];scanControls();renderAllCountriesScanResults();
+  const bar=document.querySelector('#scan-bar');if(bar)bar.style.width='12%';se('در حال تست هم‌زمان TCP سرورهای خروجی کشورها…');
+  try {
+    const response=await x('POST','/api/diag/scan-countries',{onlyPrimary:false,concurrency:14,timeout:2000},{retry:0,signal:AbortSignal.timeout(45000)});
+    O.countryResults=Array.isArray(response?.results)?response.results:[];
+    se(`تست کشورها تمام شد — ${O.countryResults.filter(r=>r.tcp_reachable).length}/${O.countryResults.length} کشور با TCP پاسخ‌گو از ورکر.`);
+  }catch(err){se(String(err?.message||'تست کشورها انجام نشد.'));}
+  finally{O.running=false;if(bar)bar.style.width='100%';scanControls();renderAllCountriesScanResults();}
+}
+  async function scanRun(candidates,cfg,sources=new Map()) {
+  O.scanError='';
+  O.results=candidates.map((ip)=>({ip,ms:null,worker_ms:null,healthy:false,done:false,browser_done:false,browser_state:'pending',source:sources.get(ip)||''}));
+  xe(candidates.length);scanControls();se(`در حال اسکن ${candidates.length} آدرس…`);
+  const edgePromise=x('POST','/api/diag/rank-ips',{ips:candidates,host:cfg.public_host||''},{retry:0,signal:AbortSignal.timeout(18000)}).catch((err)=>{O.scanError=String(err?.message||'بررسی ورکر انجام نشد');return {results:[]};});
+  const linePromise=measureLineRtt().then((line)=>{
+    const el=document.querySelector('#direct-ping-badges');
+    if(el&&line.rtt)el.innerHTML=`<span class="badge info" dir="ltr">مرورگر ↔ پنل: ${line.rtt} ms</span>`;
+  });
+  const queue=[...O.results];
+  await Promise.all(Array.from({length:Math.min(6,queue.length)},async()=>{while(queue.length){
+    const row=queue.shift(),probe=await Zt(row.ip,2200);
+    row.ms=probe.ms;row.attempt_ms=probe.attempt_ms;row.browser_state=probe.state;row.sample_range=probe.sample_range;row.samples=probe.samples||0;row.err=probe.error||'';row.browser_done=true;
+    row.healthy=probe.state==='measured'&&probe.ms>0;xe(candidates.length);
+  }}));
+  const response=await edgePromise;await linePromise;
+  const results=new Map((response?.results||[]).map(r=>[String(r.ip).toLowerCase(),r]));
+  const rejected=new Map((response?.rejected||[]).map(r=>[String(r.ip).toLowerCase(),r]));
+  O.results.forEach(r=>scanMerge(r,results.get(r.ip.toLowerCase()),rejected.get(r.ip.toLowerCase())));
 }
   async function Wt(e) {
   if (O.running) return;
@@ -9333,159 +9198,121 @@ function scanMerge(row, edge, rejected) {
   } finally { scanFinish(); }
 }
   async function WtUnderground(e) {
-  if (O.running) return;
-  O.running = true;
-  O.scanError = '';
-  O.results = [];
-  xe(0);
-  O.tab = 'ingress'; O.scanMode = 'preset'; O.preset = 'underground'; O.country = '';
-  scanControls();
-  document.querySelectorAll('[data-action="omni-preset"]').forEach((el) => el.setAttribute('aria-pressed', String(el.dataset.v === 'underground')));
-  se('در حال ساخت آدرس‌های SIIT و بررسی پاسخ ورکر…');
+  if(O.running)return;O.running=true;O.scanError='';O.results=[];O.tab='ingress';O.scanMode='preset';O.preset='underground';O.country='';xe(0);scanControls();
+  document.querySelectorAll('[data-action="omni-preset"]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.v==='underground')));
+  se('در حال ساخت فهرست SIIT-Hex64 و استخراج رکوردهای ECH…');
   try {
-    const raw = typeof e?.settings === 'function' ? await e.settings() : e?.settings || {};
-    const cfg = raw?.settings || raw || {};
-    const response = await x('POST', '/api/diag/underground-hunt', { seeds: cfg.clean_ips || [], limit: 14, apply: false });
-    const candidates = Array.isArray(response?.candidates) ? response.candidates : [];
-    const textarea = document.querySelector('#scan-ranges');
-    if (textarea) textarea.value = candidates.map((r) => r.addr).join('\n');
-    const selected = dt(cfg);
-    if (!selected.length) { O.results = []; O.scanError = 'آدرسی مطابق فیلتر انتخابی ساخته نشد.'; return; }
-    await scanRun(selected, cfg, new Map(candidates.map((r) => [r.addr, r.source])));
-  } catch (err) { O.scanError = String(err?.message || err); }
-  finally { scanFinish(); }
+    const raw=typeof e?.settings==='function'?await e.settings():e?.settings||{},cfg=raw?.settings||raw||{};
+    const response=await x('POST','/api/diag/underground-hunt',{seeds:Re(cfg.clean_ips),limit:14,apply:false},{retry:0,signal:AbortSignal.timeout(15000)});
+    const candidates=Array.isArray(response?.candidates)?response.candidates:[];
+    const textarea=document.querySelector('#scan-ranges');if(textarea)textarea.value=candidates.map(r=>r.addr).join('\n');
+    const selected=dt(cfg);if(!selected.length){O.scanError='آدرسی مطابق فیلتر انتخابی وجود ندارد.';return;}
+    await scanRun(selected,cfg,new Map(candidates.map(r=>[r.addr,r.source])));
+  }catch(err){O.scanError=err?.name==='TimeoutError'?'مهلت دریافت فهرست تمام شد؛ دوباره امتحان کنید.':String(err?.message||err);}
+  finally{scanFinish();}
 }
   async function Jt(e) {
     await Wt(e);
   }
-  async function Kt(e, trial = false) {
-  if (O.running) return y('ابتدا صبر کنید بررسی تمام شود.', 'warn');
-  if (O.tab === 'countries') return y('خروجی کشور را از دکمهٔ انتخاب همان آدرس تنظیم کنید.', 'warn');
-  const rows = scanFreshRows().filter((r) => trial ? (r.worker_reachable || r.cloudflare_verified) : r.healthy);
-  if (!rows.length) return y('نتیجهٔ تازه‌ای برای ذخیره نیست؛ دوباره بررسی کنید.', 'warn');
-  if (trial && !await Q('این آدرس‌ها فقط از سمت ورکر پاسخ داشته‌اند؛ اتصال اینترنت شما یا تونل اثبات نشده است. به فهرست فعلی برای آزمایش در کلاینت اضافه شوند؟')) return;
-  const raw = typeof e?.settings === 'function' ? await e.settings() : e?.settings || {};
-  const cfg = raw?.settings || raw || {};
-  const v6 = rows.filter((r) => r.ip.includes(':')).map((r) => r.ip);
-  const domains = rows.filter((r) => !scanIsIp(r.ip)).map((r) => r.ip);
-  const v4 = rows.filter((r) => scanIsIp(r.ip) && !r.ip.includes(':')).map((r) => r.ip);
-  const merge = (previous, next) => [...new Set([...Re(previous), ...next])];
-  const patch = {};
-  if (v6.length) { patch.ipv6_enabled = '1'; patch.ipv6_pool = merge(cfg.ipv6_pool, v6); }
-  if (domains.length) patch.address_domains = merge(cfg.address_domains, domains);
-  if (v4.length || domains.length) patch.clean_ips = merge(cfg.clean_ips, [...v4, ...domains]);
-  const saved = await b.saveSettings(patch);
-  e.setSettings(saved?.settings || { ...cfg, ...patch });
-  y(`${rows.length} آدرس ${trial ? 'برای آزمایش در کلاینت' : 'با نتیجهٔ HTTPS مرورگر'} به فهرست اضافه شد؛ تست تونل جداست.`, 'ok');
+  async function Kt(e) {
+  if(O.running)return;
+  const rows=O.results.filter(r=>r.healthy&&r.ms>0&&r.done&&Date.now()-(r.checked_at||0)<300000).sort((l,r)=>l.ms-r.ms);
+  if(!rows.length)return y('نتیجهٔ پاسخ‌گوی تازه‌ای برای ذخیره وجود ندارد.','warn');
+  const raw=typeof e?.settings==='function'?await e.settings():e?.settings||{},cfg=raw?.settings||raw||{};
+  const patch={};
+  if(O.tab==='countries') {
+    const best=rows.find(r=>COUNTRY_PROXY_MAP.has(r.ip.toLowerCase()));if(!best)return;
+    const country=COUNTRY_PROXY_MAP.get(best.ip.toLowerCase());
+    if(!await Q(`خروجی ${country.fa} با آدرس ${best.ip}:443 انتخاب شود؟ TCP از ورکر پاسخ داده است؛ سرویس پروکسی باید با کانفیگ بررسی شود.`))return;
+    patch.selected_country=country.cc;patch.proxy_ips=[`${best.ip}:443`];g.cc=country.cc;g.out=null;
+  } else {
+    const ingress=rows.filter(r=>!COUNTRY_PROXY_MAP.has(r.ip.toLowerCase()));
+    const ips=ingress.filter(r=>!r.ip.includes(':')).map(r=>r.ip),v6=ingress.filter(r=>r.ip.includes(':')).map(r=>r.ip),domains=ingress.filter(r=>!scanIsIp(r.ip)).map(r=>r.ip);
+    const merge=(old,next)=>[...new Set([...Re(old),...next])];
+    if(ips.length)patch.clean_ips=merge(cfg.clean_ips,ips);
+    if(v6.length){patch.ipv6_pool=merge(cfg.ipv6_pool,v6);patch.ipv6_enabled='1';}
+    if(domains.length)patch.address_domains=merge(cfg.address_domains,domains);
+  }
+  const saved=await b.saveSettings(patch);e.setSettings(saved?.settings||{...cfg,...patch});
+  y(O.tab==='countries'?'خروجی انتخاب‌شده در پنل ذخیره شد.':'آدرس‌های دارای پاسخ HTTPS ذخیره شدند.','ok');
 }
-  function Fe(e) {
-    let cfg = e?.settings || {};
-    window.__omniLastCfg = cfg;
-    let curExitCc = cfg.selected_country || "";
-    let curExitC =
-      curExitCc && curExitCc !== "DIRECT" ? COUNTRY_MAP.get(curExitCc) : null;
-    let isDirectConfigured = !curExitCc || curExitCc === "DIRECT";
-    let configuredProxy = Array.isArray(cfg.proxy_ips) ? cfg.proxy_ips[0] : null;
-    let selC =
-      O.tab === "countries" && O.country ? COUNTRY_MAP.get(O.country) : null;
-    setTimeout(() => {
-      if (O.tab === "countries") renderCountryGrid();
-    }, 0);
-    return `
+  function Fe(e){
+  let cfg=e?.settings||{};
+  let curExitCc=cfg.selected_country||"";
+  let curExitC=curExitCc&&curExitCc!=="DIRECT"?COUNTRY_MAP.get(curExitCc):null;
+  let selC=(O.tab==="countries"&&O.country)?COUNTRY_MAP.get(O.country):null;
+  setTimeout(()=>{if(O.tab==="countries")renderCountryGrid()},0);
+  return`
   <header class="view-head">
     <div>
-      <h2>${d("search")} اسکنر شبکه و آدرس‌های اتصال</h2>
-      <p class="muted">اینجا هر چیز با اندازه‌گیری مشخص می‌شود: RTT مرورگر شما، دسترسی TCP از Worker و پاسخ Cloudflare — هرکدام جدا و با نتیجهٔ همان لحظه. نتیجهٔ سنجش، همان لحظه روی برچسب‌ها و فهرست کشورها می‌نشیند.</p>
+      <h2>${d("search")} اسکنر آی‌پی تمیز و تست واقعی سرورهای کشورها</h2>
+      <p class="muted">دو بخش کاملاً مجزا: ۱) اسکن آی‌پی و سایت‌های تمیز ورودی (بدون تغییر کشور) · ۲) تست TCP سرورهای خروجی کشورها</p>
     </div>
     <div class="head-actions" style="display:flex;gap:8px;flex-wrap:wrap">
-      ${
-        O.tab === "ingress"
-          ? `<button class="btn btn-primary" type="button" data-action="omni-scan">${d("play")} شروع بررسی</button>`
-          : `<button class="btn btn-primary" type="button" data-action="omni-scan-all-countries">🌍 بررسی TCP همهٔ آدرس‌ها</button>`
-      }
+      ${O.tab==="ingress"
+        ?`<button class="btn btn-primary" type="button" data-action="omni-scan">${d("play")} شروع اسکن آی‌پی تمیز</button>`
+        :`<button class="btn btn-primary" type="button" data-action="omni-scan-all-countries">🌍 تست هم‌زمان همه کشورها</button>`}
     </div>
   </header>
 
   <div class="card" style="margin-bottom:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      <span class="muted" style="font-size:12px">برچسب خروجی تنظیم‌شده:</span>
-      ${
-        curExitC
-          ? `<span class="badge info" style="font-size:12px">📌 برچسب تنظیم‌شده: ${curExitC.flag} ${a(curExitC.fa)} · مقصد: ${a(configuredProxy || "در انتظار سنجش")}</span>`
-          : isDirectConfigured
-            ? `<span class="badge info" style="font-size:12px">🌐 حالت مستقیم (بدون خروجی کشور)</span>`
-            : `<span class="badge warn" style="font-size:12px">📌 برچسب country تنظیم‌شده: ${a(curExitCc)} · مقصد: ${a(configuredProxy || "در انتظار سنجش")}</span>`
-      }
+      <span class="muted" style="font-size:12px">خروجی انتخاب‌شدهٔ پنل:</span>
+      ${curExitC
+        ?`<span class="badge ok" style="font-size:12px">${curExitC.flag} خروجی ${a(curExitC.fa)} (${a((curExitC.proxies||[])[0]||curExitC.colo)})</span>`
+        :`<span class="badge info" style="font-size:12px">🌐 اتصال مستقیم (بدون پروکسی)</span>`}
       <span id="direct-ping-badges" style="display:inline-flex;gap:6px;flex-wrap:wrap"></span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button type="button" class="btn btn-sm" data-action="omni-net-sense">📱 شناسایی خط؛ تنظیم فرگمنت</button>
-      <button type="button" class="btn btn-sm" data-action="omni-underground-hunt">🧬 تولید آدرس از SIIT</button>
-      <button type="button" class="btn btn-sm" data-action="omni-test-direct">⚡ پینگ تا پنل</button>
+      <button type="button" class="btn btn-sm" data-action="omni-net-sense">📱 سنسور خط گوشی و تنظیم خودکار</button>
+      <button type="button" class="btn btn-sm" data-action="omni-underground-hunt">🧬 سنتز تیغه SIIT-Hex64</button>
+      <button type="button" class="btn btn-sm" data-action="omni-test-direct">⚡ تست پینگ مستقیم شما</button>
       <button type="button" class="btn btn-sm" data-action="omni-direct-mode">🌐 حالت مستقیم (بدون پروکسی)</button>
-      <button type="button" class="btn btn-sm" data-action="omni-rotate-ips">🔄 بررسی زنده و چرخش pool</button>
+      <button type="button" class="btn btn-sm" data-action="omni-rotate-ips">🔄 چرخش فوری مخزن آی‌پی</button>
     </div>
   </div>
 
   <div class="tabs" style="margin-bottom:12px">
-    <button type="button" data-action="omni-scan-tab" data-tab="ingress" aria-selected="${O.tab === "ingress"}">⚡ ۱) اسکن آدرس‌های کلودفلر</button>
-    <button type="button" data-action="omni-scan-tab" data-tab="countries" aria-selected="${O.tab === "countries"}">🌍 ۲) بررسی TCP آدرس‌های مقصد کشورها</button>
+    <button type="button" data-action="omni-scan-tab" data-tab="ingress" aria-selected="${O.tab==="ingress"}">⚡ ۱) اسکنر آی‌پی و سایت‌های تمیز ورودی (ایرانسل / همراه اول / مخابرات / دلخواه)</button>
+    <button type="button" data-action="omni-scan-tab" data-tab="countries" aria-selected="${O.tab==="countries"}">🌍 ۲) تست سرورهای خروجی کشورها (ProxyIP)</button>
   </div>
 
-  ${
-    O.tab === "ingress"
-      ? `
+  ${O.tab==="ingress"?`
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-      <b style="font-size:13px">⚡ انتخاب فهرست آدرس‌ها</b>
+      <b style="font-size:13px">⚡ انتخاب دسته آی‌پی و سایت‌های تمیز ورودی کلودفلر</b>
       <div class="chips">
-        ${[
-          ["both", "⚡ هر دو (IPv4 + IPv6)"],
-          ["v4", "4️⃣ فقط IPv4"],
-          ["v6", "6️⃣ فقط IPv6"],
-        ]
-          .map(
-            ([k, lbl]) =>
-              `<button type="button" class="chip" data-action="omni-ipver" data-v="${k}" aria-pressed="${O.ipVer === k}">${lbl}</button>`,
-          )
-          .join("")}
+        ${[["both","⚡ هر دو (IPv4 + IPv6)"],["v4","4️⃣ فقط IPv4"],["v6","6️⃣ فقط IPv6"]].map(([k,lbl])=>`<button type="button" class="chip" data-action="omni-ipver" data-v="${k}" aria-pressed="${O.ipVer===k}">${lbl}</button>`).join("")}
       </div>
     </div>
-    <div class="notice" style="margin-bottom:12px;font-size:12px;line-height:1.9">نام فهرست‌ها فقط دسته‌بندی است. IP خام با TLS مرورگر قابل آزمایش دقیق نیست؛ پاسخ ورکر جدا نمایش داده می‌شود و تست نهایی اتصال در کلاینت انجام می‌شود.</div>
     <div class="chips" style="margin-bottom:12px">
       ${[
-        ["all", "🌐 فهرست کامل"],
-        ["underground", "🧬 آدرس‌های SIIT"],
-        ["sites", "🛡️ فهرست جایگزین"],
-        ["qos", "⚡ IPv4 کلودفلر"],
-        ["ipv6", "📱 IPv6 کلودفلر"],
-        ["ir", "🔐 فهرست پیشنهادی"],
-      ]
-        .map(
-          ([k, lbl]) =>
-            `<button type="button" class="chip" data-action="omni-preset" data-v="${k}" aria-pressed="${O.scanMode === "preset" && O.preset === k}">${lbl}</button>`,
-        )
-        .join("")}
+        ["all","🌐 ترکیبی (QoS IPv4 + سایت‌های جهانی + IPv6)"],
+        ["underground","🧬 سنتز طیفی SIIT-Hex64 (IPv4 ↔ IPv6 + TYPE=65 ECH)"],
+        ["sites","🛡️ تیغه‌های همزاد ECH (بدون سایت عمومی)"],
+        ["qos","⚡ تیغه‌های Anycast (تست روی خط شما)"],
+        ["ipv6","📱 IPv6 + ECH"],
+        ["ir","🔐 تیغه‌های IPv4 نهفته در IPv6"]
+      ].map(([k,lbl])=>`<button type="button" class="chip" data-action="omni-preset" data-v="${k}" aria-pressed="${O.scanMode==="preset"&&O.preset===k}">${lbl}</button>`).join("")}
     </div>
     <div class="field">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
-        <label id="scan-ranges-lbl">🎯 IP، CIDR یا دامنه برای اندازه‌گیری ${O.scanMode === "custom" ? "(حالت آی‌پی دلخواه شما)" : ""}</label>
+        <label id="scan-ranges-lbl">🎯 لیست آی‌پی، رنج CIDR یا دامنه برای اسکن ${O.scanMode==="custom"?"(حالت آی‌پی دلخواه شما)":""}</label>
         <button type="button" class="btn btn-ghost btn-sm" data-action="omni-clear-custom">🧹 پاک‌سازی برای ورود آی‌پی دلخواه</button>
       </div>
-      <textarea id="scan-ranges" rows="3" dir="ltr" placeholder="هر IP، CIDR یا دامنه در یک خط؛ HTTPS مرورگر و نتیجهٔ Worker جداگانه ثبت می‌شوند.">${a((SCAN_PRESETS[O.preset] || SCAN_PRESETS.all).join("\n"))}</textarea>
+      <textarea id="scan-ranges" rows="3" dir="ltr" placeholder="هر آی‌پی، رنج CIDR یا دامنه را در یک خط وارد کنید (مثلاً 172.67.181.32 یا www.speedtest.net یا 104.17.147.0/24)">${a((SCAN_PRESETS[O.preset]||SCAN_PRESETS.all).join("\n"))}</textarea>
     </div>
     <div class="scan-progress" style="margin-top:10px"><i id="scan-bar" style="width:0%"></i></div>
-    <div class="muted" id="scan-status" style="font-size:12.5px;margin-top:8px">${O.scanMode === "custom" ? "حالت اسکن آی‌پی دلخواه شما — بدون الصاق نام کشور" : a(n("scanner.hint"))}</div>
-  </div>`
-      : `
+    <div class="muted" id="scan-status" style="font-size:12.5px;margin-top:8px">${O.scanMode==="custom"?"حالت اسکن آی‌پی دلخواه شما — بدون الصاق نام کشور":"آمادهٔ اسکن؛ زمان مرورگر و TCP ورکر جدا نمایش داده می‌شوند."}</div>
+  </div>`:`
   <div class="card">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
       <div>
-        <b style="font-size:13.5px">🌍 آدرس‌های مقصد خروجی (ProxyIP)</b>
-        <p class="muted" style="font-size:11.5px;margin:2px 0 0">برای هر مقصد فقط TCP/443 از Worker بررسی می‌شود و نتیجهٔ همان لحظه ذخیره می‌شود؛ نام کشور برچسب کاتالوگ است و سنجش نهایی سرویس با کلاینت انجام می‌شود.</p>
+        <b style="font-size:13.5px">🌍 تست سرورهای خروجی کشورها (ProxyIP)</b>
+        <p class="muted" style="font-size:11.5px;margin:2px 0 0">در این بخش زمان TCP از ورکر تا سرورهای خروجی سنجیده می‌شود؛ نام کشور از فهرست سرورهاست.</p>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button type="button" class="btn btn-primary btn-sm" data-action="omni-scan-all-countries">🌍 بررسی همهٔ آدرس‌ها</button>
+        <button type="button" class="btn btn-primary btn-sm" data-action="omni-scan-all-countries">🌍 تست هم‌زمان همه کشورها</button>
         <span class="badge info" id="country-count-lbl">— کشور</span>
       </div>
     </div>
@@ -9494,34 +9321,27 @@ function scanMerge(row, edge, rejected) {
     </div>
     <div class="chips" style="margin-bottom:8px">
       ${[
-        ["primary", "⭐ فهرست اصلی آدرس‌ها"],
-        ["eu", "🇪🇺 اروپا"],
-        ["me", "🕌 خاورمیانه و همسایه"],
-        ["as", "🌏 آسیا"],
-        ["na", "🌎 آمریکا و کانادا"],
-        ["all", "🌍 همهٔ کشورها"],
-      ]
-        .map(
-          ([k, lbl]) =>
-            `<button type="button" class="chip" data-action="omni-region" data-v="${k}" aria-pressed="${O.region === k}">${lbl}</button>`,
-        )
-        .join("")}
+        ["primary","⭐ لوکیشن‌های اصلی (۲۴ کشور)"],
+        ["eu","🇪🇺 اروپا"],
+        ["me","🕌 خاورمیانه و همسایه"],
+        ["as","🌏 آسیا"],
+        ["na","🌎 آمریکا و کانادا"],
+        ["all","🌍 همه کشورهای دارای سرور خروجی"]
+      ].map(([k,lbl])=>`<button type="button" class="chip" data-action="omni-region" data-v="${k}" aria-pressed="${O.region===k}">${lbl}</button>`).join("")}
     </div>
     <div id="country-grid" style="display:flex;flex-wrap:wrap;gap:6px;max-height:175px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:10px;background:var(--bg-elev)"></div>
     <div class="scan-progress" style="margin-top:10px"><i id="scan-bar" style="width:0%"></i></div>
-    <div class="muted" id="scan-status" style="font-size:12.5px;margin-top:8px">${selC ? `برچسب انتخاب‌شده: ${selC.flag} ${selC.fa} (${(selC.proxies || []).length} مقصد آدرس)` : "یک کشور یا «همه» را انتخاب کن تا TCP/443 از Worker بررسی و نتیجه ذخیره شود؛ کشورهای ✅دار قبلاً سنجیده شده‌اند."}</div>
-  </div>`
-  }
+    <div class="muted" id="scan-status" style="font-size:12.5px;margin-top:8px">${selC?`کشور انتخاب‌شده: ${selC.flag} ${selC.fa} (${(selC.proxies||[]).length} سرور خروجی)`:"روی یک کشور کلیک کنید تا سرورهای اختصاصی همان کشور تست شوند، یا «تست هم‌زمان همه کشورها» را بزنید."}</div>
+  </div>`}
 
+  <details style="margin:8px 0;font-size:11px" class="muted"><summary>راهنمای نتیجهٔ اسکن</summary><p>عدد سبز، زمان درخواست موفق است؛ خطای TLS به پینگ موفق تبدیل نمی‌شود. تست مرورگرِ IP خام با تست کانفیگ دارای SNI مستقل متفاوت است. زمان TCP کشورها از ورکر است، نه از گوشی.</p></details>
   <div class="card" id="scan-out" style="margin-top:12px">
     <div class="muted" style="font-size:13px">${a(n("scanner.empty"))}</div>
   </div>
   <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-    <button class="btn" id="scan-save-trial" data-action="omni-save-trial" disabled>ذخیره برای تست در کلاینت</button>
-    <button class="btn" id="scan-copy-list" data-action="omni-copy-list" disabled>کپی فهرست آدرس‌ها</button>
-    <button class="btn btn-primary" id="scan-apply" data-action="omni-apply" disabled>${d("check")} ${selC ? `انتخاب آدرس TCP ${selC.flag} ${selC.fa}` : "ذخیرهٔ نتایج HTTPS"}</button>
+    <button class="btn btn-primary" id="scan-apply" data-action="omni-apply" disabled>${d("check")} ${selC?`انتخاب سریع‌ترین سرور خروجی ${selC.flag} ${selC.fa}`:"ذخیرهٔ نتایج پاسخ‌گو در پنل"}</button>
   </div>`;
-  }
+}
 
   var MESH_ISO195 =
     "AF AL DZ AD AO AG AR AM AU AT AZ BS BH BD BB BY BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CN CO KM CG CD CR CI HR CU CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT HN HU IS IN ID IR IQ IE IL IT JM JP JO KZ KE KI KP KR KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM PK PS PW PA PG PY PE PH PL PT QA RO RU RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA SS ES LK SD SR SE CH SY TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE GB US UY UZ VU VA VE VN YE ZM ZW".split(
@@ -10111,12 +9931,12 @@ function scanMerge(row, edge, rejected) {
           let px = s.dataset.proxy || "";
           let cObj = COUNTRY_MAP.get(cc);
           if (!cc || !px) {
-            y("برای اعمال، باید یک endpoint مشخص از تست TCP انتخاب شود.", "warn");
+            y("ابتدا یک سرور خروجی را از نتیجهٔ اسکن انتخاب کنید.", "warn");
             return;
           }
           let accepted = await Q(
-            `فقط اتصال TCP به ${px} از Worker باز شده است. این تست پروتکل پروکسی، خروجی سرویس یا کشور واقعی را تأیید نمی‌کند. برچسب ${cObj?.fa || cc} صرفاً از کاتالوگ است. فقط به‌عنوان candidate در تنظیمات ثبت شود؟`,
-            { okLabel: "ثبت candidate" },
+            `سرور ${px} برای خروجی ${cObj?.fa || cc} ذخیره شود؟ این سرور در تست TCP ورکر پاسخ داده؛ تست کانفیگ جداست.`,
+            { okLabel: "ذخیرهٔ خروجی" },
           );
           if (!accepted) return;
           let patch = { selected_country: cc, proxy_ips: [px] };
@@ -10124,8 +9944,8 @@ function scanMerge(row, edge, rejected) {
           e.setSettings(saved?.settings || { ...e.settings(), ...patch });
           g.cc = cc;
           g.out = null;
-          y( `Candidate ${cObj?.flag || ""} ${cObj?.fa || cc} ثبت شد (برچسب کاتالوگ).`, "warn", );
-          e.rerenderView("scanner");
+          y(`خروجی ${cObj?.flag || ""} ${cObj?.fa || cc} ذخیره شد.`, "ok");
+          if (e.S().view === "scanner") e.rerenderView("scanner");
         } else if (i === "omni-net-sense") {
           let bd = document.querySelector("#direct-ping-badges");
           if (bd)
@@ -10145,7 +9965,9 @@ function scanMerge(row, edge, rejected) {
               ? conn.effectiveType.toUpperCase()
               : "فعال";
           let radioDl = conn.downlink ? conn.downlink + " Mbps" : "";
-          let ns = await x("POST", "/api/diag/net-sense", { apply: !0 });
+          s.disabled = true;
+          try {
+          let ns = await x("POST", "/api/diag/net-sense", { apply: !0 }, {retry:0,signal:AbortSignal.timeout(15000)});
           if (ns?.ok && ns.isp) {
             let nextCfg = { ...e.settings(), fragment_preset: ns.isp.fragment };
             if (Array.isArray(ns.applied_ips) && ns.applied_ips.length) {
@@ -10155,17 +9977,18 @@ function scanMerge(row, edge, rejected) {
             e.setSettings(nextCfg);
             g.out = Bt(e.S());
             if (bd)
-              bd.innerHTML = `<span class="badge ok">📡 اپراتور: ${a(ns.isp.name)} (${a(ns.ipVersion || "—")})</span><span class="badge info">📶 سنسور گوشی: ${a(radioType)}${radioDl ? " · " + a(radioDl) : ""}</span><span class="badge ok" dir="ltr">🛡️ پروفایل فرگمنت پیشنهادی: ${a(ns.isp.fragmentRule)}</span><span class="badge warn">IPهای پیشنهادی آماده‌اند — با دکمهٔ سنجش تأییدشان کن</span>`;
+              bd.innerHTML = `<span class="badge ok">📡 شبکهٔ فعلی: ${a(ns.isp.name)} (${a(ns.ipVersion || "—")})</span><span class="badge info">📶 برآورد مرورگر: ${a(radioType)}${radioDl ? " · " + a(radioDl) : ""}</span><span class="badge ok" dir="ltr">🛡️ پروفایل فرگمنت پیشنهادی: ${a(ns.isp.fragmentRule)}</span><span class="badge warn">IPهای پیشنهادی آماده‌اند — با دکمهٔ سنجش تأییدشان کن</span>`;
             y(
-              `📱 خط ${ns.isp.name} شناسایی شد؛ پروفایل فرگمنت و candidateهای پیشنهادی ذخیره شدند. برای تأیید فرگمنت و آدرس‌ها، سنجش مرورگر + Worker را اجرا کن.`,
+              `📱 خط ${ns.isp.name} شناسایی شد؛ پروفایل فرگمنت و آدرس‌های پیشنهادی ذخیره شدند. برای تأیید فرگمنت و آدرس‌ها، سنجش مرورگر + Worker را اجرا کن.`,
               "warn",
             );
           }
+        } catch(err){if(bd)bd.textContent="شناسایی شبکه انجام نشد: "+String(err?.message||err);y(String(err?.message||err),"err");}finally{s.disabled=false;}
         } else if (i === "omni-underground-hunt") {
           WtUnderground(e);
         } else if (i === "omni-test-direct") {
           let bd = document.querySelector("#direct-ping-badges");
-          if (bd) bd.innerHTML = '<span class="badge">Measuring separate browser and Worker paths…</span>';
+          if (bd) bd.innerHTML = '<span class="badge">در حال اندازه‌گیری پینگ مرورگر و ورکر…</span>';
           let cfMs = null;
           let colo = null;
           let workerTcpMs = null;
@@ -10211,25 +10034,16 @@ function scanMerge(row, edge, rejected) {
           );
           e.rerenderView(l.view);
         } else if (i === "omni-rotate-ips") {
-          s.disabled = !0;
-          let res = await x("POST", "/api/diag/rotate-ips", { apply: !0 });
-          s.disabled = !1;
-          if (res?.ok && res.applied) {
-            let nextCfg = {
-              ...e.settings(),
-              clean_ips: res.clean_ips,
-              ip_pool: res.ip_pool,
-            };
-            e.setSettings(nextCfg);
-            g.out = Bt(e.S());
-            y(
-              `🔄 ${res.clean_ips?.length || 0} candidate با پاسخ Cloudflare زنده بررسی و اعمال شد.`,
-              "ok",
-            );
-            e.rerenderView(l.view);
-          } else if (res?.ok) {
-            y("هیچ candidate با پروب زندهٔ Cloudflare تأیید نشد؛ مخزن قبلی بدون تغییر ماند.", "warn");
-          }
+          s.disabled = true;
+          try {
+            const cfg=e.settings();
+            const pool=[...new Set([...Re(cfg.clean_ips),...Re(cfg.ip_pool)])].filter(ip=>!DEAD_BYOIP_SET.has(String(ip).toLowerCase())&&!COUNTRY_PROXY_MAP.has(String(ip).toLowerCase()));
+            if(pool.length<2){y("برای چرخش، حداقل دو آدرس در مخزن ذخیره کنید.","warn");return;}
+            const rotated=[...pool.slice(1),pool[0]];
+            const patch={clean_ips:rotated,ip_pool:rotated.join("\n")};
+            const saved=await b.saveSettings(patch);e.setSettings(saved?.settings||{...cfg,...patch});g.out=null;
+            y("ترتیب مخزن آی‌پی چرخید؛ تنظیمات کاربران پاک نشد.","ok");e.rerenderView(l.view);
+          } catch(err){y(String(err?.message||err),"err");} finally{s.disabled=false;}
         } else if (i === "omni-toggle-autorotate") {
           let checked = Boolean(s.checked);
           let patch = {
@@ -10386,11 +10200,6 @@ function scanMerge(row, edge, rejected) {
             out.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${parts.join("")}</div>`;
           }
         } else if (i === "omni-rank") Jt(e);
-        else if (i === "omni-save-trial") Kt(e, true).catch((err) => y(String(err?.message || err), "err"));
-        else if (i === "omni-copy-list") {
-          const ok = await ae(O.results.map((r) => r.ip).join("\n"));
-          y(ok ? "فهرست آدرس‌ها کپی شد؛ در کلاینت با دامنهٔ خودتان تست کنید." : "کپی انجام نشد؛ آدرس‌ها را از کادر ورودی بردارید.", ok ? "ok" : "warn");
-        }
         else if (i === "omni-apply")
           Kt(e).catch((err) =>
             y(String(err?.message || n("scanner.rankFail")), "err"),

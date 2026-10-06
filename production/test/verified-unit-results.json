@@ -1,42 +1,50 @@
 [
   {
-    "name": "raw IPv4 is not falsely probed by HTTPS browser",
+    "name": "raw IPv4 invokes two real fetch attempts; failures never become ping",
     "ok": true
   },
   {
-    "name": "raw IPv6 is not falsely probed by HTTPS browser",
+    "name": "IPv6 URL uses one bracket pair",
     "ok": true
   },
   {
-    "name": "failed domain request never becomes ping",
+    "name": "failed domain fetch stays failed",
     "ok": true
   },
   {
-    "name": "measured domain uses unscaled median",
+    "name": "success is measured without scaling",
     "ok": true
   },
   {
-    "name": "Worker-only response is not client healthy",
+    "name": "failed attempt excluded from mean",
     "ok": true
   },
   {
-    "name": "Worker identity alone is not client healthy",
+    "name": "country proxy skips misleading browser HTTPS timing",
     "ok": true
   },
   {
-    "name": "opaque browser response alone is not Cloudflare verified",
+    "name": "Worker reachability cannot convert browser failure to success",
     "ok": true
   },
   {
-    "name": "browser and Cloudflare identity required for web result",
+    "name": "browser opaque success is not Cloudflare identity verification",
     "ok": true
   },
   {
-    "name": "CIDR /32 returns its only address",
+    "name": "country TCP success works independently of legacy alive field",
     "ok": true
   },
   {
-    "name": "CIDR addresses align to network not host offset",
+    "name": "failed country TCP never borrows browser ping",
+    "ok": true
+  },
+  {
+    "name": "CIDR /32 returns one exact address",
+    "ok": true
+  },
+  {
+    "name": "CIDR aligns to network boundary",
     "ok": true
   },
   {
@@ -44,31 +52,23 @@
     "ok": true
   },
   {
-    "name": "v6 empty selection does not silently scan IPv4",
+    "name": "empty IPv6-filtered selection has no IPv4 fallback",
     "ok": true
   },
   {
-    "name": "raw-IP scan finishes at 100 percent without browser fetch",
+    "name": "failed result is never saved",
     "ok": true
   },
   {
-    "name": "trial save requires explicit confirmation",
+    "name": "fresh IPv4 merges existing pool without forcing IPv6",
     "ok": true
   },
   {
-    "name": "confirmed trial save merges not overwrites known addresses",
+    "name": "stale results cannot be saved",
     "ok": true
   },
   {
-    "name": "stale results are not applied",
-    "ok": true
-  },
-  {
-    "name": "settings rejection releases busy lock",
-    "ok": true
-  },
-  {
-    "name": "Worker API failure is visible rather than silent zero",
+    "name": "IPv6 saves preserve IPv4 and enable IPv6",
     "ok": true
   }
 ]

@@ -1,16 +1,50 @@
 [
   {
-    "panel": "ali",
-    "mobile": true,
-    "jsErrors": [],
-    "tests": "raw IPv4/IPv6, SIIT filter, empty input, progress, no overflow, no implicit writes",
-    "ok": true
+    "panel": "main",
+    "ok": true,
+    "mocked": true,
+    "tests": [
+      "classic scanner controls",
+      "actual browser fetch path invoked",
+      "TLS errors never succeed",
+      "progress",
+      "save merge",
+      "SIIT success/error",
+      "network sense success/error",
+      "pool rotation",
+      "direct ping",
+      "country list/scan/select",
+      "config names",
+      "async output rerender stable",
+      "ports 443+2053 honored",
+      "selected proxy retained",
+      "QoS IPv4 honored",
+      "IPv6 off honored"
+    ],
+    "jsErrors": []
   },
   {
-    "panel": "main",
-    "mobile": true,
-    "jsErrors": [],
-    "tests": "raw IPv4/IPv6, SIIT filter, empty input, progress, no overflow, no implicit writes",
-    "ok": true
+    "panel": "ali",
+    "ok": true,
+    "mocked": true,
+    "tests": [
+      "classic scanner controls",
+      "actual browser fetch path invoked",
+      "TLS errors never succeed",
+      "progress",
+      "save merge",
+      "SIIT success/error",
+      "network sense success/error",
+      "pool rotation",
+      "direct ping",
+      "country list/scan/select",
+      "config names",
+      "async output rerender stable",
+      "ports 443+2053 honored",
+      "selected proxy retained",
+      "QoS IPv4 honored",
+      "IPv6 off honored"
+    ],
+    "jsErrors": []
   }
 ]
