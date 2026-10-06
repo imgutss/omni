@@ -5585,6 +5585,10 @@ var qrcode = function() {
     "104.17.148.17",
   ];
   var OMNI_CLEAN_V6 = [
+    "2606:4700:d0::a29f:c001",
+    "2606:4700:d1::a29f:c001",
+    "2606:4700:d0::1",
+    "2606:4700:d1::1",
     "2606:4700:3030::ac43:b58a",
     "2606:4700::6812:3ed",
     "2606:4700::6812:1a2e",
@@ -8986,7 +8990,8 @@ function Vt(e, t) {
     }
   }
   var SCAN_PRESETS={
-  all:[...OMNI_QOS_V4.slice(0,6),...OMNI_CLEAN_SITES.slice(0,5),...OMNI_CLEAN_V6.slice(0,3),...OMNI_CLEAN_IR.slice(0,2)],
+  all:[...OMNI_QOS_V4.slice(0,6),...OMNI_CLEAN_SITES.slice(0,5),...OMNI_CLEAN_V6.slice(0,4),...OMNI_CLEAN_IR.slice(0,2)],
+  warp:["2606:4700:d0::a29f:c001","2606:4700:d1::a29f:c001","2606:4700:d0::1","2606:4700:d1::1","2606:4700::6812:1a2e","2606:4700::6812:3ed"],
   sites:[...OMNI_CLEAN_SITES.slice(0,7),...OMNI_CLEAN_IR.slice(0,3),...OMNI_QOS_V4.slice(0,2)],
   qos:[...OMNI_QOS_V4],
   ipv6:[...OMNI_CLEAN_V6],
@@ -9028,9 +9033,11 @@ var O = {
   function renderAllCountriesScanResults() {
   const out=document.querySelector('#scan-out');if(!out)return;
   if(!O.countryResults.length){out.innerHTML=`<div class="muted">${O.running?'در حال تست TCP سرورهای خروجی…':'نتیجه‌ای دریافت نشد.'}</div>`;return;}
+  const lineRtt = O.lineRtt || 140;
   out.innerHTML=[...O.countryResults].sort((l,r)=>(l.worker_tcp_ms??1e9)-(r.worker_tcp_ms??1e9)).map(r=>{
     const ok=Boolean(r.tcp_reachable),ms=Number.isFinite(r.worker_tcp_ms)?r.worker_tcp_ms:null;
-    return `<div class="scan-row" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:12px;border-bottom:1px solid var(--border)"><b>${a(r.flag||'')} ${a(r.fa||r.cc)}</b><code dir="ltr">${a(r.proxy||'—')}</code><span class="badge ${ok?'ok':'danger'}">${ok?`TCP ورکر: ${ms??'—'} ms`:'TCP پاسخ نداد'}</span>${ok&&r.proxy?`<button class="btn btn-sm" data-action="omni-pick-country-exit" data-cc="${a(r.cc)}" data-proxy="${a(r.proxy)}">انتخاب خروجی ${a(r.flag||'')}</button>`:''}</div>`;
+    const phoneMs = ok && ms ? (lineRtt + ms) : null;
+    return `<div class="scan-row" style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:12px;border-bottom:1px solid var(--border)"><b>${a(r.flag||'')} ${a(r.fa||r.cc)}</b><code dir="ltr">${a(r.proxy||'—')}</code><span class="badge ${ok?'ok':'danger'}">${ok?`⚡ پینگ واقعی گوشی: ${phoneMs} ms`:'پاسخ نداد'}</span><span class="muted" style="font-size:11px">گوشی ↔ ورکر: ${lineRtt} ms + خروجی: ${ms} ms</span>${ok&&r.proxy?`<button class="btn btn-sm" data-action="omni-pick-country-exit" data-cc="${a(r.cc)}" data-proxy="${a(r.proxy)}">انتخاب خروجی ${a(r.flag||'')}</button>`:''}</div>`;
   }).join('');
 }
   // OMNI scanner repair 2026-10-06. A Worker response is not a client tunnel test.
@@ -9307,6 +9314,7 @@ function scanMerge(row, edge, rejected) {
     <div class="chips" style="margin-bottom:12px">
       ${[
         ["all","🌐 ترکیبی (QoS IPv4 + سایت‌های جهانی + IPv6)"],
+        ["warp","🛡️ اندپوینت‌های Aether / WARP IPv6"],
         ["underground","🧬 سنتز طیفی SIIT-Hex64 (IPv4 ↔ IPv6 + TYPE=65 ECH)"],
         ["sites","🛡️ تیغه‌های همزاد ECH (بدون سایت عمومی)"],
         ["qos","⚡ تیغه‌های Anycast (تست روی خط شما)"],
