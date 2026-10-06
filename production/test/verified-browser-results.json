@@ -1,0 +1,16 @@
+[
+  {
+    "panel": "ali",
+    "mobile": true,
+    "jsErrors": [],
+    "tests": "raw IPv4/IPv6, SIIT filter, empty input, progress, no overflow, no implicit writes",
+    "ok": true
+  },
+  {
+    "panel": "main",
+    "mobile": true,
+    "jsErrors": [],
+    "tests": "raw IPv4/IPv6, SIIT filter, empty input, progress, no overflow, no implicit writes",
+    "ok": true
+  }
+]

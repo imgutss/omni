@@ -3,8 +3,9 @@
 #  deploy: node deploy/deploy.mjs   یا   npx wrangler deploy
 # ═══════════════════════════════════════════════════════════════
 name = "omni"
-main = "src/worker.js"
+main = "production/worker.js"
 compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
 [[d1_databases]]
@@ -30,3 +31,8 @@ enabled = true
 type = "Text"
 globs = ["**/*.html"]
 fallthrough = true
+
+# Required by the production bot installer/update flow.
+[[kv_namespaces]]
+binding = "RELEASES"
+id = "f7ac482df0f04daf96378b6b55224dc9"

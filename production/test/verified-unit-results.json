@@ -1,0 +1,74 @@
+[
+  {
+    "name": "raw IPv4 is not falsely probed by HTTPS browser",
+    "ok": true
+  },
+  {
+    "name": "raw IPv6 is not falsely probed by HTTPS browser",
+    "ok": true
+  },
+  {
+    "name": "failed domain request never becomes ping",
+    "ok": true
+  },
+  {
+    "name": "measured domain uses unscaled median",
+    "ok": true
+  },
+  {
+    "name": "Worker-only response is not client healthy",
+    "ok": true
+  },
+  {
+    "name": "Worker identity alone is not client healthy",
+    "ok": true
+  },
+  {
+    "name": "opaque browser response alone is not Cloudflare verified",
+    "ok": true
+  },
+  {
+    "name": "browser and Cloudflare identity required for web result",
+    "ok": true
+  },
+  {
+    "name": "CIDR /32 returns its only address",
+    "ok": true
+  },
+  {
+    "name": "CIDR addresses align to network not host offset",
+    "ok": true
+  },
+  {
+    "name": "invalid CIDR rejected",
+    "ok": true
+  },
+  {
+    "name": "v6 empty selection does not silently scan IPv4",
+    "ok": true
+  },
+  {
+    "name": "raw-IP scan finishes at 100 percent without browser fetch",
+    "ok": true
+  },
+  {
+    "name": "trial save requires explicit confirmation",
+    "ok": true
+  },
+  {
+    "name": "confirmed trial save merges not overwrites known addresses",
+    "ok": true
+  },
+  {
+    "name": "stale results are not applied",
+    "ok": true
+  },
+  {
+    "name": "settings rejection releases busy lock",
+    "ok": true
+  },
+  {
+    "name": "Worker API failure is visible rather than silent zero",
+    "ok": true
+  }
+]

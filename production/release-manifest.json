@@ -1,0 +1,15 @@
+{
+  "release": "scanner-fix-2026-10-06.1",
+  "files": {
+    "main": {
+      "worker_sha256": "a57ce45b9310927b8ac7b06de934190793aec303f56ec738a4611d5a68d98938",
+      "panel_sha256": "49fd9dd2584c1670ed068af8f687d05efd2b0cf4d6d15bd5287237915d4ee084",
+      "backend_unchanged": true
+    },
+    "ali": {
+      "worker_sha256": "893653029ef3e2dec6be8193403a0f1176aaa5bad2fa9f74226e01a389b60f32",
+      "panel_sha256": "e7b630e17c261e7f95f70870b1ce48c837354e78039be1b8f079d02cf74b4a65",
+      "backend_unchanged": true
+    }
+  }
+}

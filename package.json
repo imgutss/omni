@@ -12,7 +12,12 @@
     "test": "bash test/run-e2e.sh",
     "pool": "node tools/pool-scan.mjs",
     "verify": "node tools/sub-verify.mjs",
-    "tail": "wrangler tail"
+    "tail": "wrangler tail",
+    "build:production": "node production/build.mjs",
+    "predeploy": "npm run build:production",
+    "predeploy:auto": "npm run build:production",
+    "test:scanner": "npm --prefix production test",
+    "test:scanner:browser": "npm --prefix production run test:browser"
   },
   "devDependencies": {
     "wrangler": "^3.80.0",
