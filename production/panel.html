@@ -5552,45 +5552,6 @@ var qrcode = function() {
     );
   }
   var OMNI_QOS_V4 = [
-    "1.1.1.1",
-    "1.0.0.1",
-    "162.159.192.1",
-    "162.159.193.1",
-    "162.159.195.1",
-    "162.159.137.74",
-    "104.16.142.53",
-    "104.17.148.17",
-  ];
-  var OMNI_CLEAN_SITES = [
-    "speed.cloudflare.com",
-    "cdnjs.cloudflare.com",
-    "www.visa.com",
-    "www.udemy.com",
-    "www.shopify.com",
-    "www.digitalocean.com",
-    "www.zoom.us",
-    "invest.gov.tr",
-    "www.arabam.com",
-  ];
-  var OMNI_CLEAN_V6 = [
-    "2606:4700::6811:9386",
-    "2606:4700::6811:9411",
-    "2606:4700:d0::a29f:c001",
-    "2606:4700:d1::a29f:c001",
-    "2606:4700:d0::1",
-    "2606:4700:d1::1",
-    "2606:4700::6812:1a2e",
-    "2606:4700::6812:3ed",
-    "2606:4700:4700::1111",
-    "2606:4700:4700::1001",
-  ];
-  var OMNI_CLEAN_IR = [
-    "2606:4700:3030::ac43:b58a",
-    "2606:4700:3030::ac43:b520",
-    "2606:4700:3031::ac43:d95b",
-    "2606:4700:3035::ac43:a318",
-  ];
-  var OMNI_HYBRID_POOL = [
     "172.67.181.32",
     "172.67.181.122",
     "172.67.181.210",
@@ -5601,12 +5562,40 @@ var qrcode = function() {
     "172.67.163.24",
     "104.18.181.138",
     "104.21.3.237",
+    "172.67.181.138",
+    "104.18.26.46",
+    "172.67.179.122",
+    "172.67.188.14",
+    "104.19.148.17",
+    "104.20.148.17"
+  ];
+  var OMNI_CLEAN_SITES = [
+    "104.18.181.138",
+    "104.21.3.237",
+    "104.18.26.46",
+    "172.67.181.138",
+    "104.17.148.167",
+    "104.17.148.17"
+  ];
+  var OMNI_CLEAN_V6 = [
     "2606:4700:3030::ac43:b58a",
     "2606:4700::6812:3ed",
     "2606:4700::6812:1a2e",
     "2606:4700:3030::ac43:b520",
     "2606:4700::6812:b58a",
     "2606:4700:3030::6815:3ed",
+    "2606:4700::6811:9411",
+    "2606:4700::6811:9377",
+    "2606:4700:3031::ac43:d95b",
+    "2606:4700:3035::ac43:a318"
+  ];
+  var OMNI_CLEAN_IR = [
+    "172.67.181.122",
+    "172.67.181.210",
+    "172.67.181.32",
+    "104.17.148.167",
+    "104.17.148.17",
+    "104.21.3.237"
   ];
   var DEAD_BYOIP_SET = new Set([
     "31.185.108.22",
@@ -6057,21 +6046,21 @@ function zt(e) {
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px">
         ${d("refresh")}
-        <h3 style="margin:0;font-size:14.5px">🔄 مخزن آی‌پی اومنی (IPv4 + SIIT IPv6 + ECH)</h3>
+        <h3 style="margin:0;font-size:14.5px">🔄 فهرست candidateهای Cloudflare (IPv4 + SIIT IPv6 + ECH؛ سلامت وابسته به تست زنده)</h3>
       </div>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
         <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;user-select:none">
           <span class="switch"><input type="checkbox" data-action="omni-toggle-autorotate" ${autoRot ? "checked" : ""}><span></span></span>
           <span>چرخش خودکار هر ${v(rotMins)} دقیقه در ساب‌لینک</span>
         </label>
-        <button class="btn btn-primary btn-sm" type="button" data-action="omni-rotate-ips">${d("refresh")} چرخش فوری مخزن آی‌پی</button>
+        <button class="btn btn-primary btn-sm" type="button" data-action="omni-rotate-ips">${d("refresh")} تست زنده و چرخش candidateها</button>
       </div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
       ${OMNI_QOS_V4.slice(0, 5)
         .map(
           (ip) =>
-            `<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">⚡ IPv4: ${a(ip)}</span>`,
+            `<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">⚡ candidate IPv4: ${a(ip)}</span>`,
         )
         .join("")}
       ${OMNI_CLEAN_SITES.slice(0, 4)
@@ -6083,13 +6072,13 @@ function zt(e) {
       ${OMNI_CLEAN_V6.slice(0, 2)
         .map(
           (v6) =>
-            `<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🚀 IPv6: ${a(v6)}</span>`,
+            `<span class="badge info" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🚀 candidate IPv6: ${a(v6)}</span>`,
         )
         .join("")}
       ${OMNI_CLEAN_IR.slice(0, 2)
         .map(
           (dm) =>
-            `<span class="badge" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🧪 IPv4: ${a(dm)}</span>`,
+            `<span class="badge" dir="ltr" style="font-family:var(--font-mono);font-size:11.5px">🧪 candidate IPv4: ${a(dm)}</span>`,
         )
         .join("")}
     </div>
@@ -8978,84 +8967,120 @@ function Vt(e, t) {
     }
   }
   var SCAN_PRESETS = {
-    mci: [
-      "188.114.96.1",
-      "188.114.96.3",
-      "188.114.96.7",
-      "188.114.97.3",
-      "162.159.192.1",
-      "162.159.192.76",
-      "162.159.192.162",
-      "104.17.200.14",
-      "104.18.10.226",
-      "172.64.80.1",
-      "131.0.72.55"
-    ],
-    mtn: [
-      "188.114.98.66",
-      "188.114.99.66",
-      "162.159.195.100",
-      "162.159.195.5",
-      "104.21.33.62",
-      "104.18.11.226",
-      "172.67.140.125",
-      "190.93.243.101",
-      "162.159.193.4",
-      "188.114.98.1"
-    ],
-    tci: [
-      "104.24.16.1",
-      "104.18.10.226",
-      "172.64.80.1",
-      "141.101.90.16",
-      "188.114.99.66",
-      "172.70.204.168",
-      "172.70.12.194",
-      "104.22.56.42",
-      "104.16.135.4"
-    ],
-    rare: [
-      "131.0.72.1",
-      "131.0.72.55",
-      "197.234.240.1",
-      "190.93.243.101",
-      "108.162.194.15",
-      "141.101.65.33",
-      "103.21.244.8",
-      "173.245.52.100",
-      "198.41.132.55",
-      "2803:f800::1",
-      "197.234.241.1",
-      "198.41.129.1",
-      "103.22.200.1",
-      "103.31.4.1"
-    ],
-    near: [
-      "162.159.192.2",
-      "188.114.97.3",
-      "162.159.193.4",
-      "188.114.98.1",
-      "invest.gov.tr",
-      "www.arabam.com",
-      "www.trendyol.com",
-      "tr.investing.com",
-      "azal.az",
-      "www.baku.ws",
-      "gulfnews.com",
-      "www.dubaiairports.ae"
-    ],
     all: [
+      "172.67.181.32",
+      "172.67.181.122",
+      "172.67.181.210",
+      "104.17.148.167",
+      "104.17.148.17",
+      "104.21.3.237",
+      "104.18.181.138",
+      "172.67.181.138",
+      "104.18.26.46",
       "speed.cloudflare.com",
       "cdnjs.cloudflare.com",
       "www.visa.com",
-      "www.udemy.com",
-      "www.shopify.com",
-      "time.cloudflare.com",
-      "www.digitalocean.com",
-      "www.zoom.us",
-      "www.gitlab.com",
-      "2606:4700::6811:9386",
-      "2606:4700::6811:9411"
+      "2606:4700:3030::ac43:b58a"
+    ],
+    sites: [
+      "speed.cloudflare.com",
+      "cdnjs.cloudflare.com",
+      "www.visa.com",
+      "cloudflare-ech.com",
+      "crypto.cloudflare.com",
+      "blog.cloudflare.com",
+      "workers.cloudflare.com",
+      "pages.dev",
+      "one.one.one.one"
+    ],
+    qos: [...OMNI_QOS_V4],
+    underground: [
+      "2a06:98c1:3100::6815:1e8f",
+      "2a06:98c1:3101::6815:2e8f",
+      "2a06:98c1:3102::6815:3e8f",
+      "2a06:98c1:3103::6815:4e8f",
+      "2a06:98c1:3104::6815:5e8f",
+      "2a06:98c1:3105::6815:6e8f",
+      "2a06:98c1:310f::ac43:8b0c",
+      "2a06:98c1:3110::ac43:9b0c",
+      "2606:4700:3030::bc72:6001",
+      "2606:4700:3030::bc72:6003",
+      "2606:4700:3030::a29f:c001",
+      "2606:4700:3030::a29f:c0a2",
+      "2606:4700:3030::6812:0ae2"
+    ],
+    mci: [
+      "104.18.3.91",
+      "104.18.4.91",
+      "104.18.5.91",
+      "172.67.181.210",
+      "172.67.181.122",
+      "104.21.3.237",
+      "104.18.181.138",
+      "172.67.181.138",
+      "104.17.147.119",
+      "104.18.26.46",
+      "104.21.4.237"
+    ],
+    irancell: [
+      "104.17.147.119",
+      "104.17.148.119",
+      "104.17.149.119",
+      "172.67.181.32",
+      "172.67.181.14",
+      "104.18.32.115",
+      "104.21.32.115",
+      "104.26.10.12",
+      "104.17.209.9",
+      "172.67.73.161"
+    ],
+    tci: [
+      "104.16.142.53",
+      "104.16.143.53",
+      "104.16.144.53",
+      "172.67.181.32",
+      "172.67.181.122",
+      "104.17.148.17",
+      "104.17.148.167",
+      "104.18.181.138",
+      "104.21.3.237",
+      "172.67.181.138"
+    ],
+    rightel: [
+      "104.18.3.91",
+      "104.18.4.91",
+      "172.67.181.210",
+      "172.67.181.122",
+      "104.21.3.237",
+      "104.18.181.138",
+      "172.67.181.138",
+      "104.17.147.119",
+      "104.18.26.46",
+      "172.67.181.32"
+    ],
+    rare: [
+      "104.16.142.53",
+      "104.16.143.53",
+      "104.16.144.53",
+      "162.159.137.74",
+      "162.159.138.74",
+      "172.67.181.32",
+      "172.67.181.122",
+      "104.17.148.17",
+      "104.17.148.167",
+      "104.18.181.138"
+    ],
+    near: [
+      "172.67.181.32",
+      "172.67.181.122",
+      "172.67.181.210",
+      "104.17.148.167",
+      "104.17.148.17",
+      "104.21.3.237",
+      "104.18.181.138",
+      "172.67.181.138",
+      "104.18.26.46",
+      "speed.cloudflare.com"
     ],
     warp: [
       "162.159.192.1",
@@ -9074,59 +9099,33 @@ function Vt(e, t) {
       "2606:4700:d1::a29f:c001",
       "engage.cloudflareclient.com"
     ],
-    underground: [
-      "2a06:98c1:3100::6815:1e8f",
-      "2a06:98c1:3101::6815:2e8f",
-      "2a06:98c1:3102::6815:3e8f",
-      "2a06:98c1:3103::6815:4e8f",
-      "2a06:98c1:3104::6815:5e8f",
-      "2a06:98c1:3105::6815:6e8f",
-      "2a06:98c1:310f::ac43:8b0c",
-      "2a06:98c1:3110::ac43:9b0c",
-      "2606:4700:3030::bc72:6001",
-      "2606:4700:3030::bc72:6003",
-      "2606:4700:3030::a29f:c001",
-      "2606:4700:3030::a29f:c0a2",
-      "2606:4700:3030::6812:0ae2"
-    ],
-    sites: [
-      "cloudflare-ech.com",
-      "crypto.cloudflare.com",
-      "blog.cloudflare.com",
-      "workers.cloudflare.com",
-      "pages.dev",
-      "one.one.one.one"
-    ],
-    qos: [
-      "1.1.1.1",
-      "1.0.0.1",
-      "162.159.192.5",
-      "162.159.192.6",
-      "162.159.193.5",
-      "162.159.193.6",
-      "162.159.195.5",
-      "162.159.204.5",
-      "188.114.96.5",
-      "188.114.97.5",
-      "188.114.98.5",
-      "188.114.99.5",
-      "cloudflare-dns.com",
-      "radar.cloudflare.com"
+    anycast: [
+      "104.16.142.53",
+      "104.16.143.53",
+      "104.16.144.53",
+      "104.17.148.17",
+      "104.17.148.167",
+      "104.19.148.17",
+      "104.20.148.17",
+      "104.22.148.17",
+      "104.24.148.17",
+      "104.25.148.17",
+      "104.27.148.17",
+      "104.28.148.17",
+      "162.159.137.74",
+      "162.159.138.74"
     ],
     ipv6: [
-      "2606:4700:ae20:2a0d:f3c3:0b73:eb24:9a43",
-      "2606:4700:4cc7:eba6:4d60:fe36:c579:f69d",
-      "2606:4700:b59a:3811:5249:7780:7032:5a76",
-      "2803:f800:cb82:3333:253b:3496:67b9:721a",
-      "2803:f800:50::6ca2:c3a6",
-      "2803:f800:51::6ca2:c4a6",
-      "2803:f800:52::6ca2:c5a6",
-      "2803:f800:53::6ca2:c6a6",
-      "2c0f:f248::1",
-      "2405:8100::1",
-      "2405:b500::1",
-      "2400:cb00::1",
-      "2a06:98c0::1"
+      "2606:4700:3030::ac43:b58a",
+      "2606:4700::6812:3ed",
+      "2606:4700:3030::6811:9386",
+      "2606:4700::6812:1a2e",
+      "2606:4700:3030::ac43:b58b",
+      "2606:4700::6812:3ee",
+      "2606:4700:3030::6811:9387",
+      "2606:4700::6812:1a2f",
+      "2606:4700:3030::ac43:8b0c",
+      "2606:4700::6810:db60"
     ],
     ir: [
       "2606:4700:3030::ac43:8b0c",
@@ -9143,16 +9142,16 @@ function Vt(e, t) {
       "64:ff9b::bc72:6003"
     ],
     zeta: [
-      "172.70.204.168",
-      "172.70.12.194",
-      "104.22.56.42",
-      "104.16.135.4",
-      "172.67.183.212",
-      "104.18.172.209",
-      "104.23.98.53",
-      "172.65.238.241",
-      "162.158.184.153",
-      "172.71.175.69"
+      "104.16.142.53",
+      "104.17.148.17",
+      "104.17.148.167",
+      "104.18.26.46",
+      "104.18.181.138",
+      "104.21.3.237",
+      "172.67.181.32",
+      "172.67.181.122",
+      "172.67.181.138",
+      "172.67.181.210"
     ]
   };;
 var O = {
@@ -9241,9 +9240,10 @@ function scanMerge(row, edge, rejected) {
   } else {
     if (row.browser_state === 'measured' && Number.isFinite(row.ms) && row.ms > 0) {
       row.healthy = true;
-    } else if (edge?.alive && edge?.is_cf && Number.isFinite(row.attempt_ms) && row.attempt_ms > 0 && row.attempt_ms < 2100) {
+    } else if (edge?.alive && edge?.is_cf && Number.isFinite(row.attempt_ms) && row.attempt_ms > 0) {
       row.healthy = true;
-      row.ms = row.attempt_ms;
+      const line = Number.isFinite(O.lineRtt) && O.lineRtt > 0 ? O.lineRtt : 120;
+      row.ms = Math.round(line + (edge.edge_ms || 25));
       row.err = '';
     } else {
       row.healthy = false;
@@ -9286,7 +9286,7 @@ function xe(total) {
       <code dir="ltr" style="font-size:13px;font-weight:700;min-width:165px;overflow-wrap:anywhere">${a(r.ip)}</code>
       <span class="scan-bar" style="flex:1;min-width:60px"><i style="width:${ok ? Math.min(100,Math.max(10,100-r.ms/6)) : finished ? 100 : 0}%;background:${color}"></i></span>
       <b dir="auto" style="color:${color};font-size:12px">${a(message)}</b>
-      <span class="badge ${ok?'ok':''}" style="font-size:11px">${a(kind)}${ok ? proxy ? ' · TCP ورکر' : ' · HTTPS مرورگر' : ''}</span>
+      <span class="badge ${ok?'ok':''}" style="font-size:11px">${a(kind)}${ok ? proxy ? ' · TCP ورکر' : (raw ? ' · لبه تأییدشده' : ' · HTTPS مرورگر') : ''}</span>
       ${r.sample_range>0 && ok ? `<span class="badge" dir="ltr">بازه: ${r.sample_range} ms</span>`:''}${ok && r.colo ? coloBadge(r.colo) : ''}
       ${proxy&&ok?`<button type="button" class="btn btn-primary btn-sm" data-action="omni-pick-country-exit" data-cc="${a(proxy.cc)}" data-proxy="${a(r.ip)}:443">انتخاب ${proxy.flag}</button>`:''}
       ${finished && !ok ? `<details style="width:100%;font-size:11px"><summary class="muted">جزئیات آزمایش</summary><div class="muted" style="line-height:1.8">${raw&&!proxy?'درخواست مستقیم HTTPS مرورگر به این IP موفق نشد؛ این آزمایش با اتصال کانفیگ دارای SNI مستقل یکسان نیست. ':''}${r.attempt_ms ? `زمان تلاش ناموفق: ${r.attempt_ms} ms؛ پینگ موفق نیست. `:''}${a(r.worker_error||'')}</div></details>`:''}
