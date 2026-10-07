@@ -391,8 +391,8 @@ export function buildConfigs(user, settings, cleanIps = []) {
   // یک خروجی آمریکا برای Gemini/AI و یک خروجی فرانسه؛ مسیرهای عمومی همچنان مستقیم‌اند.
   const fastHost = '172.67.181.32';
   for (const loc of [
-    { cc: 'US', cat: '✨ Gemini/AI آمریکا' },
-    { cc: 'FR', cat: '🇫🇷 فرانسه پایدار' },
+    { cc: 'US', cat: '✨ 🇺🇸 Gemini Lock · US Clean' },
+    { cc: 'FR', cat: '🇫🇷 France VIP · Clean' },
   ]) {
     const c = findCountry(loc.cc);
     if (c?.proxies?.[0]) add(fastHost, loc.cat, { overrideCc: c.cc, overrideProxy: `${c.proxies[0]}:443` });
@@ -400,7 +400,7 @@ export function buildConfigs(user, settings, cleanIps = []) {
 
   // فالبک FinalMask مدرن برای ایرانسل؛ روی همراه اول/مخابرات در مسیر اصلی استفاده نمی‌شود.
   const fmFallback = { size: '100-200', interval: '5-10', packets: 'tlshello' };
-  add('104.17.148.17', '💛 فالبک ایرانسل FinalMask', { directMode: true, forceFragment: fmFallback });
+  add('104.17.148.17', '💛 Irancell FinalMask · Ultra Bypass', { directMode: true, forceFragment: fmFallback });
 
   const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
   const uris = [];

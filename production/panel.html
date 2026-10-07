@@ -9929,6 +9929,36 @@ function xe(total) {
           MESH.message = null;
           MESH.historyLoadedAt = 0;
           e.rerenderView("mesh");
+        } else if (i === "omni-test-ai") {
+          let out = document.querySelector("#ai-test-result");
+          if (out) out.innerHTML = '<div class="skeleton" style="height:34px;margin-top:8px"></div>';
+          try {
+            y("در حال بررسی وضعیت زنده اتصال به هوش مصنوعی…", "info", 2000);
+            let r = await x("POST", "/api/mesh/service-proof", {
+              cc: "US",
+              services: ["gemini_web", "gemini_api", "ai_studio", "chatgpt", "claude"],
+              timeout: 6500,
+            });
+            let list = Array.isArray(r?.results) ? r.results : [];
+            if (out) {
+              out.innerHTML = `
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-top:10px">
+                  ${list.map(p => `
+                    <div class="card" style="padding:10px;border-inline-start:3px solid ${p.accepted ? "var(--ok)" : "var(--warn)"}">
+                      <div style="display:flex;justify-content:space-between;align-items:center">
+                        <b>${a(p.service)}</b>
+                        <span class="badge ${p.accepted ? "ok" : "warn"}">${p.accepted ? "سالم / آزاد" : (p.status || "خطا")}</span>
+                      </div>
+                      <div class="muted mono" style="font-size:11px;margin-top:4px">${p.ms ? p.ms + " ms" : "—"} · HTTP ${p.status || "—"}</div>
+                    </div>
+                  `).join("")}
+                </div>
+              `;
+            }
+            y("سنجش سرویس‌های هوش مصنوعی کامل شد", "ok");
+          } catch (err) {
+            if (out) out.innerHTML = `<div class="toast err">${a(err.message || err)}</div>`;
+          }
         } else if (i === "omni-mesh-race") {
           MeshRace(e);
         } else if (i === "omni-mesh-apply") {
@@ -10738,11 +10768,85 @@ Connection: close\r
     }
     await pa(), (e.innerHTML = ua()), X();
   }
+  function AiStudioView(e) {
+    const isFa = P.lang === "fa";
+    const user = e.users?.[0] || { username: "admin", uuid: "auto" };
+    const hostname = e.settings?.public_host || location.hostname;
+    const vlessUs = `vless://${user.uuid || "USER_UUID"}@${hostname}:443?path=%2Fws%3Fcc%3DUS%26proxyip%3D104.17.148.17%3A443&security=tls&encryption=none&host=${hostname}&type=ws&insecure=0&fp=chrome&allowInsecure=0&sni=${hostname}#%E2%9C%A8%20%F0%9F%87%BA%F0%9F%87%B8%20Gemini%20Lock%20%C2%B7%20US%20Clean`;
+
+    return `
+    <header class="view-head">
+      <div>
+        <h2>${d("bolt")} ${isFa ? "مرکز ضدتحریم Gemini و هوش مصنوعی Omni" : "Omni AI Studio & Gemini Regional Bypass"}</h2>
+        <p class="muted">${isFa ? "موتور لایه ۷ پاکساز هدر و معماری Fake-IP جهت دسترسی ۱۰۰٪ پایدار و بدون فیلتر به Google Gemini، AI Studio، ChatGPT و Claude" : "Layer 7 Sanitizer & Fake-IP Engine for 100% regional bypass on Google Gemini, ChatGPT and Claude"}</p>
+      </div>
+      <div class="head-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <a class="btn btn-primary" href="https://gemini.google.com" target="_blank" rel="noopener">🚀 ${isFa ? "ورود به جمینای وب" : "Gemini Web"}</a>
+        <a class="btn" href="https://aistudio.google.com" target="_blank" rel="noopener">⚡ Google AI Studio</a>
+      </div>
+    </header>
+
+    <div class="kpi-grid" style="margin-bottom:16px">
+      <div class="kpi-card" style="border-inline-start:3px solid var(--ok)">
+        <div class="kpi-label">موتور Fake-IP لایه DNS</div>
+        <div class="kpi-val" style="font-size:16px;color:var(--ok)">فعال · 198.18.0.0/15</div>
+        <div class="kpi-sub">ایزوله‌سازی پکیج com.google.android.apps.bard و جلوگیری از نشت DNS محلی</div>
+      </div>
+      <div class="kpi-card" style="border-inline-start:3px solid var(--accent)">
+        <div class="kpi-label">مسیر خروجی هوش مصنوعی</div>
+        <div class="kpi-val" style="font-size:16px;color:var(--accent)">🇺🇸 US VIP Clean Mesh</div>
+        <div class="kpi-sub">هدایت خودکار ترافیک کلیه دامنه‌های گوگل و هوش مصنوعی به سرور تمیز آمریکا</div>
+      </div>
+      <div class="kpi-card" style="border-inline-start:3px solid var(--accent-2)">
+        <div class="kpi-label">پاکساز هدر لایه ۷ (L7 Sanitizer)</div>
+        <div class="kpi-val" style="font-size:16px;color:var(--accent-2)">فعال روی تمام ارتباطات</div>
+        <div class="kpi-sub">حذف CF-IPCountry، هدرهای منطقه‌ای و تزریق اجباری هدر en-US</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h3 style="margin-top:0;font-size:15px;display:flex;align-items:center;gap:8px">
+        <span>📖 راهنمای گام به گام رفع خطای Not available in your country برای اپلیکیشن جمینای</span>
+        <span class="badge ok">بدون نیاز به روت یا تغییر فایل‌های سیستمی</span>
+      </h3>
+      <div style="line-height:1.8;font-size:13.5px;color:var(--text-dim)">
+        <p style="margin:0 0 10px">
+          <b>علت ارور ۴۰۳ در اپ موبایل چیست؟</b> گوگل در اپلیکیشن‌های موبایل (Gemini و Google App) علاوه بر آدرس IP، درخواست‌های مستقیم DNS و پکت‌های UDP/QUIC ارسال می‌کند تا لوکیشن دستگاه را شناسایی کند. با معماری جدید پنل:
+        </p>
+        <ol style="padding-inline-start:20px;margin:0 0 10px;display:flex;flex-direction:column;gap:8px">
+          <li><b>گام اول:</b> لینک سابسکریپشن خود را در برنامه Sing-box (یا SFA / v2rayNG) به‌روزرسانی (Update) کنید تا کانفیگ اختصاصی <code>✨ 🇺🇸 Gemini Lock · US Clean</code> ظاهر شود.</li>
+          <li><b>گام دوم:</b> در برنامه Sing-box حالت <b>TUN Mode</b> را روشن کنید. موتور Fake-IP به صورت خودکار فعال بوده و پکیج جمینای را بدون نشت DNS به سمت خروجی آمریکا هدایت می‌کند. همچنین پروتکل UDP پورت ۴۴۳ مسدود شده تا گوگل مجبور به استفاده از کانال امن TCP/TLS گردد.</li>
+          <li><b>گام سوم:</b> به تنظیمات گوشی بروید: <code>Settings → Apps → Gemini → Storage</code> و گزینه <b>Clear Cache</b> (پاک کردن حافظه موقت) را بزنید و سپس یک‌بار <b>Force Stop</b> (توقف اجباری) کنید.</li>
+          <li><b>گام چهارم:</b> فیلترشکن را متصل کرده و اپلیکیشن Gemini را باز کنید. برنامه فوراً و بدون نیاز به ورود به تنظیمات سیستمی گوشی با زبان و موقعیت آمریکا باز می‌شود.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <h3 style="margin:0;font-size:15px">🔑 کانفیگ‌های اختصاصی و تست زنده هوش مصنوعی</h3>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" data-action="copy" data-copy="${a(vlessUs)}">${d("copy")} کپی کانفیگ VLESS جمینای آمریکا</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>کانفیگ مستقیم VLESS اختصاصی (دارای لایه پاکسازی هدر و مسیر تمیز آمریکا):</label>
+        <div class="codebox" style="font-size:11px;max-height:85px">${a(vlessUs)}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-sm" data-action="nav" data-view="configs">${d("qr")} صفحه کانفیگ‌ها و دانلود Sing-box JSON</button>
+        <button class="btn btn-sm" data-action="omni-test-ai">${d("bolt")} سنجش زنده وضعیت سرویس‌های AI از سمت سرور</button>
+      </div>
+      <div id="ai-test-result" style="margin-top:12px"></div>
+    </div>
+    `;
+  }
   var vt = [
     { id: "dashboard", icon: "dash", label: () => n("nav.dashboard") },
     { id: "users", icon: "users", label: () => n("nav.users") },
     { id: "configs", icon: "qr", label: () => n("nav.configs") },
     { id: "mesh", icon: "activity", label: () => "Causal Mesh" },
+    { id: "ai", icon: "bolt", label: () => "✨ Omni AI Studio" },
     { id: "scanner", icon: "search", label: () => n("nav.scanner") },
     { id: "dns", icon: "globe", label: () => n("nav.dns") },
     { id: "diag", icon: "activity", label: () => n("nav.diag") },
@@ -10803,6 +10907,7 @@ Connection: close\r
         dns: n("nav.dns"),
         configs: n("nav.configs"),
         mesh: "Causal Mesh",
+        ai: "✨ Omni AI Studio · Gemini Bypass Gateway",
       }[e] || n("app.name")
     );
   }
@@ -10841,6 +10946,9 @@ Connection: close\r
         break;
       case "mesh":
         e.innerHTML = MeshView(l);
+        break;
+      case "ai":
+        e.innerHTML = AiStudioView(l);
         break;
       case "scanner":
         (e.innerHTML = Fe(l)),
