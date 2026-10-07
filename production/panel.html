@@ -6089,6 +6089,12 @@ function zt(e) {
       <div class="card-head">${d("shield")}<h3>۱) پروفایل اپراتور و لوکیشن خروجی</h3></div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px">
         ${[
+          [
+            "senpai",
+            "🎯 SenPai Anti-DPI",
+            "Anti-DPI: 1-104-1 + first-packet 114-1",
+            "1-104,1-2,tlshello",
+          ],
           [ "irancell", "💛 ایرانسل (MTN)", "F&F: unsafe + semi-python + tlshello-0-len", "100-200,5-10,tlshello", ],
           [
             "tci",
@@ -8967,6 +8973,32 @@ function Vt(e, t) {
     }
   }
   var SCAN_PRESETS = {
+    senpai: [
+      "104.16.132.229",
+      "104.16.133.229",
+      "104.17.148.17",
+      "104.17.148.167",
+      "172.67.181.32",
+      "172.67.181.122",
+      "104.21.3.237",
+      "162.159.137.74",
+      "162.159.138.74",
+      "speed.cloudflare.com",
+      "cdnjs.cloudflare.com",
+      "www.visa.com"
+    ],
+    anti_dpi: [
+      "speed.cloudflare.com",
+      "cdnjs.cloudflare.com",
+      "www.visa.com",
+      "104.16.142.53",
+      "104.17.148.17",
+      "104.18.181.138",
+      "172.67.181.210",
+      "104.21.3.237",
+      "104.18.26.46",
+      "104.18.3.91"
+    ],
     all: [
       "172.67.181.32",
       "172.67.181.122",
@@ -9498,6 +9530,8 @@ function xe(total) {
     </div>
     <div class="chips" style="margin-bottom:12px">
       ${[
+        ["senpai", "🎯 سنپای (Anti-DPI)"],
+        ["anti_dpi", "🛡️ ضد اختلال (Asha/SenPai)"],
         ["mci", "💙 همراه اول (MCI)"],
         ["mtn", "💛 ایرانسل (MTN)"],
         ["tci", "🏠 مخابرات / وای‌فای (TCI)"],
@@ -10483,7 +10517,19 @@ function xe(total) {
           let prof = s.dataset.v || "all";
           let fragVal = s.dataset.frag || "100-200,5-10,tlshello";
           g.profile = prof; g.fragPreset = fragVal; g.ech = !0; g.cs = ""; g.alpn = "http/1.1"; g.fragment = !1; g.fp = "chrome"; g.method = ""; let patch = { fingerprint: "chrome", ech_mode: "auto", cipher_suites: "", alpn_pref: "http/1.1", finalmask_preset: "" };
-          if (prof === "irancell") { g.fp = "unsafe"; g.fragment = !0; g.ech = !1; g.cs = PATT_CS["semi-python"]; g.fragPreset = "patt:tlshello-0-len"; g.method = "ff"; patch.fingerprint = "unsafe"; patch.ech_mode = "off"; patch.cipher_suites = PATT_CS["semi-python"]; patch.finalmask_preset = "tlshello-0-len"; g.ports = [443, 2053, 8080];
+          if (prof === "senpai") {
+            g.fp = "unsafe"; g.fragment = !0; g.ech = !1; g.cs = PATT_CS["semi-python"]; g.fragPreset = "senpai"; g.method = "ff"; patch.fingerprint = "unsafe"; patch.ech_mode = "off"; patch.cipher_suites = PATT_CS["semi-python"]; patch.finalmask_preset = "tlshello-0-len"; g.ports = [443, 2053];
+            g.addrs = "hybrid";
+            patch.fragment_preset = "senpai";
+            patch.clean_ips = [
+              "104.16.132.229",
+              "104.17.148.17",
+              "172.67.181.32",
+              "104.21.3.237",
+              "speed.cloudflare.com",
+              "cdnjs.cloudflare.com"
+            ];
+          } else if (prof === "irancell") { g.fp = "unsafe"; g.fragment = !0; g.ech = !1; g.cs = PATT_CS["semi-python"]; g.fragPreset = "patt:tlshello-0-len"; g.method = "ff"; patch.fingerprint = "unsafe"; patch.ech_mode = "off"; patch.cipher_suites = PATT_CS["semi-python"]; patch.finalmask_preset = "tlshello-0-len"; g.ports = [443, 2053, 8080];
             g.addrs = "hybrid";
             patch.fragment_preset = "irancell";
             patch.clean_ips = [
