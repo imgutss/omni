@@ -4371,13 +4371,13 @@ init_auth();
 init_scan();
 var enc2 = encodeURIComponent;
 var FRAGMENT_PRESETS = [
-  { id: "none", label: "\u2014 \u0628\u062F\u0648\u0646 Fragment (\u067E\u0631\u0648\u0641\u0627\u06CC\u0644\u200C\u0647\u0627\u06CC \u062F\u06CC\u06AF\u0631 \u0647\u0645 \u0628\u0647\u200C\u0635\u0648\u0631\u062A candidate \u0633\u0627\u062E\u062A\u0647 \u0645\u06CC\u200C\u0634\u0648\u0646\u062F)", size: "", interval: "", packets: "" },
-  { id: "irancell", label: "\u{1F9EA} Candidate profile A \xB7 \u062A\u0633\u062A\u200C\u0646\u0634\u062F\u0647 (100-200 / 5-10 / tlshello)", size: "100-200", interval: "5-10", packets: "tlshello" },
-  { id: "tci", label: "\u{1F9EA} Candidate profile B \xB7 \u062A\u0633\u062A\u200C\u0646\u0634\u062F\u0647 (50-200 / 1-3 / tlshello)", size: "50-200", interval: "1-3", packets: "tlshello" },
-  { id: "mci", label: "\u{1F9EA} Candidate profile C \xB7 \u062A\u0633\u062A\u200C\u0646\u0634\u062F\u0647 (10-30 / 2-5 / tlshello)", size: "10-30", interval: "2-5", packets: "tlshello" },
-  { id: "rightel", label: "\u{1F9EA} Candidate profile D \xB7 \u062A\u0633\u062A\u200C\u0646\u0634\u062F\u0647 (50-100 / 2-5 / tlshello)", size: "50-100", interval: "2-5", packets: "tlshello" },
-  { id: "gaming", label: "\u{1F680} Experimental Fragment profile \xB7 no latency claim (200-3000 / 1-2 / tlshello)", size: "200-3000", interval: "1-2", packets: "tlshello" },
-  { id: "aggressive", label: "\u{1F525} Experimental finer-fragment profile \xB7 compatibility unverified (10-20 / 10-20 / tlshello)", size: "10-20", interval: "10-20", packets: "tlshello" }
+  { id: "none", label: "— بدون Fragment (اتصال مستقیم / ECH استاندارد)", size: "", interval: "", packets: "" },
+  { id: "irancell", label: "💛 ویژه ایرانسل · MTN (100-200 / 5-10 / tlshello)", size: "100-200", interval: "5-10", packets: "tlshello" },
+  { id: "tci", label: "🏠 ویژه مخابرات و فیبر نوری · TCI (50-200 / 1-3 / tlshello)", size: "50-200", interval: "1-3", packets: "tlshello" },
+  { id: "mci", label: "💙 ویژه همراه اول · MCI (10-30 / 2-5 / tlshello)", size: "10-30", interval: "2-5", packets: "tlshello" },
+  { id: "rightel", label: "💜 ویژه رایتل و شاتل · Rightel (50-100 / 2-5 / tlshello)", size: "50-100", interval: "2-5", packets: "tlshello" },
+  { id: "gaming", label: "⚡ ویژه گیمینگ و استریم بدون تاخیر (200-3000 / 1-2 / tlshello)", size: "200-3000", interval: "1-2", packets: "tlshello" },
+  { id: "aggressive", label: "🔥 ضد اختلال و فیلترینگ شدید (10-20 / 10-20 / tlshello)", size: "10-20", interval: "10-20", packets: "tlshello" }
 ];
 var FINGERPRINTS = ["chrome", "unsafe", "firefox", "safari", "ios", "android", "edge", "random", "randomized"];
 var fragmentPreset = (id) => {
@@ -4747,22 +4747,38 @@ function buildConfigs(user, settings, cleanIps = []) {
 }
 var MESH_AI_DOMAINS = [
   "gemini.google.com",
-  "generativelanguage.googleapis.com",
+  "bard.google.com",
   "aistudio.google.com",
+  "generativelanguage.googleapis.com",
+  "proactivebackend-pa.googleapis.com",
+  "assistant-s3-pa.googleapis.com",
+  "robin-pa.googleapis.com",
+  "alkalimakersuite-pa.googleapis.com",
+  "alkalimakersuite-pa.clients6.google.com",
+  "aisandbox-pa.googleapis.com",
+  "waa-pa.clients6.google.com",
+  "gemini.gstatic.com",
   "googleapis.com",
   "googleusercontent.com",
   "gstatic.com",
   "accounts.google.com",
+  "clients6.google.com",
+  "cloud.google.com",
   "chatgpt.com",
   "openai.com",
+  "oaistatic.com",
+  "oaiusercontent.com",
   "claude.ai",
   "anthropic.com"
 ];
 var MESH_AI_PACKAGES = [
+  "com.google.android.apps.bard",
   "com.google.android.googlequicksearchbox",
   "com.google.android.gms",
   "com.google.android.gsf",
-  "com.android.vending"
+  "com.android.vending",
+  "com.openai.chatgpt",
+  "com.anthropic.claude"
 ];
 var MESH_GAME_DOMAINS = [
   "steampowered.com",
@@ -4854,14 +4870,24 @@ function buildSingbox(user, settings, addrs, ports = [443, 2053, 8080, 80]) {
     log: { level: "warn", timestamp: true },
     dns: {
       servers: [
-        { tag: "remote", address: settings.dns_upstream || "https://1.1.1.1/dns-query" },
-        { tag: "direct", address: "https://cloudflare-dns.com/dns-query", detour: "direct" }
+        { tag: "remote", address: "https://dns.google/dns-query", detour: "select" },
+        { tag: "direct", address: "https://1.1.1.1/dns-query", detour: "direct" }
       ],
-      rules: [{ outbound: "any", server: "direct" }],
-      final: "remote"
+      rules: [
+        { domain_suffix: [".ir"], server: "direct" },
+        { domain_suffix: meshDirectDomains(settings), server: "direct" },
+        { package_name: MESH_AI_PACKAGES, server: "remote" },
+        { domain_suffix: MESH_AI_DOMAINS, server: "remote" }
+      ],
+      final: "remote",
+      strategy: "ipv4_only"
     },
-    inbounds: [{ type: "mixed", tag: "mixed-in", listen: "127.0.0.1", listen_port: 2080 }],
+    inbounds: [
+      { type: "mixed", tag: "mixed-in", listen: "127.0.0.1", listen_port: 2080 },
+      { type: "tun", tag: "tun-in", inet4_address: "172.19.0.1/30", auto_route: true, strict_route: true, stack: "system", sniff: true }
+    ],
     outbounds: [
+      { type: "dns", tag: "dns-out" },
       { type: "selector", tag: "select", outbounds: ["auto", ...outs.map((o) => o.tag)] },
       { type: "urltest", tag: "auto", outbounds: outs.map((o) => o.tag), url: "http://www.gstatic.com/generate_204", interval: "3m" },
       { type: "direct", tag: "direct" },
