@@ -22,5 +22,8 @@
   "devDependencies": {
     "wrangler": "^3.80.0",
     "ws": "^8.18.0"
+  },
+  "dependencies": {
+    "acorn": "^8.19.0"
   }
 }

@@ -6268,7 +6268,8 @@ function pattMethodsCard() {
          ["🧭", "ALPN: http/1.1 برای ws · h2,http/1.1 برای XHTTP"]],
     warp6: [["🌀", "از بخش add aether: پروتکل wireguard/warp-in-warp"], ["🚀", "نوع آی‌پی: IPv6"],
             ["🔎", "اسکن کن، بعد آی‌پی پیدا شده و اسم را انتخاب و سیو کن"]],
-    warp: [["🌀", "از بخش add aether: پروتکل wireguard/warp-in-warp"], ["📍", "نوع آی‌پی: هر کدام (v4 / v6 / both)"],
+    near:["172.67.181.32","104.17.148.17","104.18.225.52","104.19.154.120","162.159.192.1","162.159.193.1","2606:4700:d0::a29f:c001","2606:4700:d1::a29f:c001","2606:4700:3030::ac43:b58a","speed.cloudflare.com","cp.cloudflare.com"],
+  warp: [["🌀", "از بخش add aether: پروتکل wireguard/warp-in-warp"], ["📍", "نوع آی‌پی: هر کدام (v4 / v6 / both)"],
            ["🔎", "اسکن کن، بعد آی‌پی پیدا شده و اسم را انتخاب و سیو کن"]],
     masque: [["🧩", "از بخش add aether: پروتکل MASQUE-HTTP/2"], ["🖐️", "fingerprint: semi-python"],
              ["📄", "finalMask: tlshello-0-len"], ["🔎", "اسکن کن، بعد آی‌پی و اسم را انتخاب و سیو کن"]],
@@ -9095,11 +9096,28 @@ function scanMerge(row, edge, rejected) {
   row.done=true; row.checked_at=Date.now();
 }
 
-  function xe(total) {
+  function coloBadge(colo) {
+  if (!colo) return '';
+  const c = String(colo).toUpperCase();
+  const golden = ['IST','SAW','GYD','EVN','EBL','BGW','DXB','AUH','DOH','KWI','BAH','MCT','SOF','TBS','ATH'];
+  const silver = ['FRA','AMS','VIE','WAW','CDG','LHR','MXP','ZRH','MAD','OTP'];
+  if (golden.includes(c)) return `<span class="badge ok" dir="ltr" title="نزدیک‌ترین دیتاسنتر لبه کلودفلر به ایران">👑 لبه همسایه: ${c}</span>`;
+  if (silver.includes(c)) return `<span class="badge info" dir="ltr" title="دیتاسنتر مستقیم اروپایی">⚡ لبه اروپا: ${c}</span>`;
+  return `<span class="badge" dir="ltr">🌐 لبه: ${c}</span>`;
+}
+function xe(total) {
   const out=document.querySelector('#scan-out');if(!out)return;
   const progress=document.querySelector('#scan-bar');
   if(progress)progress.style.width=`${total ? Math.round(O.results.filter((r)=>r.done||r.browser_done).length/total*100) : 0}%`;
-  const sorted=[...O.results].sort((l,r)=>(l.healthy ? l.ms : 1e8)-(r.healthy ? r.ms : 1e8));
+  const goldenColos = new Set(['IST','SAW','GYD','EVN','EBL','BGW','DXB','AUH','DOH','KWI','BAH','MCT','SOF','TBS','ATH']);
+  const silverColos = new Set(['FRA','AMS','VIE','WAW','CDG','LHR','MXP','ZRH','MAD','OTP']);
+  const sortScore = (r) => {
+    if (!r.healthy) return 1e9;
+    const c = String(r.colo || '').toUpperCase();
+    const tierBonus = goldenColos.has(c) ? -80 : silverColos.has(c) ? -30 : 0;
+    return (r.ms || 999) + tierBonus;
+  };
+  const sorted=[...O.results].sort((l,r)=>sortScore(l)-sortScore(r));
   out.innerHTML=sorted.length ? sorted.map((r)=>{
     const proxy=COUNTRY_PROXY_MAP.get(r.ip.toLowerCase()), v6=r.ip.includes(':'), raw=scanIsIp(r.ip);
     const ok=r.healthy && r.ms>0, finished=r.done||r.browser_done;
@@ -9112,7 +9130,7 @@ function scanMerge(row, edge, rejected) {
       <span class="scan-bar" style="flex:1;min-width:60px"><i style="width:${ok ? Math.min(100,Math.max(10,100-r.ms/6)) : finished ? 100 : 0}%;background:${color}"></i></span>
       <b dir="auto" style="color:${color};font-size:12px">${a(message)}</b>
       <span class="badge ${ok?'ok':''}" style="font-size:11px">${a(kind)}${ok ? proxy ? ' · TCP ورکر' : ' · HTTPS مرورگر' : ''}</span>
-      ${r.sample_range>0 && ok ? `<span class="badge" dir="ltr">بازه: ${r.sample_range} ms</span>`:''}
+      ${r.sample_range>0 && ok ? `<span class="badge" dir="ltr">بازه: ${r.sample_range} ms</span>`:''}${ok && r.colo ? coloBadge(r.colo) : ''}
       ${proxy&&ok?`<button type="button" class="btn btn-primary btn-sm" data-action="omni-pick-country-exit" data-cc="${a(proxy.cc)}" data-proxy="${a(r.ip)}:443">انتخاب ${proxy.flag}</button>`:''}
       ${finished && !ok ? `<details style="width:100%;font-size:11px"><summary class="muted">جزئیات آزمایش</summary><div class="muted" style="line-height:1.8">${raw&&!proxy?'درخواست مستقیم HTTPS مرورگر به این IP موفق نشد؛ این آزمایش با اتصال کانفیگ دارای SNI مستقل یکسان نیست. ':''}${r.attempt_ms ? `زمان تلاش ناموفق: ${r.attempt_ms} ms؛ پینگ موفق نیست. `:''}${a(r.worker_error||'')}</div></details>`:''}
       ${source?`<small class="muted" style="width:100%">${a(source)}</small>`:''}
@@ -9313,6 +9331,7 @@ function scanMerge(row, edge, rejected) {
     </div>
     <div class="chips" style="margin-bottom:12px">
       ${[
+        ["near","👑 مسیرهای طلایی کم‌ترین پینگ (همسایه: ترکیه/باکو/دبی)"],
         ["all","🌐 ترکیبی (QoS IPv4 + سایت‌های جهانی + IPv6)"],
         ["warp","🛡️ اندپوینت‌های Aether / WARP IPv6"],
         ["underground","🧬 سنتز طیفی SIIT-Hex64 (IPv4 ↔ IPv6 + TYPE=65 ECH)"],
