@@ -5552,59 +5552,43 @@ var qrcode = function() {
     );
   }
   var OMNI_QOS_V4 = [
-    "172.67.181.32",
-    "172.67.181.122",
-    "172.67.181.210",
-    "104.17.148.167",
-    "104.17.148.17",
-    "104.17.147.119",
-    "104.18.3.91",
-    "172.67.163.24",
-    "104.18.181.138",
-    "104.21.3.237",
-    "104.18.26.46",
-    "172.67.181.138",
-    "104.16.142.53",
+    "1.1.1.1",
+    "1.0.0.1",
+    "162.159.192.1",
+    "162.159.193.1",
+    "162.159.195.1",
     "162.159.137.74",
-    "104.17.148.77",
-    "172.67.217.91",
+    "104.16.142.53",
+    "104.17.148.17",
   ];
   var OMNI_CLEAN_SITES = [
     "speed.cloudflare.com",
     "cdnjs.cloudflare.com",
     "www.visa.com",
     "www.udemy.com",
-    "www.tradingview.com",
     "www.shopify.com",
-    "www.skype.com",
-    "104.18.181.138",
-    "104.21.3.237",
-    "104.18.26.46",
-    "172.67.181.138",
-    "104.17.148.167",
-    "104.17.148.17",
+    "www.digitalocean.com",
+    "www.zoom.us",
+    "invest.gov.tr",
+    "www.arabam.com",
   ];
   var OMNI_CLEAN_V6 = [
+    "2606:4700::6811:9386",
+    "2606:4700::6811:9411",
     "2606:4700:d0::a29f:c001",
     "2606:4700:d1::a29f:c001",
     "2606:4700:d0::1",
     "2606:4700:d1::1",
-    "2606:4700:3030::ac43:b58a",
-    "2606:4700::6812:3ed",
     "2606:4700::6812:1a2e",
-    "2606:4700:3030::ac43:b520",
-    "2606:4700::6812:b58a",
-    "2606:4700:3030::6815:3ed",
-    "2606:4700::6811:9411",
-    "2606:4700::6811:9377",
-    "2606:4700:3031::ac43:d95b",
-    "2606:4700:3035::ac43:a318",
+    "2606:4700::6812:3ed",
+    "2606:4700:4700::1111",
+    "2606:4700:4700::1001",
   ];
   var OMNI_CLEAN_IR = [
-    "172.67.181.122",
-    "172.67.181.210",
-    "104.17.147.119",
-    "104.18.3.91",
+    "2606:4700:3030::ac43:b58a",
+    "2606:4700:3030::ac43:b520",
+    "2606:4700:3031::ac43:d95b",
+    "2606:4700:3035::ac43:a318",
   ];
   var OMNI_HYBRID_POOL = [
     "172.67.181.32",
@@ -8993,14 +8977,87 @@ function Vt(e, t) {
       if (k && !COUNTRY_PROXY_MAP.has(k)) COUNTRY_PROXY_MAP.set(k, c);
     }
   }
-  var SCAN_PRESETS={
-  all:[...OMNI_QOS_V4.slice(0,6),...OMNI_CLEAN_SITES.slice(0,5),...OMNI_CLEAN_V6.slice(0,4),...OMNI_CLEAN_IR.slice(0,2)],
-  warp:["2606:4700:d0::a29f:c001","2606:4700:d1::a29f:c001","2606:4700:d0::1","2606:4700:d1::1","2606:4700::6812:1a2e","2606:4700::6812:3ed"],
-  sites:[...OMNI_CLEAN_SITES.slice(0,7),...OMNI_CLEAN_IR.slice(0,3),...OMNI_QOS_V4.slice(0,2)],
-  qos:[...OMNI_QOS_V4],
-  ipv6:[...OMNI_CLEAN_V6],
-  ir:[...OMNI_CLEAN_IR,...OMNI_CLEAN_SITES.slice(0,4)]
-};
+  var SCAN_PRESETS = {
+    near: [
+      "invest.gov.tr",
+      "www.arabam.com",
+      "www.trendyol.com",
+      "tr.investing.com",
+      "www.sozcu.com.tr",
+      "www.ensonhaber.com",
+      "azal.az",
+      "www.baku.ws",
+      "gulfnews.com",
+      "www.dubaiairports.ae"
+    ],
+    all: [
+      "speed.cloudflare.com",
+      "cdnjs.cloudflare.com",
+      "www.visa.com",
+      "www.udemy.com",
+      "www.shopify.com",
+      "www.digitalocean.com",
+      "www.zoom.us",
+      "www.gitlab.com",
+      "2606:4700::6811:9386",
+      "2606:4700::6811:9411"
+    ],
+    warp: [
+      "2606:4700:d0::a29f:c001",
+      "2606:4700:d1::a29f:c001",
+      "2606:4700:d0::1",
+      "2606:4700:d1::1",
+      "2606:4700:d0::a29f:c101",
+      "2606:4700:d1::a29f:c101",
+      "162.159.192.1",
+      "162.159.193.1",
+      "162.159.195.1"
+    ],
+    underground: [
+      "2606:4700:3032::ac43:b58a",
+      "2606:4700:3033::ac43:b520",
+      "2606:4700:3034::6812:35b",
+      "2606:4700:3036::6811:94a7",
+      "2606:4700:3037::6810:8e35",
+      "2606:4700:3032::a29f:894a"
+    ],
+    sites: [
+      "cloudflare-ech.com",
+      "crypto.cloudflare.com",
+      "blog.cloudflare.com",
+      "workers.cloudflare.com",
+      "pages.dev",
+      "one.one.one.one"
+    ],
+    qos: [
+      "1.1.1.1",
+      "1.0.0.1",
+      "cloudflare-dns.com",
+      "radar.cloudflare.com",
+      "developers.cloudflare.com",
+      "dash.cloudflare.com",
+      "api.cloudflare.com",
+      "www.cloudflare.com"
+    ],
+    ipv6: [
+      "2606:4700::6812:1a2e",
+      "2606:4700::6812:3ed",
+      "2606:4700::6812:b58a",
+      "2606:4700::6811:9377",
+      "2606:4700:4700::1111",
+      "2606:4700:4700::1001",
+      "2606:4700:3030::6815:3ed"
+    ],
+    ir: [
+      "2606:4700:3030::ac43:b58a",
+      "2606:4700:3030::ac43:b520",
+      "2606:4700:3031::ac43:d95b",
+      "2606:4700:3035::ac43:a318",
+      "2606:4700:3030::6812:35b",
+      "2606:4700:3030::6811:94a7",
+      "2606:4700:3030::a29f:894a"
+    ]
+  };
 var O = {
     running: !1,
     tab: "ingress",
@@ -10768,148 +10825,11 @@ Connection: close\r
     }
     await pa(), (e.innerHTML = ua()), X();
   }
-  function AiStudioView(e) {
-    const isFa = P.lang === "fa";
-    const user = e.users?.[0] || { username: "Ali", uuid: "8d28037f-885a-4542-98b7-ab3156f06cf2" };
-    const hostname = e.settings?.public_host || location.hostname;
-    const uuid = user.uuid || "8d28037f-885a-4542-98b7-ab3156f06cf2";
-    const path = encodeURIComponent("/ws?cc=US&proxyip=104.168.125.179:443");
-
-    const geminiConfigs = [
-      {
-        name: "✨ 🇺🇸 Gemini Lock · speed.cloudflare.com",
-        host: "speed.cloudflare.com",
-        ping: "143 ms سبز",
-        desc: "دامنه پرسرعت کلودفلر با کمترین تأخیر",
-        uri: `vless://${uuid}@speed.cloudflare.com:443?path=${path}&security=tls&encryption=none&host=${hostname}&type=ws&insecure=0&fp=chrome&allowInsecure=0&sni=${hostname}#%E2%9C%A8%20%F0%9F%87%BA%F0%9F%87%B8%20Gemini%20Lock%20%C2%B7%20speed%20(143ms)`
-      },
-      {
-        name: "✨ 🇺🇸 Gemini Lock · cdnjs.cloudflare.com",
-        host: "cdnjs.cloudflare.com",
-        ping: "154 ms سبز",
-        desc: "سرور تمیز CDN با پایداری بالا",
-        uri: `vless://${uuid}@cdnjs.cloudflare.com:443?path=${path}&security=tls&encryption=none&host=${hostname}&type=ws&insecure=0&fp=chrome&allowInsecure=0&sni=${hostname}#%E2%9C%A8%20%F0%9F%87%BA%F0%9F%87%B8%20Gemini%20Lock%20%C2%B7%20cdnjs%20(154ms)`
-      },
-      {
-        name: "✨ 🇺🇸 Gemini Lock · www.visa.com",
-        host: "www.visa.com",
-        ping: "153 ms سبز",
-        desc: "دامنه تست‌شده در اسکنر گوشی شما",
-        uri: `vless://${uuid}@www.visa.com:443?path=${path}&security=tls&encryption=none&host=${hostname}&type=ws&insecure=0&fp=chrome&allowInsecure=0&sni=${hostname}#%E2%9C%A8%20%F0%9F%87%BA%F0%9F%87%B8%20Gemini%20Lock%20%C2%B7%20Visa%20(153ms)`
-      },
-      {
-        name: "✨ 🇺🇸 Gemini Lock · همراه اول IPv6",
-        host: "2606:4700:3030::6811:9386",
-        ping: "308 ms",
-        desc: "مخصوص اینترنت همراه اول با ECH",
-        uri: `vless://${uuid}@[2606:4700:3030::6811:9386]:443?path=${path}&security=tls&encryption=none&host=${hostname}&type=ws&insecure=0&fp=chrome&allowInsecure=0&sni=${hostname}#%E2%9C%A8%20%F0%9F%87%BA%F0%9F%87%B8%20Gemini%20Lock%20%C2%B7%20IPv6%20MCI`
-      },
-      {
-        name: "✨ 🇺🇸 Gemini Lock · ایرانسل FinalMask",
-        host: "104.17.148.17",
-        ping: "Bypass",
-        desc: "فرگمنت پیشرفته ضد فایروال ایرانسل",
-        uri: `vless://${uuid}@104.17.148.17:443?path=${path}&security=tls&encryption=none&host=${hostname}&type=ws&insecure=0&fp=chrome&allowInsecure=0&sni=${hostname}&fm=%7B%22tcp%22%3A%5B%7B%22type%22%3A%22fragment%22%2C%22settings%22%3A%7B%22packets%22%3A%22tlshello%22%2C%22length%22%3A%22100-200%22%2C%22delay%22%3A%225-10%22%2C%22maxSplit%22%3A%2210%22%7D%7D%5D%7D#%E2%9C%A8%20%F0%9F%87%BA%F0%9F%87%B8%20Gemini%20Lock%20%C2%B7%20Irancell%20FinalMask`
-      },
-      {
-        name: "✨ 🇺🇸 Gemini Lock · Anycast IP",
-        host: "162.159.137.74",
-        ping: "Clean IP",
-        desc: "آی‌پی تمیز بین‌المللی",
-        uri: `vless://${uuid}@162.159.137.74:443?path=${path}&security=tls&encryption=none&host=${hostname}&type=ws&insecure=0&fp=chrome&allowInsecure=0&sni=${hostname}#%E2%9C%A8%20%F0%9F%87%BA%F0%9F%87%B8%20Gemini%20Lock%20%C2%B7%20Anycast`
-      }
-    ];
-
-    const allUris = geminiConfigs.map(c => c.uri).join("\n");
-
-    return `
-    <header class="view-head">
-      <div>
-        <h2>${d("bolt")} ${isFa ? "مرکز ضدتحریم Gemini و هوش مصنوعی Omni" : "Omni AI Studio & Gemini Regional Bypass"}</h2>
-        <p class="muted">${isFa ? "موتور لایه ۷ پاکساز هدر و معماری Fake-IP جهت دسترسی ۱۰۰٪ پایدار و بدون فیلتر به Google Gemini، AI Studio، ChatGPT و Claude" : "Layer 7 Sanitizer & Fake-IP Engine for 100% regional bypass on Google Gemini, ChatGPT and Claude"}</p>
-      </div>
-      <div class="head-actions" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <a class="btn btn-primary" href="https://gemini.google.com" target="_blank" rel="noopener">🚀 ${isFa ? "ورود به جمینای وب" : "Gemini Web"}</a>
-        <a class="btn" href="https://aistudio.google.com" target="_blank" rel="noopener">⚡ Google AI Studio</a>
-      </div>
-    </header>
-
-    <div class="kpi-grid" style="margin-bottom:16px">
-      <div class="kpi-card" style="border-inline-start:3px solid var(--ok)">
-        <div class="kpi-label">موتور Fake-IP لایه DNS</div>
-        <div class="kpi-val" style="font-size:16px;color:var(--ok)">فعال · 198.18.0.0/15</div>
-        <div class="kpi-sub">ایزوله‌سازی پکیج com.google.android.apps.bard و جلوگیری از نشت DNS محلی</div>
-      </div>
-      <div class="kpi-card" style="border-inline-start:3px solid var(--accent)">
-        <div class="kpi-label">مسیر خروجی هوش مصنوعی</div>
-        <div class="kpi-val" style="font-size:16px;color:var(--accent)">🇺🇸 US VIP Clean Mesh</div>
-        <div class="kpi-sub">هدایت خودکار ترافیک کلیه دامنه‌های گوگل و هوش مصنوعی به سرور تمیز آمریکا</div>
-      </div>
-      <div class="kpi-card" style="border-inline-start:3px solid var(--accent-2)">
-        <div class="kpi-label">پاکساز هدر لایه ۷ (L7 Sanitizer)</div>
-        <div class="kpi-val" style="font-size:16px;color:var(--accent-2)">فعال روی تمام ارتباطات</div>
-        <div class="kpi-sub">حذف CF-IPCountry، هدرهای منطقه‌ای و تزریق اجباری هدر en-US</div>
-      </div>
-    </div>
-
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <div>
-          <h3 style="margin:0 0 4px;font-size:16px">🔑 کانفیگ‌های اختصاصی Gemini با پینگ سبز (تست‌شده روی خط شما)</h3>
-          <p class="muted" style="margin:0;font-size:12.5px">هر کانفیگ از یک دامنه و آی‌پی تمیز مجزا استفاده می‌کند تا همگی پینگ سبز ۱۲۰ تا ۱۵۰ میلی‌ثانیه داشته باشند</p>
-        </div>
-        <button class="btn btn-primary" data-action="copy" data-copy="${a(allUris)}">
-          ${d("copy")} کپی همه ۶ کانفیگ جمینای (پک کامل پینگ سبز)
-        </button>
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:9px">
-        ${geminiConfigs.map(c => `
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:var(--surface-2);border-radius:var(--radius-sm);border:1px solid var(--border);flex-wrap:wrap;gap:8px">
-            <div>
-              <b style="font-size:13.5px">${a(c.name)}</b>
-              <div class="mono muted" style="font-size:11px;margin-top:2px">آدرس: <span style="color:var(--accent)">${a(c.host)}</span> · ${a(c.desc)}</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="badge ok">${a(c.ping)}</span>
-              <button class="btn btn-sm" data-action="copy" data-copy="${a(c.uri)}">${d("copy")} کپی تکی</button>
-            </div>
-          </div>
-        `).join("")}
-      </div>
-
-      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn btn-sm" data-action="nav" data-view="configs">${d("qr")} رفتن به صفحه تولید کانفیگ‌های کامل (Sing-box & Clash)</button>
-        <button class="btn btn-sm btn-ghost" data-action="omni-test-ai">${d("bolt")} سنجش زنده وضعیت سرویس‌های AI از سمت سرور</button>
-      </div>
-      <div id="ai-test-result" style="margin-top:12px"></div>
-    </div>
-
-    <div class="card" style="margin-bottom:16px">
-      <h3 style="margin-top:0;font-size:15px;display:flex;align-items:center;gap:8px">
-        <span>📖 راهنمای گام به گام رفع خطای Not available in your country برای اپلیکیشن جمینای</span>
-        <span class="badge ok">بدون نیاز به روت یا تغییر فایل‌های سیستمی</span>
-      </h3>
-      <div style="line-height:1.8;font-size:13.5px;color:var(--text-dim)">
-        <p style="margin:0 0 10px">
-          <b>علت ارور ۴۰۳ در اپ موبایل چیست؟</b> گوگل در اپلیکیشن‌های موبایل (Gemini و Google App) علاوه بر آدرس IP، درخواست‌های مستقیم DNS و پکت‌های UDP/QUIC ارسال می‌کند تا لوکیشن دستگاه را شناسایی کند. با معماری جدید پنل:
-        </p>
-        <ol style="padding-inline-start:20px;margin:0 0 10px;display:flex;flex-direction:column;gap:8px">
-          <li><b>گام اول:</b> دکمه <b>«کپی همه ۶ کانفیگ جمینای»</b> را در بالا بزنید و در برنامه v2rayNG یا Sing-box با زدن گزینه Import from clipboard کانفیگ‌ها را وارد کنید. همگی با پینگ سبز ۱۲۰-۱۵۰ms پاسخ می‌دهند.</li>
-          <li><b>گام دوم:</b> در برنامه Sing-box حالت <b>TUN Mode</b> را روشن کنید. موتور Fake-IP به صورت خودکار فعال بوده و پکیج جمینای را بدون نشت DNS به سمت خروجی آمریکا هدایت می‌کند. همچنین پروتکل UDP پورت ۴۴۳ مسدود شده تا گوگل مجبور به استفاده از کانال امن TCP/TLS گردد.</li>
-          <li><b>گام سوم:</b> به تنظیمات گوشی بروید: <code>Settings → Apps → Gemini → Storage</code> و گزینه <b>Clear Cache</b> (پاک کردن حافظه موقت) را بزنید و سپس یک‌بار <b>Force Stop</b> (توقف اجباری) کنید.</li>
-          <li><b>گام چهارم:</b> فیلترشکن را متصل کرده و اپلیکیشن Gemini را باز کنید. برنامه فوراً و بدون نیاز به ورود به تنظیمات سیستمی گوشی با زبان و موقعیت آمریکا باز می‌شود.</li>
-        </ol>
-      </div>
-    </div>
-    `;
-  }
   var vt = [
     { id: "dashboard", icon: "dash", label: () => n("nav.dashboard") },
     { id: "users", icon: "users", label: () => n("nav.users") },
     { id: "configs", icon: "qr", label: () => n("nav.configs") },
     { id: "mesh", icon: "activity", label: () => "Causal Mesh" },
-    { id: "ai", icon: "bolt", label: () => "✨ Omni AI Studio" },
     { id: "scanner", icon: "search", label: () => n("nav.scanner") },
     { id: "dns", icon: "globe", label: () => n("nav.dns") },
     { id: "diag", icon: "activity", label: () => n("nav.diag") },
@@ -10970,7 +10890,6 @@ Connection: close\r
         dns: n("nav.dns"),
         configs: n("nav.configs"),
         mesh: "Causal Mesh",
-        ai: "✨ Omni AI Studio · Gemini Bypass Gateway",
       }[e] || n("app.name")
     );
   }
@@ -11009,9 +10928,6 @@ Connection: close\r
         break;
       case "mesh":
         e.innerHTML = MeshView(l);
-        break;
-      case "ai":
-        e.innerHTML = AiStudioView(l);
         break;
       case "scanner":
         (e.innerHTML = Fe(l)),
