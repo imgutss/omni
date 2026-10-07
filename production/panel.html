@@ -9233,6 +9233,7 @@ function scanMerge(row, edge, rejected) {
   row.cloudflare_verified=Boolean(edge?.alive && edge?.is_cf && !edge?.is_proxy);
   row.worker_error=String(edge?.error || rejected?.error || '');
   row.colo=edge?.colo || null;
+  row.port2053=Boolean(edge?.port2053);
   if (proxy) {
     row.ms=Boolean(edge?.tcp_reachable) ? (edge?.worker_tcp_ms || edge?.edge_ms || row.worker_ms) : null;
     row.healthy=Boolean(edge?.tcp_reachable) && row.ms !== null;
@@ -9288,8 +9289,9 @@ function xe(total) {
       <b dir="auto" style="color:${color};font-size:12px">${a(message)}</b>
       <span class="badge ${ok?'ok':''}" style="font-size:11px">${a(kind)}${ok ? proxy ? ' · TCP ورکر' : (raw ? ' · لبه تأییدشده' : ' · HTTPS مرورگر') : ''}</span>
       ${r.sample_range>0 && ok ? `<span class="badge" dir="ltr">بازه: ${r.sample_range} ms</span>`:''}${ok && r.colo ? coloBadge(r.colo) : ''}
+      ${ok && r.port2053 ? '<span class="badge info" dir="ltr" style="font-size:10.5px">⚡ پورت ۲۰۵۳ باز</span>' : ''}
       ${proxy&&ok?`<button type="button" class="btn btn-primary btn-sm" data-action="omni-pick-country-exit" data-cc="${a(proxy.cc)}" data-proxy="${a(r.ip)}:443">انتخاب ${proxy.flag}</button>`:''}
-      ${finished && !ok ? `<details style="width:100%;font-size:11px"><summary class="muted">جزئیات آزمایش</summary><div class="muted" style="line-height:1.8">${raw&&!proxy?'درخواست مستقیم HTTPS مرورگر به این IP موفق نشد؛ این آزمایش با اتصال کانفیگ دارای SNI مستقل یکسان نیست. ':''}${r.attempt_ms ? `زمان تلاش ناموفق: ${r.attempt_ms} ms؛ پینگ موفق نیست. `:''}${a(r.worker_error||'')}</div></details>`:''}
+      ${finished ? `<details style="width:100%;font-size:11px"><summary class="muted">جزئیات مسیر و لبه</summary><div class="muted" style="line-height:1.8">${ok ? `✅ اتصال لبه کلودفلر پایدار است. تأخیر نهایی کلاینت: ${r.ms} ms` + (r.worker_ms ? ` (گوشی ↔ ورکر: ${O.lineRtt || '—'} ms + لبه کلودفلر: ${r.worker_ms} ms)` : '') + (r.colo ? ` · دیتاسنتر: ${r.colo}` : '') + (r.port2053 ? ' · پورت جایگزین ۲۰۵۳ در دسترس است' : '') : (raw&&!proxy?'درخواست مستقیم HTTPS مرورگر به این IP بدون SNI انجام شد. ':'' + (r.attempt_ms ? `زمان تلاش: ${r.attempt_ms} ms؛ `:'' + (r.worker_error||'')))}</div></details>`:''}
       ${source?`<small class="muted" style="width:100%">${a(source)}</small>`:''}
     </div>`;
   }).join('') : '<div class="muted">هنوز نتیجه‌ای نیست.</div>';
@@ -9302,14 +9304,22 @@ function xe(total) {
         cache: "no-store",
         signal: AbortSignal.timeout(2500),
       });
-      const started = performance.now();
-      const response = await fetch("/healthz?t=" + Date.now(), {
-        cache: "no-store",
-        signal: AbortSignal.timeout(3000),
-      });
-      if (!response.ok) throw new Error(`healthz پاسخ ${response.status} داد`);
-      rtt = Math.max(1, Math.round(performance.now() - started));
-      colo = response.headers.get("x-omni-colo") || null;
+      const samples = [];
+      for (let i = 0; i < 3; i++) {
+        const started = performance.now();
+        const response = await fetch("/healthz?t=" + Date.now() + "_" + i, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(2500),
+        });
+        if (response.ok) {
+          samples.push(Math.max(1, Math.round(performance.now() - started)));
+          if (!colo) colo = response.headers.get("x-omni-colo") || null;
+        }
+      }
+      if (samples.length) {
+        samples.sort((a, b) => a - b);
+        rtt = samples[Math.floor(samples.length / 2)];
+      }
     } catch {
       // No response is unavailable, not a default/estimated latency.
     }

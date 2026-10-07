@@ -1,0 +1,29 @@
+# ═══════════════════════════════════════════════════════════════
+#  Omni Panel — Cloudflare Worker (omni-ali)
+# ═══════════════════════════════════════════════════════════════
+name = "omni-ali"
+main = "production/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "omni-db"
+database_id = "dbf2efd0-d35f-42ad-8fbe-f09806ba8644"
+
+[vars]
+PANEL_NAME = "Omni"
+BOT_WEBHOOK_SECRET = "omni-hook"
+BOT_USERNAME = "OmniAiGateBot"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[observability]
+enabled = true
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true

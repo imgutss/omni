@@ -20,10 +20,9 @@
     "test:scanner:browser": "npm --prefix production run test:browser"
   },
   "devDependencies": {
+    "acorn": "^8.19.0",
+    "playwright": "^1.63.0",
     "wrangler": "^3.80.0",
     "ws": "^8.18.0"
-  },
-  "dependencies": {
-    "acorn": "^8.19.0"
   }
 }
