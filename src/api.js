@@ -165,12 +165,12 @@ function meshHistoryStats(rows = []) {
 
 function meshScore(mode, latest, history) {
   if (!latest?.alive || !(latest.edge_ms > 0)) return null;
-  const h = history || { samples: 0, success_rate: 100, p50: latest.edge_ms, p95: latest.edge_ms, jitter_span: 0 };
+  const h = history || { samples: 0, success_rate: 100, p50: latest.edge_ms, p95: latest.edge_ms, jitter_span: 0, jitter_stddev: 0 };
   const p50 = h.p50 ?? latest.edge_ms;
   const p95 = h.p95 ?? latest.edge_ms;
-  const jitter = h.jitter_span ?? Math.max(0, p95 - p50);
+  const jitter = h.jitter_stddev || h.jitter_span || Math.max(0, p95 - p50);
   const failure = Math.max(0, 100 - (h.success_rate ?? 100));
-  if (mode === 'game') return Math.round((latest.edge_ms * 0.28 + p50 * 0.22 + p95 * 0.5 + jitter * 1.8 + failure * 4) * 10) / 10;
+  if (mode === 'game') return Math.round((latest.edge_ms * 0.25 + p50 * 0.20 + p95 * 0.45 + jitter * 2.2 + failure * 5) * 10) / 10;
   if (mode === 'ai') return Math.round((latest.edge_ms * 0.35 + p50 * 0.3 + p95 * 0.35 + jitter * 0.8 + failure * 5) * 10) / 10;
   return Math.round((latest.edge_ms * 0.42 + p50 * 0.38 + p95 * 0.2 + jitter * 0.5 + failure * 3) * 10) / 10;
 }

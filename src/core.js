@@ -75,6 +75,8 @@ const GEMINI_AI_SUFFIXES = [
   'aisandbox-pa.googleapis.com',
   'oauthaccountmanager.googleapis.com',
   'optimizationguide-pa.googleapis.com',
+  'waa-pa.clients6.google.com',
+  'gemini.gstatic.com',
   'notebooklm.google.com',
   'notebooklm.google',
   'labs.google',
@@ -82,6 +84,9 @@ const GEMINI_AI_SUFFIXES = [
   'opal.google',
   'deepmind.google',
   'ai.google',
+  'accounts.google.com',
+  'clients6.google.com',
+  'cloud.google.com',
   'chatgpt.com',
   'openai.com',
   'oaistatic.com',
@@ -106,8 +111,9 @@ function isYoutubeMediaHost(host) {
 }
 
 export function isGeminiOrAiHost(host) {
-  const h = String(host || '').trim().toLowerCase().replace(/\.$/, '');
+  const h = String(host || '').trim().toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
   if (!h || isYoutubeMediaHost(h)) return false;
+  if (isGoogleIpLiteral(h)) return true;
   return GEMINI_AI_SUFFIXES.some((suf) => h === suf || h.endsWith('.' + suf));
 }
 

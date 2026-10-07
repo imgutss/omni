@@ -138,14 +138,21 @@ export const DEAD_BYOIP_BLACKLIST = new Set([
 
 /** پروکسی‌های SOCKS5/HTTP تاییدشده (IPv4 خالص آمریکا و اروپا) برای باز کردن بدون خطای Google Gemini (وب و اپ اندروید) */
 export const GEMINI_VIP_PROXIES = [
-  // خروجی واقعی آمریکا (New York, AS212238) — Gemini HTTP 200 با TLS معتبر
+  // ۱) خروجی تاییدشده آمریکا (AS63023 Miami) — Gemini HTTP 200 بدون محدودیت کشوری
   'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
-  // فالبک‌های کانادا با Gemini HTTP 200 و TLS معتبر
-  'socks5://38.49.210.79:40000',
-  'socks5://pqyiblro:BW6cuhhS2U0r@132.145.110.34:1080',
+  // ۲) خروجی تاییدشده آمریکای شمالی (Oracle Cloud AS31898) — Gemini HTTP 200
   'socks5://jhreyayp:YtvoFAC0jMDx@192.18.152.237:1080',
-  // فالبک اروپا با TLS معتبر
+  // ۳) خروجی تاییدشده کانادا (Oracle Cloud AS31898) — Gemini HTTP 200
+  'socks5://pqyiblro:BW6cuhhS2U0r@132.145.110.34:1080',
+  // ۴) خروجی تاییدشده بریتانیا — Gemini HTTP 200
+  'socks5://qpmcy1xm:wgj6q7ns5gfs@gb.day1404.dpdns.org:11361',
+  // ۵) خروجی تاییدشده هلند/اروپا — Gemini HTTP 200
+  'socks5://5.255.117.127:1080',
   'socks5://31.220.40.59:5080',
+  // ۶) خروجی تاییدشده فرانسه — Gemini HTTP 200
+  'socks5://213.199.47.140:1080',
+  // ۷) خروجی تاییدشده امارات — Gemini HTTP 200
+  'socks5://zfdsvi6l:dl7o17z4ml9q@ua.day1404.dpdns.org:11359',
 ];
 
 const V4_GLOBAL = OMNI_QOS_V4.slice(0, 10);
@@ -202,41 +209,68 @@ const REAL_EXIT_PROXIES = {
 export const COUNTRY_VIP_PROXIES = {
   US: [
     'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
+    'socks5://jhreyayp:YtvoFAC0jMDx@192.18.152.237:1080',
   ],
   CA: [
-    'socks5://38.49.210.79:40000',
-    'socks5://pqyiblro:BW6cuhhS2U0r@132.145.110.34:1080',
     'socks5://jhreyayp:YtvoFAC0jMDx@192.18.152.237:1080',
+    'socks5://pqyiblro:BW6cuhhS2U0r@132.145.110.34:1080',
+  ],
+  GB: [
+    'socks5://qpmcy1xm:wgj6q7ns5gfs@gb.day1404.dpdns.org:11361',
+    'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
   ],
   NL: [
     'socks5://5.255.117.127:1080',
     'socks5://31.220.40.59:5080',
   ],
   DE: [
-    'http://s6102032620021:fahfah090908@202.28.17.5:8080',
-    'socks5://167.86.86.221:9050',
-  ],
-  GB: [
-    'socks5://qpmcy1xm:wgj6q7ns5gfs@gb.day1404.dpdns.org:11361',
+    'socks5://5.255.117.127:1080',
+    'socks5://31.220.40.59:5080',
+    'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
   ],
   FR: [
-    'socks5://109.199.107.68:1080',
-    'socks5://77.221.152.210:36219',
     'socks5://213.199.47.140:1080',
-  ],
-  JP: [
-    'socks5://172.105.192.212:9080',
-    'socks5://35.78.212.217:32053',
-    'socks5://101.36.104.46:10808',
-  ],
-  SG: [
-    'socks5://45.77.244.108:1080',
+    'socks5://5.255.117.127:1080',
   ],
   AE: [
     'socks5://zfdsvi6l:dl7o17z4ml9q@ua.day1404.dpdns.org:11359',
+    'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
   ],
   SE: [
-    'socks5://171.25.158.95:1080',
+    'socks5://5.255.117.127:1080',
+    'socks5://qpmcy1xm:wgj6q7ns5gfs@gb.day1404.dpdns.org:11361',
+  ],
+  FI: [
+    'socks5://5.255.117.127:1080',
+    'socks5://31.220.40.59:5080',
+  ],
+  CH: [
+    'socks5://5.255.117.127:1080',
+    'socks5://213.199.47.140:1080',
+  ],
+  AT: [
+    'socks5://5.255.117.127:1080',
+    'socks5://31.220.40.59:5080',
+  ],
+  IT: [
+    'socks5://213.199.47.140:1080',
+    'socks5://5.255.117.127:1080',
+  ],
+  ES: [
+    'socks5://213.199.47.140:1080',
+    'socks5://5.255.117.127:1080',
+  ],
+  TR: [
+    'socks5://zfdsvi6l:dl7o17z4ml9q@ua.day1404.dpdns.org:11359',
+    'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
+  ],
+  SG: [
+    'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
+    'socks5://jhreyayp:YtvoFAC0jMDx@192.18.152.237:1080',
+  ],
+  JP: [
+    'socks5://113by3ev:hggxksa6plnq@us1.day1404.dpdns.org:11357',
+    'socks5://jhreyayp:YtvoFAC0jMDx@192.18.152.237:1080',
   ],
 };
 
