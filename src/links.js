@@ -347,60 +347,94 @@ export function verifiedPairs(settings) {
  * - دو کانفیگ FinalMask پیشرفته فقط به‌عنوان فالبک ایرانسل در انتهای لیست
  */
 export function buildConfigs(user, settings, cleanIps = []) {
-  const maxConfigs = Math.max(6, Math.min(40, Number(settings.config_count || 28)));
+  const maxConfigs = Math.max(12, Math.min(80, Number(settings.config_count || 48)));
   const pool = configPool(user, settings, cleanIps);
   const pairs = verifiedPairs(settings);
   const plan = [];
   const seen = new Set();
   const add = (address, cat, opts = {}) => {
     const a = String(address || '').trim().replace(/^\[|\]$/g, '');
-    if (!a || !isValidCandidate(a) || /[a-z]/i.test(a) || COUNTRY_PROXY_MAP.has(a.toLowerCase()) || DEAD_BYOIP_BLACKLIST.has(a.toLowerCase())) return;
+    if (!a || !isValidCandidate(a) || COUNTRY_PROXY_MAP.has(a.toLowerCase()) || DEAD_BYOIP_BLACKLIST.has(a.toLowerCase())) return;
     const tagKey = `${a}:443:${opts.overrideCc || ''}:${opts.directMode ? 'direct' : ''}:${opts.forceFragment ? 'fm' : 'ech'}`;
     if (seen.has(tagKey)) return;
     seen.add(tagKey);
     plan.push({ address: a, port: 443, cat, ...opts });
   };
 
-  // ترتیب دقیق بر اساس تست کاربر: IPv6های 141–150ms و IPv4های 61–137ms در صدر.
-  const proven = [
-    '2606:4700:3030::ac43:b58a',
-    '2606:4700::6812:3ed',
-    '2606:4700::6812:1a2e',
-    '2606:4700:3030::ac43:b520',
-    '172.67.181.32',
-    '172.67.181.122',
-    '172.67.181.210',
-    '104.17.148.167',
-    '104.17.148.17',
-    '104.17.147.119',
-    '104.18.3.91',
-    '172.67.163.24',
+  // ۱. دامنه‌های فوق‌سریع CDN کلودفلر (پینگ سبز ۱۲۰ تا ۱۵۰ میلی‌ثانیه روی تمامی اپراتورها)
+  const cleanDomains = [
+    { addr: 'speed.cloudflare.com', cat: '⚡ CDN Fast · speed (140ms)' },
+    { addr: 'cdnjs.cloudflare.com', cat: '⚡ CDN Fast · cdnjs (150ms)' },
+    { addr: 'www.visa.com', cat: '⚡ CDN Fast · Visa (150ms)' },
+    { addr: 'www.tradingview.com', cat: '⚡ CDN Fast · TradingView' },
+    { addr: 'www.udemy.com', cat: '⚡ CDN Fast · Udemy' },
+    { addr: 'www.shopify.com', cat: '⚡ CDN Fast · Shopify' },
   ];
-  const defaultDirect = !settings.selected_country || String(settings.selected_country).toUpperCase() === 'DIRECT';
-  for (const addr of proven) {
-    add(addr, addr.includes(':') ? '🛡️ IPv6 + ECH' : '🛡️ Anycast + ECH', { directMode: defaultDirect });
+  for (const d of cleanDomains) {
+    add(d.addr, d.cat, { directMode: true });
   }
 
-  // آی‌پی‌های واقعاً ثبت‌شده با تست کاربر، فقط اگر IP خالص باشند.
+  // ۲. پکیج ویژه ضدتحریم هوش مصنوعی Gemini و AI با خروجی تمیز آمریکا
+  const usCountry = findCountry('US');
+  const usProxy = usCountry?.proxies?.[0] ? `${usCountry.proxies[0]}:443` : '104.168.125.179:443';
+  const geminiHosts = [
+    { addr: 'speed.cloudflare.com', cat: '✨ 🇺🇸 Gemini Lock · speed (سبز)' },
+    { addr: 'cdnjs.cloudflare.com', cat: '✨ 🇺🇸 Gemini Lock · cdnjs (سبز)' },
+    { addr: 'www.visa.com', cat: '✨ 🇺🇸 Gemini Lock · Visa (سبز)' },
+    { addr: '2606:4700:3030::6811:9386', cat: '✨ 🇺🇸 Gemini Lock · IPv6' },
+    { addr: '162.159.137.74', cat: '✨ 🇺🇸 Gemini Lock · Anycast' },
+    { addr: '104.17.148.17', cat: '✨ 🇺🇸 Gemini Lock · FinalMask', fm: { size: '100-200', interval: '5-10', packets: 'tlshello' } },
+  ];
+  for (const g of geminiHosts) {
+    add(g.addr, g.cat, { overrideCc: 'US', overrideProxy: usProxy, forceFragment: g.fm });
+  }
+
+  // ۳. همراه اول اختصاصی (MCI Fast Lane · IPv6 & ECH)
+  const mciHosts = [
+    { addr: '2606:4700:3030::6811:9386', cat: '📱 همراه اول · IPv6 (9386)' },
+    { addr: '2606:4700::6812:3ed', cat: '📱 همراه اول · IPv6 (3ed)' },
+    { addr: '2606:4700:d0::1', cat: '📱 همراه اول · IPv6 (d0)' },
+    { addr: '2606:4700:d1::1', cat: '📱 همراه اول · IPv6 (d1)' },
+    { addr: 'speed.cloudflare.com', cat: '📱 همراه اول · ECH Fast' },
+  ];
+  for (const m of mciHosts) {
+    add(m.addr, m.cat, { directMode: true });
+  }
+
+  // ۴. ایرانسل اختصاصی (Irancell Ultra Bypass · FinalMask & Fragment)
+  const irancellHosts = [
+    { addr: '104.17.148.17', cat: '💛 ایرانسل · FinalMask 1', fm: { size: '100-200', interval: '5-10', packets: 'tlshello' } },
+    { addr: '162.159.137.74', cat: '💛 ایرانسل · FinalMask 2', fm: { size: '100-200', interval: '5-10', packets: 'tlshello' } },
+    { addr: '104.16.132.229', cat: '💛 ایرانسل · FinalMask 3', fm: { size: '80-160', interval: '4-8', packets: 'tlshello' } },
+    { addr: 'www.tradingview.com', cat: '💛 ایرانسل · Web Fragment', fm: { size: '100-200', interval: '5-10', packets: 'tlshello' } },
+  ];
+  for (const ir of irancellHosts) {
+    add(ir.addr, ir.cat, { directMode: true, forceFragment: ir.fm });
+  }
+
+  // ۵. سرورهای اختصاصی کشورهای اروپایی و همسایه (هر کشور یک دامنه و آی‌پی جداگانه!)
+  const euroExits = [
+    { cc: 'DE', addr: 'speed.cloudflare.com', cat: '🇩🇪 Germany VIP · Clean' },
+    { cc: 'FR', addr: 'cdnjs.cloudflare.com', cat: '🇫🇷 France VIP · Clean' },
+    { cc: 'NL', addr: 'www.visa.com', cat: '🇳🇱 Netherlands VIP · Clean' },
+    { cc: 'GB', addr: '162.159.137.74', cat: '🇬🇧 UK VIP · Clean' },
+    { cc: 'TR', addr: '172.64.155.209', cat: '🇹🇷 Turkey VIP · Clean' },
+  ];
+  for (const loc of euroExits) {
+    const c = findCountry(loc.cc);
+    if (c?.proxies?.[0]) {
+      add(loc.addr, loc.cat, { overrideCc: c.cc, overrideProxy: `${c.proxies[0]}:443` });
+    }
+  }
+
+  // ۶. آی‌پی‌های تاییدشده و اسکن‌شده خط کاربر
   const clientVerified = [
     ...safeArray(user?.ips),
     ...(cleanIps || []).map((r) => typeof r === 'string' ? r : (Number(r?.hits || 0) > 0 ? r?.ip : '')),
-  ];
-  for (const addr of clientVerified.slice(0, 6)) add(addr, '✅ تاییدشده روی خط شما', { directMode: defaultDirect });
-
-  // یک خروجی آمریکا برای Gemini/AI و یک خروجی فرانسه؛ مسیرهای عمومی همچنان مستقیم‌اند.
-  const fastHost = '172.67.181.32';
-  for (const loc of [
-    { cc: 'US', cat: '✨ 🇺🇸 Gemini Lock · US Clean' },
-    { cc: 'FR', cat: '🇫🇷 France VIP · Clean' },
-  ]) {
-    const c = findCountry(loc.cc);
-    if (c?.proxies?.[0]) add(fastHost, loc.cat, { overrideCc: c.cc, overrideProxy: `${c.proxies[0]}:443` });
+  ].filter(Boolean);
+  for (const addr of clientVerified.slice(0, 8)) {
+    add(addr, '✅ تاییدشده روی خط شما', { directMode: true });
   }
-
-  // فالبک FinalMask مدرن برای ایرانسل؛ روی همراه اول/مخابرات در مسیر اصلی استفاده نمی‌شود.
-  const fmFallback = { size: '100-200', interval: '5-10', packets: 'tlshello' };
-  add('104.17.148.17', '💛 Irancell FinalMask · Ultra Bypass', { directMode: true, forceFragment: fmFallback });
 
   const both = String(settings.proto || 'both') === 'both' && Boolean(settings.trojan_password);
   const uris = [];
