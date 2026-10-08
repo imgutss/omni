@@ -6307,9 +6307,10 @@ function pattMethodsCard() {
   </div>`;
 }
 function Vt(e, t) {
+    let mime = typeof t === "string" ? "text/plain;charset=utf-8" : "application/zip";
     let s = document.createElement("a");
     (s.href = URL.createObjectURL(
-      new Blob([t], { type: "text/plain;charset=utf-8" }),
+      new Blob([t], { type: mime }),
     )),
       (s.download = e),
       s.click(),
@@ -10131,6 +10132,124 @@ function xe(total) {
     relayIp: "138.201.54.122",
   };
 
+  function natnetCrc32(buf) {
+    let table = new Int32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+      table[i] = c;
+    }
+    let crc = -1;
+    for (let i = 0; i < buf.length; i++) {
+      crc = (crc >>> 8) ^ table[(crc ^ buf[i]) & 0xFF];
+    }
+    return (crc ^ (-1)) >>> 0;
+  }
+
+  function natnetCreateZip(files) {
+    let enc = new TextEncoder();
+    let parts = [], central = [], offset = 0;
+    for (let file of files) {
+      let nameBytes = enc.encode(file.name);
+      let dataBytes = typeof file.content === 'string' ? enc.encode(file.content) : file.content;
+      let crc = natnetCrc32(dataBytes), size = dataBytes.length;
+
+      let lh = new Uint8Array(30 + nameBytes.length);
+      let dv = new DataView(lh.buffer);
+      dv.setUint32(0, 0x04034b50, true);
+      dv.setUint16(4, 20, true);
+      dv.setUint16(6, 0x0800, true);
+      dv.setUint16(8, 0, true);
+      dv.setUint16(10, 0, true);
+      dv.setUint16(12, 0, true);
+      dv.setUint32(14, crc, true);
+      dv.setUint32(18, size, true);
+      dv.setUint32(22, size, true);
+      dv.setUint16(26, nameBytes.length, true);
+      dv.setUint16(28, 0, true);
+      lh.set(nameBytes, 30);
+      parts.push(lh, dataBytes);
+
+      let ch = new Uint8Array(46 + nameBytes.length);
+      let cdv = new DataView(ch.buffer);
+      cdv.setUint32(0, 0x02014b50, true);
+      cdv.setUint16(4, 20, true);
+      cdv.setUint16(6, 20, true);
+      cdv.setUint16(8, 0x0800, true);
+      cdv.setUint16(10, 0, true);
+      cdv.setUint16(12, 0, true);
+      cdv.setUint16(14, 0, true);
+      cdv.setUint32(16, crc, true);
+      cdv.setUint32(20, size, true);
+      cdv.setUint32(24, size, true);
+      cdv.setUint16(28, nameBytes.length, true);
+      cdv.setUint16(30, 0, true);
+      cdv.setUint16(32, 0, true);
+      cdv.setUint16(34, 0, true);
+      cdv.setUint16(36, 0, true);
+      cdv.setUint32(38, 0, true);
+      cdv.setUint32(42, offset, true);
+      ch.set(nameBytes, 46);
+      central.push(ch);
+      offset += lh.length + dataBytes.length;
+    }
+    let centralSize = central.reduce((sum, c) => sum + c.length, 0);
+    let eocd = new Uint8Array(22);
+    let edv = new DataView(eocd.buffer);
+    edv.setUint32(0, 0x06054b50, true);
+    edv.setUint16(4, 0, true);
+    edv.setUint16(6, 0, true);
+    edv.setUint16(8, files.length, true);
+    edv.setUint16(10, files.length, true);
+    edv.setUint32(12, centralSize, true);
+    edv.setUint32(16, offset, true);
+    edv.setUint16(20, 0, true);
+
+    let allParts = [...parts, ...central, eocd];
+    let totalLength = allParts.reduce((acc, p) => acc + p.length, 0);
+    let result = new Uint8Array(totalLength);
+    let pos = 0;
+    for (let p of allParts) {
+      result.set(p, pos);
+      pos += p.length;
+    }
+    return result;
+  }
+
+  function natnetVercelCode(host) {
+    return `export const config = { runtime: 'edge' };
+
+export default async function handler(req) {
+  const target = process.env.TARGET_WORKER || 'https://${host}';
+  const url = new URL(req.url);
+  const targetUrl = new URL(url.pathname + url.search, target);
+
+  return fetch(targetUrl.toString(), {
+    method: req.method,
+    headers: req.headers,
+    body: req.body,
+    duplex: 'half'
+  });
+};`;
+  }
+
+  function natnetNetlifyCode(host) {
+    return `export default async (request, context) => {
+  const target = Netlify.env.get("TARGET_WORKER") || "https://${host}";
+  const url = new URL(request.url);
+  const targetUrl = new URL(url.pathname + url.search, target);
+
+  return fetch(targetUrl.toString(), {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+    duplex: "half"
+  });
+};
+
+export const config = { path: "/*" };`;
+  }
+
   function natnetSpooferJson(host) {
     let connectIp = NATNET.spooferIp || "104.18.183.237";
     let listenPort = Number(NATNET.spooferPort) || 40443;
@@ -10304,27 +10423,77 @@ quic:
       </div>
     </div>
 
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px;margin-top:12px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:12px">
       <!-- VERCEL CARD -->
-      <div class="card">
-        <div class="card-head">
-          <b style="color:var(--accent)">▲ کد اسکریپت لبه Vercel (api/index.js)</b>
+      <div class="card" style="display:flex;flex-direction:column;gap:10px;border-inline-start:3px solid var(--accent)">
+        <div class="card-head" style="margin-bottom:0">
+          <b style="color:var(--accent);font-size:14px">▲ پل ابری Vercel Edge (کد و فایل آماده)</b>
           <div class="spacer"></div>
-          <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vercelCode)}">${d("copy")} کپی کد</button>
+          <span class="badge ok">AWS Anycast Edge</span>
         </div>
-        <p class="muted" style="font-size:11.5px;margin:0 0 8px 0">یک پروژه رایگان در Vercel ایجاد کنید، متغیر محیطی <code>TARGET_WORKER = https://${publicHost}</code> را ست کرده و این کد را در <code>api/index.js</code> قرار دهید.</p>
-        <div class="codebox" style="max-height:160px;overflow:auto"><code dir="ltr">${a(vercelCode)}</code></div>
+
+        <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div style="font-weight:700;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+            ${d("download")} <span>دانلود فایل‌های آماده (برای راحتی کاربر):</span>
+          </div>
+          <p class="muted" style="font-size:11.5px;margin:0 0 10px 0;line-height:1.7">
+            نیازی به ساخت دستی فایل نیست! پکیج ZIP شامل فایل‌های <code>api/index.js</code> و <code>vercel.json</code> با آدرس ورکر شما آماده شده و با یک کلیک قابل آپلود در گیت‌هاب یا Vercel است:
+          </p>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-vercel-zip">
+              📦 دانلود پکیج زیپ Vercel (.zip)
+            </button>
+            <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-vercel-js">
+              📄 دانلود فایل index.js
+            </button>
+            <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vercelCode)}">
+              ${d("copy")} کپی کد
+            </button>
+          </div>
+        </div>
+
+        <details style="font-size:12px">
+          <summary style="cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0">
+            👁️ مشاهده کد اسکریپت api/index.js (جهت کپی دستی)
+          </summary>
+          <div class="codebox" style="margin-top:8px;max-height:150px;overflow:auto"><code dir="ltr">${a(vercelCode)}</code></div>
+        </details>
       </div>
 
       <!-- NETLIFY CARD -->
-      <div class="card">
-        <div class="card-head">
-          <b style="color:#00c7b7">◈ کد اسکریپت لبه Netlify (Edge Function)</b>
+      <div class="card" style="display:flex;flex-direction:column;gap:10px;border-inline-start:3px solid #00c7b7">
+        <div class="card-head" style="margin-bottom:0">
+          <b style="color:#00c7b7;font-size:14px">◈ پل ابری Netlify Edge (فوق‌سریع Drag & Drop)</b>
           <div class="spacer"></div>
-          <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(netlifyCode)}">${d("copy")} کپی کد</button>
+          <span class="badge ok">CloudFront / Fastly</span>
         </div>
-        <p class="muted" style="font-size:11.5px;margin:0 0 8px 0">در Netlify یک پروژه جدید ایجاد کنید و کد فوق را در مسیر <code>netlify/edge-functions/bridge.js</code> قرار داده و دیپلوی کنید.</p>
-        <div class="codebox" style="max-height:160px;overflow:auto"><code dir="ltr">${a(netlifyCode)}</code></div>
+
+        <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div style="font-weight:700;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px">
+            ${d("download")} <span>ساده‌ترین روش بدون کدنویسی:</span>
+          </div>
+          <p class="muted" style="font-size:11.5px;margin:0 0 10px 0;line-height:1.7">
+            پکیج ZIP زیر را دانلود کنید، وارد صفحه <b>app.netlify.com/drop</b> شوید و فایل زیپ را با کشیدن و رها کردن (Drag & Drop) آپلود کنید؛ سایت و پل شما ظرف ۵ ثانیه ساخته می‌شود!
+          </p>
+          <div style="display:flex;gap:7px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-netlify-zip">
+              📦 دانلود پکیج زیپ Netlify (.zip)
+            </button>
+            <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-netlify-js">
+              📄 دانلود فایل bridge.js
+            </button>
+            <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(netlifyCode)}">
+              ${d("copy")} کپی کد
+            </button>
+          </div>
+        </div>
+
+        <details style="font-size:12px">
+          <summary style="cursor:pointer;font-weight:600;color:#00c7b7;padding:4px 0">
+            👁️ مشاهده کد اسکریپت netlify/edge-functions/bridge.js (جهت کپی دستی)
+          </summary>
+          <div class="codebox" style="margin-top:8px;max-height:150px;overflow:auto"><code dir="ltr">${a(netlifyCode)}</code></div>
+        </details>
       </div>
     </div>
 
@@ -10429,12 +10598,31 @@ quic:
     <div class="card" style="margin-top:12px">
       <div class="card-head">
         ${d("download")}
-        <h3 style="margin:0">فایل پیکربندی اختصاصی اسپوفر (config.json)</h3>
+        <h3 style="margin:0">فایل‌های آماده و پکیج اجرایی اسپوفر محلی</h3>
         <div class="spacer"></div>
-        <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-spoofer">📥 دانلود مستقیم config.json</button>
-        <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(spooferJsonStr)}">${d("copy")} کپی متن</button>
       </div>
-      <div class="codebox" style="margin-top:8px;max-height:190px;overflow:auto"><code dir="ltr">${a(spooferJsonStr)}</code></div>
+      <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px">
+        <p class="muted" style="font-size:12px;margin:0 0 10px 0;line-height:1.7">
+          می‌توانید پکیج کامل را دانلود کنید که علاوه بر <code>config.json</code>، شامل فایل‌های اجرای خودکار برای ویندوز (فایل bat) و اندروید (ترموکس) است، یا فایل تنظیمی خام را دریافت کنید:
+        </p>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-spoofer-zip">
+            📦 دانلود پکیج کامل اسپوفر (.zip)
+          </button>
+          <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-spoofer">
+            📥 دانلود فایل config.json
+          </button>
+          <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(spooferJsonStr)}">
+            ${d("copy")} کپی متن JSON
+          </button>
+        </div>
+      </div>
+      <details style="font-size:12px;margin-top:8px">
+        <summary style="cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0">
+          👁️ مشاهده متن فایل config.json
+        </summary>
+        <div class="codebox" style="margin-top:8px;max-height:180px;overflow:auto"><code dir="ltr">${a(spooferJsonStr)}</code></div>
+      </details>
     </div>
 
     <!-- TERMINAL / TERMUX ONE-LINER -->
@@ -10635,6 +10823,67 @@ quic:
         } else if (i === "omni-natnet-v2rayng") {
           let uri = s.dataset.uri || "";
           location.href = "v2rayng://install-config?url=" + encodeURIComponent(uri);
+        } else if (i === "omni-natnet-dl-vercel-zip") {
+          let host = e.settings()?.public_host || window.location.hostname;
+          let code = natnetVercelCode(host);
+          let vercelCfg = JSON.stringify({ version: 2, env: { TARGET_WORKER: "https://" + host } }, null, 2);
+          let pkgJson = JSON.stringify({ name: "omni-vercel-edge-bridge", version: "1.0.0", private: true }, null, 2);
+          let guide = `راهنمای دیپلوی سریع در Vercel:
+۱. فایل‌های این پوشه را در یک ریپازیتوری شخصی گیت‌هاب آپلود کنید یا با Vercel CLI اجرا نمایید.
+۲. در داشبورد Vercel روی Add New Project کلیک کرده و پروژه را ایمپورت کنید.
+۳. متغیر TARGET_WORKER قبلاً درون vercel.json ست شده است!
+۴. روی Deploy کلیک کنید؛ ظرف ۳۰ ثانیه دامنه لبه شما ساخته می‌شود.`;
+          let zip = natnetCreateZip([
+            { name: "api/index.js", content: code },
+            { name: "vercel.json", content: vercelCfg },
+            { name: "package.json", content: pkgJson },
+            { name: "راهنمای_دیپلوی_Vercel.txt", content: guide }
+          ]);
+          Vt("omni-vercel-bridge.zip", zip);
+          y("پکیج آماده Vercel با موفقیت دانلود شد", "ok");
+        } else if (i === "omni-natnet-dl-vercel-js") {
+          let host = e.settings()?.public_host || window.location.hostname;
+          Vt("index.js", natnetVercelCode(host));
+          y("فایل api/index.js با موفقیت دانلود شد", "ok");
+        } else if (i === "omni-natnet-dl-netlify-zip") {
+          let host = e.settings()?.public_host || window.location.hostname;
+          let code = natnetNetlifyCode(host);
+          let toml = `[[edge_functions]]\n  function = "bridge"\n  path = "/*"\n\n[build.environment]\n  TARGET_WORKER = "https://${host}"\n`;
+          let indexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Bridge Active</title></head><body style="font-family:sans-serif;background:#111;color:#fff;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center"><h2>Omni Netlify Edge Active</h2><p style="opacity:.7">Ready to bypass censorship.</p></div></body></html>`;
+          let guide = `راهنمای آپلود در Netlify (Drag & Drop):
+۱. وارد سایت https://app.netlify.com شوید.
+۲. به صفحه https://app.netlify.com/drop بروید.
+۳. همین فایل ZIP را مستقیماً در کادر دایره‌ای وسط صفحه با ماوس بکشید و رها کنید (Drop).
+۴. نتلیفای بلافاصله بدون نیاز به کدنویسی ظرف چند ثانیه سایت را آنلاین کرده و یک دامنه‌ اختصاصی به شما می‌دهد!`;
+          let zip = natnetCreateZip([
+            { name: "netlify/edge-functions/bridge.js", content: code },
+            { name: "netlify.toml", content: toml },
+            { name: "index.html", content: indexHtml },
+            { name: "راهنمای_آپلود_Netlify.txt", content: guide }
+          ]);
+          Vt("omni-netlify-bridge.zip", zip);
+          y("پکیج آماده Netlify با موفقیت دانلود شد", "ok");
+        } else if (i === "omni-natnet-dl-netlify-js") {
+          let host = e.settings()?.public_host || window.location.hostname;
+          Vt("bridge.js", natnetNetlifyCode(host));
+          y("فایل bridge.js با موفقیت دانلود شد", "ok");
+        } else if (i === "omni-natnet-dl-spoofer-zip") {
+          let host = e.settings()?.public_host || window.location.hostname;
+          let json = natnetSpooferJson(host);
+          let bat = `@echo off\r\ntitle Omni SNI Spoofer\r\necho Starting Omni Local Spoofer on port 40443...\r\nsni-spoof.exe\r\npause\r\n`;
+          let sh = `#!/data/data/com.termux/files/usr/bin/bash\necho "اجرای اسپوفر محلی روی پورت 40443..."\n./sni-spoof\n`;
+          let guide = `راهنمای اجرای اسپوفر محلی:
+۱. در ویندوز: فایل sni-spoof.exe را کنار config.json بگذارید و run-windows.bat را اجرا کنید.
+۲. در اندروید: برنامه را در ترموکس اجرا کنید.
+۳. در کلاینت (v2rayNG): کانفیگ لوپ‌بک 127.0.0.1:40443 را فعال کنید.`;
+          let zip = natnetCreateZip([
+            { name: "config.json", content: json },
+            { name: "run-windows.bat", content: bat },
+            { name: "run-termux.sh", content: sh },
+            { name: "راهنمای_اسپوفر.txt", content: guide }
+          ]);
+          Vt("omni-spoofer-package.zip", zip);
+          y("پکیج کامل اسپوفر با موفقیت دانلود شد", "ok");
         } else if (i === "omni-natnet-dl-spoofer") {
           let host = e.settings()?.public_host || window.location.hostname;
           let json = natnetSpooferJson(host);
