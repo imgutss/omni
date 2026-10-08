@@ -1,7 +1,3 @@
-# ═══════════════════════════════════════════════════════════════
-#  Omni Panel — Cloudflare Worker (رایگان)
-#  deploy: node deploy/deploy.mjs   یا   npx wrangler deploy
-# ═══════════════════════════════════════════════════════════════
 name = "omni"
 main = "production/worker.js"
 compatibility_date = "2024-09-23"
@@ -17,22 +13,10 @@ database_id = "9660e603-a4e9-4b2c-8071-788e2539e618"
 PANEL_NAME = "Omni"
 BOT_WEBHOOK_SECRET = "omni-hook"
 BOT_USERNAME = "OmniAiGateBot"
-# توکن ربات و آیدی مدیر از طریق secrets ست می‌شوند:
-#   npx wrangler secret put BOT_TOKEN
-#   npx wrangler secret put ADMIN_CHAT_ID
 
 [triggers]
 crons = ["*/5 * * * *"]
 
-[observability]
-enabled = true
-
-[[rules]]
-type = "Text"
-globs = ["**/*.html"]
-fallthrough = true
-
-# Required by the production bot installer/update flow.
 [[kv_namespaces]]
 binding = "RELEASES"
 id = "f7ac482df0f04daf96378b6b55224dc9"
