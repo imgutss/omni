@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════════
 #  Omni Panel — Cloudflare Worker (omni-ali)
 # ═══════════════════════════════════════════════════════════════
-name = "omni-ali"
+name = "omni-nova-f61e"
 main = "production/worker.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
@@ -9,8 +9,8 @@ workers_dev = true
 
 [[d1_databases]]
 binding = "DB"
-database_name = "omni-db"
-database_id = "dbf2efd0-d35f-42ad-8fbe-f09806ba8644"
+database_name = "omni-nova-f61e-db-6e0947"
+database_id = "0e0fe2b6-0ba1-4eb2-a6d4-845628372fce"
 
 [vars]
 PANEL_NAME = "Omni"
