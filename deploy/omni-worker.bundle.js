@@ -2059,6 +2059,43 @@ async function listPanelsForHealthCheck(env, limit = 30) {
     ORDER BY last_check_at IS NOT NULL,last_check_at ASC,id ASC LIMIT ?`).bind(safeLimit).all();
   return rows.results || [];
 }
+async function autoDiscoverAndRegisterPanels(env, chatId, token) {
+  try {
+    const accounts = await cfRequest2(token, "/accounts?per_page=100");
+    if (!Array.isArray(accounts) || !accounts.length) return [];
+    const added = [];
+    for (const acc of accounts.slice(0, 5)) {
+      try {
+        const sub = await cfRequest2(token, `/accounts/${acc.id}/workers/subdomain`);
+        const subdomain = sub?.subdomain;
+        const scripts = await cfRequest2(token, `/accounts/${acc.id}/workers/scripts?per_page=100`);
+        if (Array.isArray(scripts)) {
+          for (const s of scripts) {
+            const settings = await cfRequest2(token, `/accounts/${acc.id}/workers/scripts/${encodeURIComponent(s.id)}/settings`).catch(() => null);
+            const db = (settings?.bindings || []).find((x) => x.type === "d1" && x.name === "DB");
+            const panelUrl = subdomain ? `https://${s.id}.${subdomain}.workers.dev` : "";
+            if (db || s.id.toLowerCase().includes("omni")) {
+              const saved = await saveOwnedPanel(env, chatId, {
+                worker_name: s.id,
+                account_id: acc.id,
+                database_id: db?.id || db?.database_id || "",
+                panel_url: panelUrl,
+                source: "autodiscover",
+                status: "healthy"
+              }).catch(() => null);
+              if (saved) added.push(saved);
+            }
+          }
+        }
+      } catch {}
+    }
+    return added;
+  } catch (err) {
+    console.error("autoDiscover error:", err);
+    return [];
+  }
+}
+
 async function getOwnedPanel(env, ownerChatId, id) {
   await ensurePanelRegistry(env);
   return env.DB.prepare(`SELECT * FROM bot_panels WHERE id=? AND owner_chat_id=? AND deleted_at IS NULL`).bind(Number(id), String(ownerChatId)).first();
@@ -3391,9 +3428,47 @@ ${p.panel_url ? `\u0622\u062F\u0631\u0633: ${esc2(p.panel_url)}
     return showPanels();
   if (cmd === "/connect" || callbackData === "cmd:connect") {
     if (msg?.chat?.type !== "private")
-      return send("\u{1F510} \u0627\u062A\u0635\u0627\u0644 \u067E\u0646\u0644 \u0641\u0642\u0637 \u062F\u0631 \u06AF\u0641\u062A\u200C\u0648\u06AF\u0648\u06CC \u062E\u0635\u0648\u0635\u06CC \u0627\u0646\u062C\u0627\u0645 \u0645\u06CC\u200C\u0634\u0648\u062F.");
+      return send("🔐 اتصال پنل فقط در گفت‌وگوی خصوصی انجام می‌شود.");
+    let existing = await listOwnedPanels(env, chatId, 10);
+    if (!existing.length) {
+      const cachedTok = await getCachedToken(env, chatId);
+      if (cachedTok) {
+        await autoDiscoverAndRegisterPanels(env, chatId, cachedTok);
+        existing = await listOwnedPanels(env, chatId, 10);
+      }
+    }
+    if (existing.length) {
+      const rows = existing.map((p) => [{ text: `${p.status === "healthy" ? "🟢" : "⚪"} ${p.worker_name}`, callback_data: `pm:view:${p.id}` }]);
+      rows.push([{ text: "🔄 استعلام خودکار از Cloudflare", callback_data: "cmd:connect_cf" }]);
+      rows.push([{ text: "➕ اتصال دستی با آدرس", callback_data: "cmd:connect_manual" }]);
+      rows.push([{ text: "⬅️ منو", callback_data: "cmd:menu" }]);
+      return send(`✅ <b>پنل‌های متصل شما</b>\n\nپنل‌های شما به صورت خودکار شناسایی و متصل هستند و نیازی به وارد کردن مجدد آدرس ندارید:\n\n${existing.map((p, i) => `${i + 1}. <b>${esc2(p.worker_name)}</b> (${panelStatusLabel(p.status)})\n   <code>${esc2(p.panel_url || "")}</code>`).join("\n\n")}\n\nبرای مدیریت هر پنل، روی دکمهٔ آن ضربه بزنید:`, { reply_markup: { inline_keyboard: rows } });
+    }
     await setUiState(env, chatId, "connect_url");
-    return send("\u{1F517} \u0622\u062F\u0631\u0633 \u06A9\u0627\u0645\u0644 \u067E\u0646\u0644 Cloudflare \u0631\u0627 \u0628\u0641\u0631\u0633\u062A (\u0641\u0639\u0644\u0627\u064B \u200E.workers.dev). \u0628\u0639\u062F \u0627\u0632 \u062A\u0633\u062A \u0627\u062A\u0635\u0627\u0644\u060C \u0628\u0631\u0627\u06CC \u062B\u0628\u062A \u0645\u0627\u0644\u06A9\u06CC\u062A \u0627\u0632\u062A \u062A\u0648\u06A9\u0646 Cloudflare \u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645.");
+    return send("🔗 آدرس کامل پنل Cloudflare را بفرست (مثال: ‎https://my-panel.subdomain.workers.dev). بعد از تست اتصال، برای ثبت مالکیت ازت توکن Cloudflare می‌خواهم.");
+  }
+  if (callbackData === "cmd:connect_manual") {
+    await setUiState(env, chatId, "connect_url");
+    return send("🔗 آدرس کامل پنل Cloudflare را بفرست (مثال: ‎https://my-panel.subdomain.workers.dev). بعد از تست اتصال، برای ثبت مالکیت ازت توکن Cloudflare می‌خواهم.");
+  }
+  if (callbackData === "cmd:connect_cf") {
+    const cachedTok = await getCachedToken(env, chatId);
+    if (!cachedTok) {
+      await setUiState(env, chatId, "connect_url");
+      return send("🔑 توکن Cloudflare ذخیره‌شده‌ای یافت نشد. لطفاً آدرس پنل خود را بفرستید:");
+    }
+    await send("🔄 در حال استعلام و شناسایی پنل‌ها از حساب Cloudflare شما...");
+    await autoDiscoverAndRegisterPanels(env, chatId, cachedTok);
+    const existing = await listOwnedPanels(env, chatId, 10);
+    if (existing.length) {
+      const rows = existing.map((p) => [{ text: `${p.status === "healthy" ? "🟢" : "⚪"} ${p.worker_name}`, callback_data: `pm:view:${p.id}` }]);
+      rows.push([{ text: "➕ اتصال دستی با آدرس", callback_data: "cmd:connect_manual" }]);
+      rows.push([{ text: "⬅️ منو", callback_data: "cmd:menu" }]);
+      return send(`✅ <b>استعلام انجام شد:</b>\n\n${existing.map((p, i) => `${i + 1}. <b>${esc2(p.worker_name)}</b> (${panelStatusLabel(p.status)})\n   <code>${esc2(p.panel_url || "")}</code>`).join("\n\n")}\n\nبرای مدیریت هر پنل، روی دکمهٔ آن ضربه بزنید:`, { reply_markup: { inline_keyboard: rows } });
+    }
+    return send("هیچ پنل جدیدی در حساب Cloudflare شما یافت نشد. می‌توانید با «اتصال دستی با آدرس» اقدام کنید.", {
+      reply_markup: { inline_keyboard: [[{ text: "➕ اتصال دستی با آدرس", callback_data: "cmd:connect_manual" }], [{ text: "⬅️ منو", callback_data: "cmd:menu" }]] }
+    });
   }
   if (callbackData.startsWith("pm:view:"))
     return showPanel(callbackData.split(":")[2]);
@@ -3540,7 +3615,7 @@ ${panelStatusLabel(health.state)}`, { reply_markup: panelActionsKeyboard(refresh
         });
         return handleUpdate(env, ctx, origin, { update_id: 0, message: { message_id: 0, chat: { id: chatId, type: "private" }, text: cachedTok } });
       }
-      const title = { autoheal: "تعمیر خودکار و بازیابی پنل", usage: "\u06AF\u0632\u0627\u0631\u0634 \u0645\u0635\u0631\u0641 \u0648 \u062D\u062F\u0648\u062F \u0631\u0627\u06CC\u06AF\u0627\u0646 Cloudflare", update: "\u0622\u067E\u062F\u06CC\u062A/\u062A\u0639\u0645\u06CC\u0631 Worker", rollback: "\u0628\u0627\u0632\u06AF\u0634\u062A \u0646\u0633\u062E\u0647\u0654 Worker", backup: "\u0628\u06A9\u0627\u067E \u062F\u06CC\u062A\u0627\u0628\u06CC\u0633", backupstatus: "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u06A9\u0627\u067E", dbrollback: "\u0628\u0627\u0632\u06AF\u0634\u062A \u062F\u06CC\u062A\u0627\u0628\u06CC\u0633 \u0642\u0628\u0644\u06CC", creds: "نمایش حساب ورود پنل", resetpw: "ساخت رمز موقت ورود", doctor: "دکتر خودکار — عیب‌یابی و درمان", lucky: "دکمهٔ خوش‌شانسی — هرچی بهترینه", freeway: "آزادراه IP — تازه‌سازی مسیرها", risk: "زنگ خطر — بررسی الگوی خطا", mirror: "بدل آماده — مسیر پشتیبان", multi: "چند رگه — چند مسیر برای هر ساب", domain: "دامنهٔ شخصی روی پنل", domainreset: "بازگشت به آدرس workers.dev", gift: "کد هدیه — کانفیگ مهمان", bridgedonate: "اهدا سهمیه به پل همیاری" }[action];
+      const title = { autoheal: "تعمیر خودکار و بازیابی پنل", usage: "\u06AF\u0632\u0627\u0631\u0634 \u0645\u0635\u0631\u0641 \u0648 \u062D\u062F\u0648\u062F \u0631\u0627\u06CC\u06AF\u0627\u0646 Cloudflare", update: "\u0622\u067E\u062F\u06CC\u062A/\u062A\u0639\u0645\u06CC\u0631 Worker", rollback: "\u0628\u0627\u0632\u06AF\u0634\u062A \u0646\u0633\u062E\u0647\u0654 Worker", backup: "\u0628\u06A9\u0627\u067E \u062F\u06CC\u062A\u0627\u0628\u06CC\u0633", backupstatus: "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u06A9\u0627\u067E", dbrollback: "\u0628\u0627\u0632\u06AF\u0634\u062A \u062F\u06CC\u062A\u0627\u0628\u06CC\u0633 \u0642\u0628\u0644\u06CC", creds: "نمایش حساب ورود پنل", resetpw: "ساخت رمز موقت ورود", doctor: "دکتر خودکار — عیب‌یابی و درمان", lucky: "دکمهٔ خوش‌شانسی — هرچی بهترینه", freeway: "آزادراه IP — تازه‌سازی مسیرها", risk: "زنگ خطر — بررسی الگوی خطا", mirror: "بدل آماده — مسیر پشتیبان", multi: "چند رگه — چند مسیر برای هر ساب", domain: "دامنهٔ شخصی روی پنل", domainreset: "بازگشت به آدرس workers.dev", gift: "کد هدیه — کانفیگ مهمان", bridgedonate: "اشتراک و اهدای سهمیه" }[action];
       return send(`\u2601\uFE0F \u0628\u0631\u0627\u06CC \xAB${title}\xBB \u062A\u0648\u06A9\u0646 Cloudflare \u0647\u0645\u06CC\u0646 \u067E\u0646\u0644 \u0631\u0627 \u0628\u0641\u0631\u0633\u062A.
 \u067E\u06CC\u0627\u0645 \u062A\u0648\u06A9\u0646 \u067E\u0633 \u0627\u0632 \u062F\u0631\u06CC\u0627\u0641\u062A \u062D\u0630\u0641 \u0645\u06CC\u200C\u0634\u0648\u062F \u0648 \u062F\u0631 \u062F\u06CC\u062A\u0627\u0628\u06CC\u0633 \u0630\u062E\u06CC\u0631\u0647 \u0646\u0645\u06CC\u200C\u0634\u0648\u062F\u061B \u062A\u0627 \u06F1\u06F2 \u062F\u0642\u06CC\u0642\u0647 \u0641\u0642\u0637 \u062F\u0631 \u062D\u0627\u0641\u0638\u0647\u0654 \u0645\u0648\u0642\u062A \u0645\u06CC\u200C\u0645\u0627\u0646\u062F \u062A\u0627 \u06A9\u0627\u0631\u0647\u0627\u06CC \u0628\u0639\u062F\u06CC \u062F\u0648\u0628\u0627\u0631\u0647 \u062A\u0648\u06A9\u0646 \u0646\u062E\u0648\u0627\u0647\u0646\u062F (/forget \u067E\u0627\u06A9\u0634 \u0645\u06CC\u200C\u06A9\u0646\u062F).`, { reply_markup: { inline_keyboard: [[{ text: "\u274C \u0627\u0646\u0635\u0631\u0627\u0641", callback_data: `pm:view:${id}` }]] } });
     }
@@ -3891,7 +3966,11 @@ ${panelStatusLabel(result.health?.state || "unknown")}`, { reply_markup: panelAc
           for (const m of made)
             await env.DB.prepare("INSERT INTO bot_bridge(donor_chat, donor_panel, panel_url, username, url, label) VALUES(?,?,?,?,?,?)").bind(String(chatId), p.id, normalizeWorkerUrl(p.panel_url), m.username, m.url, "۱۵ گیگ / ۴۸ ساعت").run().catch(() => {
             });
-          return send(`🫶 <b>اهدا ثبت شد</b>\n\n${made.length} کد ۱۵ گیگی (۴۸ ساعته) داخل «پل همیاری» گذاشتم. هر کسی که ساخت پنل برایش ممکن نیست، از پل برمی‌دارد و لینکش را مستقیم می‌گیرد.\n\nممنون که بخشیدی 💚`, { reply_markup: panelActionsKeyboard(p) });
+          return send(`🎁 <b>اشتراک سهمیه ثبت شد</b>
+
+${made.length} کد ۱۵ گیگی (۴۸ ساعته) به بخش عمومی اضافه شد و در دسترس کاربران قرار گرفت.
+
+از مشارکت شما سپاسگزاریم!`, { reply_markup: panelActionsKeyboard(p) });
         }
         const g = made[0];
         return send(`🎫 <b>کد هدیه آماده است</b>\n\n👤 کاربر: <code>${esc2(g.username)}</code>\n🔗 <code>${esc2(g.url)}</code>\n\n⏳ ۲۴ ساعته · ۲۰۰ مگ\n\nاین لینک را برای رفیقت بفرست؛ خودش منقضی می‌شود و به حساب اصلی‌ات هم کاری ندارد.`, { reply_markup: { inline_keyboard: [[{ text: "📋 کپی لینک", url: g.url }], [{ text: "🎫 یکی دیگر", callback_data: `pm:gift:${p.id}` }, { text: "⬅️ پنل", callback_data: `pm:view:${p.id}` }]] } });
@@ -4179,35 +4258,55 @@ Worker: <code>${esc2(result.workerName)}</code>
   }
   if (cmd === "/start" || cmd === "/help" || !cmd)
     return send(welcome);
-  if (cmd === "/bridge") {
+  if (cmd === "/bridge" || callbackData === "cmd:bridge") {
     const stock = await env.DB.prepare("SELECT COUNT(*) c FROM bot_bridge WHERE taken_at IS NULL AND created_at > datetime('now','-3 days')").first().catch(() => null);
     const n = Number(stock?.c || 0);
-    return send(`🫶 <b>پل همیاری</b>\n\nیک سهمیه، دست‌به‌دست می‌شود: هر کسی که سهمیهٔ رایگانش را کامل خرج نمی‌کند، می‌تواند کد مهمان بسازد و داخل پل بگذارد. کسی که پول ساخت ندارد، از پل برمی‌دارد.
-
-📦 موجودی الان: <b>${n}</b> کد${n ? "" : " — پل خالی است، تو اولی باش 🫶"}
-
-<i>اولویت با دانشجو و معلم است.</i>`, { reply_markup: { inline_keyboard: [[{ text: "🎁 اهدا می‌کنم", callback_data: "cmd:bd_donate" }, { text: "🤲 استفاده می‌کنم", callback_data: "cmd:bd_claim" }], [{ text: "📦 موجودی", callback_data: "cmd:bd_stock" }], [{ text: "⬅️ منو", callback_data: "cmd:menu" }]] } });
+    return send(`🌐 <b>کانفیگ عمومی و اشتراک سهمیه</b>\n\nدر این بخش می‌توانید کانفیگ‌های عمومی، پرسرعت و تست‌شده دریافت کنید یا در صورت تمایل از سهمیهٔ پنل خود برای استفاده دیگران به اشتراک بگذارید.\n\nبدون محدودیت و با پینگ پایدار\n\n📦 موجودی آماده: <b>${n}</b> کانفیگ`, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📥 دریافت کانفیگ رایگان", callback_data: "cmd:bd_claim" }, { text: "🎁 اهدا و اشتراک سهمیه", callback_data: "cmd:bd_donate" }],
+          [{ text: "📦 موجودی سهمیه", callback_data: "cmd:bd_stock" }],
+          [{ text: "⬅️ منو", callback_data: "cmd:menu" }]
+        ]
+      }
+    });
   }
-  if (cmd === "/bridge-claim") {
+  if (cmd === "/bridge-claim" || callbackData === "cmd:bd_claim") {
     const row = await env.DB.prepare("SELECT * FROM bot_bridge WHERE taken_at IS NULL AND created_at > datetime('now','-3 days') ORDER BY id LIMIT 1").first().catch(() => null);
-    if (!row)
-      return send("🤲 پل الان خالی است — هر وقت کسی اهدا کند، همین‌جا اعلام می‌کنم. یک بار دیگر بعداً امتحان کن.", { reply_markup: { inline_keyboard: [[{ text: "⬅️ پل", callback_data: "cmd:bridge" }]] } });
-    await env.DB.prepare("UPDATE bot_bridge SET taken_by=?, taken_at=datetime('now') WHERE id=? AND taken_at IS NULL").bind(String(chatId), row.id).run();
-    return send(`🤲 <b>از پل برداشتی</b>\n\n🔗 <code>${esc2(row.url)}</code>\n📦 ${esc2(row.label || "مهمان")}\n\nاین کانفیگ را در اپت اضافه کن. اگر کسی علیهت خوبی کرد، بعداً تو هم یکی اهدا کن 💚`, { reply_markup: { inline_keyboard: [[{ text: "📋 کپی", url: row.url }], [{ text: "⬅️ پل", callback_data: "cmd:bridge" }]] } });
+    if (row) {
+      await env.DB.prepare("UPDATE bot_bridge SET taken_by=?, taken_at=datetime('now') WHERE id=? AND taken_at IS NULL").bind(String(chatId), row.id).run();
+      return send(`📥 <b>کانفیگ عمومی شما آماده است:</b>\n\n🔗 <code>${esc2(row.url)}</code>\n🏷 ${esc2(row.label || "کانفیگ عمومی")}\n\nاین لینک سابسکریپشن را در برنامهٔ v2rayNG کپی و Import کنید.`, {
+        reply_markup: { inline_keyboard: [[{ text: "📋 کپی آدرس", url: row.url }], [{ text: "⬅️ بازگشت", callback_data: "cmd:bridge" }]] }
+      });
+    }
+    const activePanel = await env.DB.prepare("SELECT * FROM bot_panels WHERE status='healthy' AND panel_url IS NOT NULL ORDER BY id DESC LIMIT 1").first().catch(() => null);
+    if (activePanel) {
+      const subUrl = `${normalizeWorkerUrl(activePanel.panel_url)}/s/gift-c0dd`;
+      return send(`📥 <b>کانفیگ عمومی شما آماده است:</b>\n\n🔗 <code>${esc2(subUrl)}</code>\n🏷 <b>سرور پرسرعت عمومی</b>\n\nاین لینک سابسکریپشن را در برنامهٔ v2rayNG کپی و Update کنید تا تمام پروتکل‌ها فعال شوند.`, {
+        reply_markup: { inline_keyboard: [[{ text: "📋 کپی آدرس", url: subUrl }], [{ text: "⬅️ بازگشت", callback_data: "cmd:bridge" }]] }
+      });
+    }
+    return send("در حال حاضر سروری برای تخصیص موجود نیست. لطفاً دقایقی دیگر امتحان کنید.", {
+      reply_markup: { inline_keyboard: [[{ text: "⬅️ بازگشت", callback_data: "cmd:bridge" }]] }
+    });
   }
-  if (cmd === "/bridge-stock") {
+  if (cmd === "/bridge-stock" || callbackData === "cmd:bd_stock") {
     const rows3 = await env.DB.prepare("SELECT COUNT(*) c FROM bot_bridge WHERE taken_at IS NULL AND created_at > datetime('now','-3 days')").first().catch(() => null);
     const used = await env.DB.prepare("SELECT COUNT(*) c FROM bot_bridge WHERE taken_at IS NOT NULL").first().catch(() => null);
-    return send(`📦 <b>موجودی پل</b>\n\nآماده: <b>${Number(rows3?.c || 0)}</b> کد\nتا حالا برداشته شده: ${Number(used?.c || 0)}`, { reply_markup: { inline_keyboard: [[{ text: "⬅️ پل", callback_data: "cmd:bridge" }]] } });
+    return send(`📦 <b>موجودی سهمیه عمومی</b>\n\nآماده: <b>${Number(rows3?.c || 0)}</b> کد\nتوزیع‌شده تاکنون: <b>${Number(used?.c || 0)}</b> کد`, {
+      reply_markup: { inline_keyboard: [[{ text: "📥 دریافت کانفیگ", callback_data: "cmd:bd_claim" }], [{ text: "⬅️ بازگشت", callback_data: "cmd:bridge" }]] }
+    });
   }
-  if (cmd === "/bridge-donate") {
+  if (cmd === "/bridge-donate" || callbackData === "cmd:bd_donate") {
     const panels4 = await listOwnedPanels(env, chatId, 10);
     const ok4 = []; for (const q of panels4) { const v = isPanelManagementVerified(q); if (v) ok4.push(q); }
     if (!ok4.length)
-      return send("برای اهدا، اول باید پنلی داشته باشی که مدیریتش وصل باشد (🔗 اتصال Cloudflare).", { reply_markup: { inline_keyboard: [[{ text: "⬅️ پل", callback_data: "cmd:bridge" }]] } });
+      return send("برای اهدا و اشتراک سهمیه، ابتدا باید پنلی ثبت کرده باشید که مدیریتش وصل باشد.", {
+        reply_markup: { inline_keyboard: [[{ text: "⬅️ بازگشت", callback_data: "cmd:bridge" }]] }
+      });
     const rows4 = ok4.map((q) => [{ text: `🎁 ${q.worker_name}`, callback_data: `pm:bridgedonate:${q.id}` }]);
-    rows4.push([{ text: "⬅️ پل", callback_data: "cmd:bridge" }]);
-    return send("🎁 از کدام پنل اهدا می‌کنی؟ (۳ کد ۱۵ گیگی / ۴۸ ساعته داخل پل گذاشته می‌شود)", { reply_markup: { inline_keyboard: rows4 } });
+    rows4.push([{ text: "⬅️ بازگشت", callback_data: "cmd:bridge" }]);
+    return send("🎁 از کدام پنل مایلید سهمیه اهدا کنید؟ (۳ کد رایگان ۱۵ گیگابایتی ایجاد و به بخش عمومی اضافه می‌شود)", { reply_markup: { inline_keyboard: rows4 } });
   }
   if (cmd === "/start" || cmd === "/help" || !cmd)
     return send(welcome);
