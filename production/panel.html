@@ -10114,13 +10114,14 @@ function xe(total) {
     }
   }
 
-  /* =========================================================================
-     🇮🇷 OMNI / NATIONAL INTERNET BYPASS (نت ملی - نسخه جامع آرشیو و ضد فیلتر)
+    /* =========================================================================
+     🇮🇷 OMNI / NATIONAL INTERNET BYPASS (نت ملی - سامانه جامع روز ۲۰۲۶)
      ========================================================================= */
   var NATNET = {
     tab: "bridge", // "bridge" | "spoofer" | "relays"
     bridgePlatform: "vercel", // "vercel" | "netlify"
-    netlifyMode: "shecan", // "shecan" | "normal"
+    vercelMode: "rewrite", // "rewrite" | "relay" | "installer"
+    netlifyMode: "rewrite", // "rewrite" | "edge"
     user: "",
     bridgeDomain: "",
     spooferIp: "104.18.183.237",
@@ -10139,12 +10140,14 @@ function xe(total) {
       domains: [
         "react.dev", "nextjs.org", "cursor.com", "ai.vercel.com", 
         "api.vercel.com", "app.vercel.com", "blog.vercel.com", 
-        "botid.vercel.com", "analytics.vercel.com", "community.vercel.com"
+        "botid.vercel.com", "analytics.vercel.com", "community.vercel.com",
+        "turborepo.org", "swc.rs"
       ],
       ips: [
+        "76.76.21.21", "76.76.21.22", "76.76.21.98", "76.76.21.9",
         "198.169.2.1", "198.169.2.65", "18.173.154.0", "18.173.154.27", 
         "18.173.154.31", "18.173.154.32", "18.173.154.33", "18.173.154.59", 
-        "18.173.154.104", "18.173.154.111", "18.173.154.123", "18.173.154.129", "18.173.154.255"
+        "18.173.154.104", "18.173.154.111", "18.173.154.123", "18.173.154.129"
       ]
     },
     netlify: {
@@ -10154,12 +10157,20 @@ function xe(total) {
         "cluster-api.sigs.k8s.io", "gateway-api.sigs.k8s.io", "kubectl.docs.kubernetes.io"
       ],
       ips: [
+        "104.198.14.52", "75.2.60.5", "99.83.231.61", "3.67.62.179", "35.157.174.195",
         "138.201.54.122", "142.54.178.211", "178.22.122.101", "216.239.38.120", 
         "204.12.196.34", "144.76.1.88", "94.130.13.19", "50.7.5.83", "50.7.5.85", 
-        "50.7.87.2", "50.7.87.3", "50.7.87.4", "204.79.197.220", "63.141.252.203", 
-        "65.109.34.234", "94.130.70.160", "94.130.33.41", "94.130.50.12", "95.216.69.37"
+        "50.7.87.2", "50.7.87.3", "50.7.87.4", "204.79.197.220", "63.141.252.203"
       ]
     },
+    fastly: {
+      domains: ["tignaltofansv4.global.ssl.fastly.net", "focalin.yhbj.store"],
+      ips: ["146.75.117.91", "151.101.65.140", "151.101.1.140"]
+    },
+    communitySpoofHosts: [
+      "www.multiplydose.com", "www.ignitelimit.com", "www.calmlunch.com", 
+      "www.creationlong.org", "www.gossipglove.com", "www.calmloud.com"
+    ],
     dnstt: {
       resolver: "2.189.44.44",
       domain: "rent.snapp.autos",
@@ -10176,7 +10187,7 @@ function xe(total) {
         }]
       }, null, 2)
     },
-    emergencyDns: ["5.200.200.6", "5.200.200.200"],
+    emergencyDns: ["5.200.200.6", "5.200.200.200", "178.22.122.100", "185.51.200.2", "10.202.10.202"],
     emergencyProxies: ["http://194.48.198.135:7070", "http://185.126.5.72:8080"],
     xhttpInstaller: "bash <(curl -fsSL https://raw.githubusercontent.com/avacocloud/XHTTP-Installer/main/install.sh)"
   };
@@ -10200,7 +10211,7 @@ function xe(total) {
     let parts = [], central = [], offset = 0;
     for (let file of files) {
       let nameBytes = enc.encode(file.name);
-      let dataBytes = typeof file.content === 'string' ? enc.encode(file.content) : file.content;
+      let dataBytes = typeof file.content === "string" ? enc.encode(file.content) : file.content;
       let crc = natnetCrc32(dataBytes), size = dataBytes.length;
 
       let lh = new Uint8Array(30 + nameBytes.length);
@@ -10208,15 +10219,12 @@ function xe(total) {
       dv.setUint32(0, 0x04034b50, true);
       dv.setUint16(4, 20, true);
       dv.setUint16(6, 0x0800, true);
-      dv.setUint16(8, 0, true);
-      dv.setUint16(10, 0, true);
-      dv.setUint16(12, 0, true);
       dv.setUint32(14, crc, true);
       dv.setUint32(18, size, true);
       dv.setUint32(22, size, true);
       dv.setUint16(26, nameBytes.length, true);
-      dv.setUint16(28, 0, true);
       lh.set(nameBytes, 30);
+
       parts.push(lh, dataBytes);
 
       let ch = new Uint8Array(46 + nameBytes.length);
@@ -10225,75 +10233,171 @@ function xe(total) {
       cdv.setUint16(4, 20, true);
       cdv.setUint16(6, 20, true);
       cdv.setUint16(8, 0x0800, true);
-      cdv.setUint16(10, 0, true);
-      cdv.setUint16(12, 0, true);
-      cdv.setUint16(14, 0, true);
       cdv.setUint32(16, crc, true);
       cdv.setUint32(20, size, true);
       cdv.setUint32(24, size, true);
       cdv.setUint16(28, nameBytes.length, true);
-      cdv.setUint16(30, 0, true);
-      cdv.setUint16(32, 0, true);
-      cdv.setUint16(34, 0, true);
-      cdv.setUint16(36, 0, true);
-      cdv.setUint32(38, 0, true);
       cdv.setUint32(42, offset, true);
       ch.set(nameBytes, 46);
+
       central.push(ch);
       offset += lh.length + dataBytes.length;
     }
-    let centralSize = central.reduce((sum, c) => sum + c.length, 0);
+
+    let centralSize = central.reduce((a, b) => a + b.length, 0);
     let eocd = new Uint8Array(22);
     let edv = new DataView(eocd.buffer);
     edv.setUint32(0, 0x06054b50, true);
-    edv.setUint16(4, 0, true);
-    edv.setUint16(6, 0, true);
     edv.setUint16(8, files.length, true);
     edv.setUint16(10, files.length, true);
     edv.setUint32(12, centralSize, true);
     edv.setUint32(16, offset, true);
-    edv.setUint16(20, 0, true);
 
-    let allParts = [...parts, ...central, eocd];
-    let totalLength = allParts.reduce((acc, p) => acc + p.length, 0);
-    let result = new Uint8Array(totalLength);
-    let pos = 0;
-    for (let p of allParts) {
-      result.set(p, pos);
-      pos += p.length;
+    let all = [...parts, ...central, eocd];
+    let totalLen = all.reduce((a, b) => a + b.length, 0);
+    let result = new Uint8Array(totalLen);
+    let ptr = 0;
+    for (let chunk of all) {
+      result.set(chunk, ptr);
+      ptr += chunk.length;
     }
     return result;
   }
 
-  function natnetVercelCode(host) {
-    return `export const config = { runtime: 'edge' };
+  function natnetVercelRewriteJson(host) {
+    let clean = (host || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return JSON.stringify({
+      "$schema": "https://openapi.vercel.sh/vercel.json",
+      "rewrites": [
+        { "source": "/(.*)", "destination": `https://${clean}/$1` }
+      ],
+      "headers": [
+        {
+          "source": "/(.*)",
+          "headers": [
+            { "key": "x-vercel-enable-rewrite-caching", "value": "0" },
+            { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
+            { "key": "CDN-Cache-Control", "value": "no-store" },
+            { "key": "Vercel-CDN-Cache-Control", "value": "no-store" }
+          ]
+        }
+      ]
+    }, null, 2);
+  }
 
-export default async function handler(req) {
-  const target = process.env.TARGET_WORKER || 'https://${host}';
-  const url = new URL(req.url);
-  const targetUrl = new URL(url.pathname + url.search, target);
+  function natnetVercelRelayJs(host) {
+    let clean = (host || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return `// api/relay.js - Transparent HTTPS streaming relay for Vercel
+// Architecture based on XHTTPRelayECO v2.0.0 (Unbuffered Direct Streaming)
+import https from "node:https";
+import http from "node:http";
+import { URL } from "node:url";
 
-  return fetch(targetUrl.toString(), {
+export const config = {
+  api: { bodyParser: false },
+};
+
+export default function handler(req, res) {
+  const targetHost = process.env.BACKEND_URL || "https://${clean}";
+  let backend;
+  try {
+    backend = new URL(targetHost.startsWith("http") ? targetHost : "https://" + targetHost);
+  } catch {
+    res.statusCode = 500;
+    res.setHeader("content-type", "text/plain; charset=utf-8");
+    res.end("Relay misconfigured: BACKEND_URL is invalid.");
+    return;
+  }
+
+  const isHttps = backend.protocol === "https:";
+  const client  = isHttps ? https : http;
+  const port    = backend.port ? Number(backend.port) : (isHttps ? 443 : 80);
+
+  const forwardHeaders = { ...req.headers };
+  forwardHeaders.host = backend.host;
+  delete forwardHeaders["x-forwarded-host"];
+  delete forwardHeaders["x-forwarded-proto"];
+
+  const options = {
+    protocol: backend.protocol,
+    hostname: backend.hostname,
+    port: port,
     method: req.method,
-    headers: req.headers,
-    body: req.body,
-    duplex: 'half'
+    path: req.url,
+    headers: forwardHeaders,
+    rejectUnauthorized: false
+  };
+
+  const proxyReq = client.request(options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+    proxyRes.pipe(res);
   });
+
+  proxyReq.on("error", () => {
+    if (!res.headersSent) {
+      res.statusCode = 502;
+      res.end("Upstream gateway error");
+    }
+  });
+
+  req.pipe(proxyReq);
 };`;
   }
 
-  function natnetNetlifyCode(host) {
-    return `export default async (request, context) => {
-  const target = Netlify.env.get("TARGET_WORKER") || "https://${host}";
-  const url = new URL(request.url);
-  const targetUrl = new URL(url.pathname + url.search, target);
+  function natnetNetlifyRewriteToml(host) {
+    let clean = (host || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return `# netlify.toml - Zero-Compute Edge Proxy (No Functions, No Execution Timeouts)
+# Drag & Drop ready package for https://app.netlify.com/drop
+[[redirects]]
+  from = "/*"
+  to = "https://${clean}/:splat"
+  status = 200
+  force = true
+  headers = {X-From = "Netlify-Omni-Proxy"}
+`;
+  }
 
-  return fetch(targetUrl.toString(), {
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
-    duplex: "half"
-  });
+  function natnetNetlifyEdgeFunction(host) {
+    let clean = (host || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    return `// netlify/edge-functions/proxy.js
+// Netlify Edge Functions v2 (Deno runtime with unbuffered ReadableStream)
+const BACKEND_URL = Netlify.env.get("BACKEND_URL") || "https://${clean}";
+
+export default async function handler(request, context) {
+  try {
+    const url = new URL(request.url);
+    const targetPath = url.pathname + url.search;
+    const upstreamUrl = new URL(targetPath, BACKEND_URL).toString();
+
+    const headers = new Headers(request.headers);
+    headers.delete("host");
+    headers.delete("x-forwarded-proto");
+    headers.delete("x-forwarded-host");
+
+    const upstreamRequest = new Request(upstreamUrl, {
+      method: request.method,
+      headers: headers,
+      body: request.body,
+      redirect: "manual",
+    });
+
+    const upstreamResponse = await fetch(upstreamRequest);
+
+    const responseHeaders = new Headers();
+    for (const [key, value] of upstreamResponse.headers.entries()) {
+      if (!["transfer-encoding", "connection", "keep-alive"].includes(key.toLowerCase())) {
+        responseHeaders.set(key, value);
+      }
+    }
+
+    return new Response(upstreamResponse.body, {
+      status: upstreamResponse.status,
+      statusText: upstreamResponse.statusText,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    return context.next();
+  }
 };
 
 export const config = { path: "/*" };`;
@@ -10337,17 +10441,17 @@ export const config = { path: "/*" };`;
   function natnetBuildBalancerJson(type, host, path, uuid, platform) {
     let nodes = [];
     if (platform === "vercel") {
-      NATNET_DATA.vercel.domains.forEach((d, idx) => {
+      NATNET_DATA.vercel.domains.forEach((d) => {
         nodes.push({ name: `Vercel-${d}`, address: d, sni: d, host: host, path: path, uuid: uuid });
       });
-      NATNET_DATA.vercel.ips.slice(0, 4).forEach((ip, idx) => {
+      NATNET_DATA.vercel.ips.slice(0, 6).forEach((ip) => {
         nodes.push({ name: `Vercel-CF-${ip}`, address: ip, sni: "react.dev", host: host, path: path, uuid: uuid });
       });
     } else {
-      NATNET_DATA.netlify.domains.slice(0, 6).forEach((d) => {
+      NATNET_DATA.netlify.domains.slice(0, 8).forEach((d) => {
         nodes.push({ name: `Netlify-${d}`, address: d, sni: d, host: host, path: path, uuid: uuid });
       });
-      NATNET_DATA.netlify.ips.slice(0, 6).forEach((ip) => {
+      NATNET_DATA.netlify.ips.slice(0, 8).forEach((ip) => {
         nodes.push({ name: `Netlify-Shecan-${ip}`, address: ip, sni: "kubernetes.io", host: host, path: path, uuid: uuid });
       });
     }
@@ -10361,7 +10465,8 @@ export const config = { path: "/*" };`;
           network: "xhttp",
           security: "tls",
           tlsSettings: { serverName: n.sni, allowInsecure: true },
-          xhttpSettings: { host: n.host, path: n.path, mode: "auto" }
+          xhttpSettings: { host: n.host, path: n.path, mode: "auto" },
+          sockopt: { dialerProxy: "" }
         }
       }));
       return JSON.stringify({
@@ -10370,40 +10475,51 @@ export const config = { path: "/*" };`;
           ...outbounds,
           { protocol: "freedom", tag: "direct" }
         ],
-        observatory: {
-          subjectSelector: nodes.map(n => n.name),
-          probeUrl: "http://cp.cloudflare.com/generate_204",
-          probeInterval: "1m"
-        },
         routing: {
-          balancers: [{ tag: "balancer", selector: nodes.map(n => n.name) }],
-          rules: [{ type: "field", network: "tcp,udp", balancerTag: "balancer" }]
+          balancers: [{
+            tag: "omni-round-robin",
+            selector: platform === "vercel" ? ["Vercel-"] : ["Netlify-"],
+            strategy: { type: "roundRobin" }
+          }],
+          rules: [{ type: "field", network: "tcp,udp", balancerTag: "omni-round-robin" }]
         }
       }, null, 2);
     } else {
-      // Sing-box
+      // Sing-box URLTest with ClientHello TLS fragmentation
       let outbounds = nodes.map(n => ({
         type: "vless",
         tag: n.name,
         server: n.address,
         server_port: 443,
         uuid: n.uuid,
-        tls: { enabled: true, server_name: n.sni, insecure: true },
-        transport: { type: "xhttp", host: n.host, path: n.path }
+        tls: {
+          enabled: true,
+          server_name: n.sni,
+          insecure: true,
+          fragment: {
+            enabled: true,
+            length: "100-200",
+            interval: "10-20"
+          }
+        },
+        transport: {
+          type: "xhttp",
+          host: n.host,
+          path: n.path,
+          mode: "auto"
+        }
       }));
+      let balancer = {
+        type: "urltest",
+        tag: "AUTO-BALANCER",
+        outbounds: nodes.map(n => n.name),
+        url: "http://cp.cloudflare.com/generate_204",
+        interval: "3m",
+        tolerance: 50
+      };
       return JSON.stringify({
-        inbounds: [{ type: "mixed", tag: "mixed-in", listen: "127.0.0.1", listen_port: 2080 }],
-        outbounds: [
-          {
-            type: "urltest",
-            tag: "auto-balancer",
-            outbounds: nodes.map(n => n.name),
-            url: "https://cp.cloudflare.com/generate_204",
-            interval: "1m"
-          },
-          ...outbounds,
-          { type: "direct", tag: "direct" }
-        ]
+        inbounds: [{ type: "mixed", tag: "mixed-in", listen: "127.0.0.1", listen_port: 20808 }],
+        outbounds: [balancer, ...outbounds, { type: "direct", tag: "direct" }]
       }, null, 2);
     }
   }
@@ -10417,63 +10533,69 @@ export const config = { path: "/*" };`;
 
     let users = e.users || [];
     let spooferJsonStr = natnetSpooferJson(publicHost);
-
     let bridgeHost = NATNET.bridgeDomain || publicHost;
 
-    // Build Vercel URIs
+    // Vercel URIs with anti-DPI fragmentation
     let vercelUris = NATNET_DATA.vercel.domains.map(d => 
-      `vless://${uuid}@${d}:443?encryption=none&security=tls&sni=${d}&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto#${encodeURIComponent("🇮🇷 Vercel-" + d)}`
+      `vless://${uuid}@${d}:443?encryption=none&security=tls&sni=${d}&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Vercel-" + d)}`
     );
-    let vercelIpUris = NATNET_DATA.vercel.ips.slice(0, 6).map(ip => 
-      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=react.dev&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto#${encodeURIComponent("🇮🇷 Vercel-CF-" + ip)}`
+    let vercelIpUris = NATNET_DATA.vercel.ips.slice(0, 8).map(ip => 
+      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=react.dev&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Vercel-CF-" + ip)}`
     );
     let allVercelUris = [...vercelUris, ...vercelIpUris];
 
-    // Build Netlify URIs
+    // Netlify URIs with anti-DPI fragmentation
     let netlifyUris = NATNET_DATA.netlify.domains.map(d => 
-      `vless://${uuid}@${d}:443?encryption=none&security=tls&sni=${d}&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto#${encodeURIComponent("🇮🇷 Netlify-" + d)}`
+      `vless://${uuid}@${d}:443?encryption=none&security=tls&sni=${d}&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Netlify-" + d)}`
     );
-    let netlifyShecanUris = NATNET_DATA.netlify.ips.slice(0, 8).map(ip => 
-      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=kubernetes.io&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto#${encodeURIComponent("🇮🇷 Netlify-Shecan-" + ip)}`
+    let netlifyShecanUris = NATNET_DATA.netlify.ips.slice(0, 10).map(ip => 
+      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=kubernetes.io&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Netlify-Shecan-" + ip)}`
     );
     let allNetlifyUris = [...netlifyUris, ...netlifyShecanUris];
 
-    let vercelCode = natnetVercelCode(publicHost);
-    let netlifyCode = natnetNetlifyCode(publicHost);
-    let termuxCmd = `pkg update && pkg install golang git -y && git clone https://github.com/rsta2/sni-spoof && cd sni-spoof && go build && ./sni-spoof`;
+    // Active code displays
+    let vercelRewriteCode = natnetVercelRewriteJson(publicHost);
+    let vercelRelayCode = natnetVercelRelayJs(publicHost);
+    let netlifyRewriteCode = natnetNetlifyRewriteToml(publicHost);
+    let netlifyEdgeCode = natnetNetlifyEdgeFunction(publicHost);
 
-    // Local Spoofer Loopback URI
+    // Local Loopback URIs
     let spooferPort = NATNET.spooferPort || "40443";
-    let vlessLoopback = `vless://${uuid}@127.0.0.1:${spooferPort}?alpn=h2%2Chttp%2F1.1&encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22scMaxEachPostBytes%22%3A1000000%2C%22xPaddingBytes%22%3A%22100-1000%22%7D&fp=chrome&host=${encodeURIComponent(publicHost)}&mode=auto&path=${encodeURIComponent(xhttpPath)}&security=tls&sni=${encodeURIComponent(publicHost)}&type=xhttp#${encodeURIComponent("🇮🇷 Local-SNI-Spoofer (40443)")}`;
+    let vlessLoopback = `vless://${uuid}@127.0.0.1:${spooferPort}?alpn=h2%2Chttp%2F1.1&encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22scMaxEachPostBytes%22%3A1000000%2C%22xPaddingBytes%22%3A%22100-1000%22%7D&fp=chrome&host=${encodeURIComponent(publicHost)}&mode=auto&path=${encodeURIComponent(xhttpPath)}&security=tls&sni=${encodeURIComponent(publicHost)}&type=xhttp#${encodeURIComponent("🇮🇷 Local-XHTTP-Spoofer (40443)")}`;
+    let trojanLoopback = `trojan://${uuid}@127.0.0.1:${spooferPort}?security=tls&sni=www.multiplydose.com&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=ws&host=www.multiplydose.com&path=${encodeURIComponent(xhttpPath)}#${encodeURIComponent("🇮🇷 Local-Trojan-Spoofer (40443)")}`;
+    let fastlyXhttpUri = `vless://${uuid}@146.75.117.91:80?encryption=none&security=none&type=xhttp&host=tignaltofansv4.global.ssl.fastly.net&path=%2FTignal&mode=auto#${encodeURIComponent("🇮🇷 Fastly-XHTTP-Relay")}`;
+
+    let termuxCmd = `pkg update && pkg install golang git -y && git clone https://github.com/rsta2/sni-spoof && cd sni-spoof && go build && ./sni-spoof`;
 
     return `
   <!-- HERO BANNER -->
   <section class="card mesh-hero" style="border-inline-start:4px solid #ef4444">
     <div style="position:relative;z-index:1;max-width:960px">
-      <div class="mesh-kicker" style="color:#ef4444">OMNI / NATIONAL INTERNET EVASION SUITE · نت ملی</div>
-      <h2 class="mesh-title">سامانه جامع بای‌پس فیلترینگ نت ملی (Vercel / Netlify / Spoofer / DNSTT)</h2>
-      <p class="muted" style="margin:0;max-width:760px;line-height:1.8">
-        در شرایط قطع کامل اینترنت بین‌الملل، دسترسی به رنج‌های مستقیم کلودفلر بسته می‌شود. با استفاده از دامنه‌های سفید اختصاصی ورسل (مانند react.dev)، فرانتینگ نتلیفای (kubernetes.io)، اسپوفر محلی لوپ‌بک و تونل‌های اضطراری، اتصال بدون قطعی برقرار می‌ماند.
+      <div class="mesh-kicker" style="color:#ef4444">OMNI / NATIONAL INTERNET SUITE (معماری روز ۲۰۲۶) · نت ملی</div>
+      <h2 class="mesh-title">سامانه ۳ گانه عبور از فیلترینگ نت ملی (Edge Rewrites / Spoofer / DNSTT)</h2>
+      <p class="muted" style="margin:0;max-width:820px;line-height:1.8">
+        در شرایط قطع کامل اینترنت بین‌الملل، تمام رنج‌های کلودفلر مسدود می‌شوند. این سامانه با جدیدترین استانداردهای کامیونیتی (پروژه‌های XHTTPRelayECO v2.0.0 و XHTTP-Installer و Netlify Edge) دسترسی پایدار را از طریق بازنویسی لبه‌ای بدون کد (Zero-Compute)، رله استریمینگ شفاف، اسپوفر لوپ‌بک ۴۰۴۴۳ و تونل DNS تضمین می‌کند.
       </p>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
-        <span class="badge info">⚡ ۳ زیربخش تفکیک‌شده</span>
-        <span class="badge ok">▲ Vercel XHTTP</span>
-        <span class="badge ok">◈ Netlify Edge</span>
-        <span class="badge ok">🛡️ Local Spoofer (40443)</span>
-        <span class="badge ok">📡 DNSTT & White Relays</span>
+        <span class="badge info">⚡ ۳ بخش تفکیک‌شده</span>
+        <span class="badge ok">▲ Vercel Edge Rewrite (Zero Compute)</span>
+        <span class="badge ok">◈ Netlify Drop & Edge Functions</span>
+        <span class="badge ok">🛡️ Local Loopback (40443)</span>
+        <span class="badge ok">🛡️ Anti-DPI ClientHello Fragment</span>
+        <span class="badge ok">📡 DNSTT & White DNS</span>
       </div>
     </div>
   </section>
 
   <!-- 3 MAIN SUB-SECTIONS TAB SELECTOR -->
   <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-    <button class="btn ${NATNET.tab === "bridge" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-tab" data-tab="bridge" style="flex:1;min-width:220px;padding:12px;font-weight:700">
+    <button class="btn ${NATNET.tab === "bridge" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-tab" data-tab="bridge" style="flex:1;min-width:240px;padding:12px;font-weight:700">
       🚀 ۱. پل‌های ابری Edge (Vercel & Netlify XHTTP)
     </button>
-    <button class="btn ${NATNET.tab === "spoofer" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-tab" data-tab="spoofer" style="flex:1;min-width:220px;padding:12px;font-weight:700">
-      🛡️ ۲. اسپوفر محلی لوپ‌بک (RSTA / RM Spoofer 40443)
+    <button class="btn ${NATNET.tab === "spoofer" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-tab" data-tab="spoofer" style="flex:1;min-width:240px;padding:12px;font-weight:700">
+      🛡️ ۲. ابزار SNI Spoofing و لوپ‌بک (پورت ۴۰۴۴۳)
     </button>
-    <button class="btn ${NATNET.tab === "relays" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-tab" data-tab="relays" style="flex:1;min-width:220px;padding:12px;font-weight:700">
+    <button class="btn ${NATNET.tab === "relays" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-tab" data-tab="relays" style="flex:1;min-width:240px;padding:12px;font-weight:700">
       📡 ۳. رله‌های مجاز سفید، CDN خورشید و DNSTT
     </button>
   </div>
@@ -10482,13 +10604,13 @@ export const config = { path: "/*" };`;
   <div class="card" style="margin-top:12px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
     <div style="display:flex;align-items:center;gap:10px">
       ${d("users")}
-      <span style="font-size:13px;font-weight:600">کاربر فعال:</span>
+      <span style="font-size:13px;font-weight:600">کاربر فعال جهت تولید کانفیگ:</span>
       <select id="natnet-user" class="input" style="padding:4px 10px;min-width:140px">
         ${users.map(u => `<option value="${a(u.username)}" ${activeUser.username === u.username ? "selected" : ""}>👤 ${a(u.username)}</option>`).join("")}
       </select>
     </div>
     <div style="font-size:12px" class="muted">
-      شناسه UUID کاربر: <code dir="ltr" class="mono">${a(uuid)}</code>
+      شناسه UUID: <code dir="ltr" class="mono">${a(uuid)}</code>
     </div>
   </div>
 
@@ -10509,7 +10631,7 @@ export const config = { path: "/*" };`;
             ⚖️ خروجی Xray Balancer
           </button>
           <button class="btn btn-sm" type="button" data-action="omni-natnet-balancer" data-core="singbox">
-            ⚖️ خروجی Sing-box URL-Test
+            ⚖️ خروجی Sing-box URL-Test (با Fragment)
           </button>
         </div>
       </div>
@@ -10518,7 +10640,7 @@ export const config = { path: "/*" };`;
         <div class="field">
           <label for="natnet-bridge-domain">دامنه اختصاصی پروژه شما در ${NATNET.bridgePlatform === "vercel" ? "Vercel" : "Netlify"} (اختیاری):</label>
           <input type="text" id="natnet-bridge-domain" class="input mono" dir="ltr" placeholder="مثال: my-bridge.${NATNET.bridgePlatform === "vercel" ? "vercel" : "netlify"}.app" value="${a(NATNET.bridgeDomain)}">
-          <small class="muted">در صورت خالی بودن، ترافیک از دامنه‌های فرانتینگ عمومی کلودفرانت و کلاستر هدایت می‌شود.</small>
+          <small class="muted">در صورت خالی بودن، ترافیک از دامنه‌های رسمی و سفید تست‌شده (مانند react.dev یا kubernetes.io) عبور داده می‌شود.</small>
         </div>
       </div>
     </div>
@@ -10528,47 +10650,94 @@ export const config = { path: "/*" };`;
       <!-- VERCEL SECTION -->
       <div class="card" style="margin-top:12px;border-inline-start:3px solid var(--accent)">
         <div class="card-head">
-          <b style="color:var(--accent);font-size:14px">▲ پکیج و فایل‌های آماده Vercel Edge (دانلود با ۱ کلیک)</b>
+          <b style="color:var(--accent);font-size:14px">▲ راهنمای استقرار و پکیج‌های روز Vercel (معماری ۲۰۲۶)</b>
           <div class="spacer"></div>
-          <span class="badge ok">AWS Anycast Edge</span>
-        </div>
-        <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
-          <p class="muted" style="font-size:12px;margin:0 0 10px 0;line-height:1.7">
-            <b>بدون نیاز به ساخت فایل دستی:</b> فایل زیپ زیر شامل <code>api/index.js</code> و <code>vercel.json</code> به صورت آماده با آدرس ورکر شما تنظیم شده است؛ کافیست آن را در گیت‌هاب یا داشبورد Vercel آپلود کنید:
-          </p>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-vercel-zip">
-              📦 دانلود پکیج آماده Vercel (.zip)
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-vercel-js">
-              📄 دانلود فایل index.js
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vercelCode)}">
-              ${d("copy")} کپی متن کد
-            </button>
-            <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(allVercelUris.join("
-"))}">
-              📋 کپی همه کانفیگ‌های ورسل (${allVercelUris.length} عدد)
-            </button>
-          </div>
+          <span class="badge ok">Anti-Ban · Zero Compute</span>
         </div>
 
-        <details style="font-size:12px;margin-top:8px">
-          <summary style="cursor:pointer;font-weight:600;color:var(--accent)">
-            👁️ مشاهده کد اسکریپت api/index.js و راهنمای متغیرها
-          </summary>
-          <div class="codebox" style="margin-top:8px;max-height:140px;overflow:auto"><code dir="ltr">${a(vercelCode)}</code></div>
-        </details>
+        <!-- Vercel Mode Selector -->
+        <div style="display:flex;gap:6px;margin:10px 0;flex-wrap:wrap">
+          <button class="btn btn-sm ${NATNET.vercelMode === "rewrite" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-vercel-mode" data-vmode="rewrite">
+            ⚡ متد ۱: بازنویسی لبه‌ای (Zero-Compute Rewrite)
+          </button>
+          <button class="btn btn-sm ${NATNET.vercelMode === "relay" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-vercel-mode" data-vmode="relay">
+            🌊 متد ۲: رله استریمینگ Node.js (XHTTPRelayECO v2)
+          </button>
+          <button class="btn btn-sm ${NATNET.vercelMode === "installer" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-vercel-mode" data-vmode="installer">
+            💻 متد ۳: نصب خودکار لینوکس (XHTTP-Installer)
+          </button>
+        </div>
+
+        <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
+          ${NATNET.vercelMode === "rewrite" ? `
+            <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
+              <b>توصیه اکید روز ۲۰۲۶ (بر اساس متد XHTTPRelayECO):</b> در این روش <u>هیچ تابع سرورلسی اجرا نمی‌شود</u>! شبکه لبه ورسل تمام درخواست‌ها را مستقیماً به عنوان External Rewrite با ترافیک نامحدود و بدون تایم‌اوت ۱۰ ثانیه‌ای به ورکر شما پروکسی می‌کند. صفر درصد مصرف منابع، بدون خطر بسته شدن اکانت رایگان Vercel!
+            </p>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-vercel-zip">
+                📦 دانلود پکیج آماده Vercel Rewrite (.zip)
+              </button>
+              <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-vercel-code">
+                📄 دانلود فایل vercel.json
+              </button>
+              <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vercelRewriteCode)}">
+                ${d("copy")} کپی vercel.json
+              </button>
+              <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(allVercelUris.join("\n"))}">
+                📋 کپی همه کانفیگ‌های ورسل (${allVercelUris.length} عدد)
+              </button>
+            </div>
+            <details style="font-size:12px;margin-top:10px">
+              <summary style="cursor:pointer;font-weight:600;color:var(--accent)">👁️ مشاهده محتوای vercel.json و هدرهای ضد کش</summary>
+              <div class="codebox" style="margin-top:8px;max-height:160px;overflow:auto"><code dir="ltr">${a(vercelRewriteCode)}</code></div>
+            </details>
+          ` : NATNET.vercelMode === "relay" ? `
+            <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
+              <b>معماری رله استریمینگ Node.js:</b> این اسکریپت با غیرفعال‌سازی پارسر خودکار بادی (<code>bodyParser: false</code>) ترافیک خام XHTTP و TCP را به صورت لایو و بدون بافر در حافظه انتقال می‌دهد تا بالاترین سرعت و کمترین پینگ حاصل شود.
+            </p>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-vercel-zip">
+                📦 دانلود پکیج Node.js Streaming Relay (.zip)
+              </button>
+              <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-vercel-code">
+                📄 دانلود فایل api/relay.js
+              </button>
+              <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vercelRelayCode)}">
+                ${d("copy")} کپی کد relay.js
+              </button>
+            </div>
+            <details style="font-size:12px;margin-top:10px">
+              <summary style="cursor:pointer;font-weight:600;color:var(--accent)">👁️ مشاهده کد api/relay.js</summary>
+              <div class="codebox" style="margin-top:8px;max-height:160px;overflow:auto"><code dir="ltr">${a(vercelRelayCode)}</code></div>
+            </details>
+          ` : `
+            <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
+              <b>پروژه XHTTP-Installer:</b> اگر سرور اختصاصی لینوکس (اوبونتو / دبیان) دارید، این اسکریپت به صورت یکپارچه هسته Xray، سرتیفیکیت امن و ادغام اتوماتیک با Vercel CLI را برای شما راه‌اندازی می‌نماید.
+            </p>
+            <div class="codebox" style="margin:8px 0"><code dir="ltr">${a(NATNET_DATA.xhttpInstaller)}</code></div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" type="button" data-action="omni-copy" data-text="${a(NATNET_DATA.xhttpInstaller)}">
+                ${d("copy")} کپی دستور یک‌خطی لینوکس
+              </button>
+              <a class="btn btn-sm" href="https://github.com/avacocloud/XHTTP-Installer" target="_blank" rel="noopener">
+                🌐 مخزن XHTTP-Installer در گیت‌هاب
+              </a>
+            </div>
+          `}
+        </div>
       </div>
 
       <!-- VERCEL READY CONFIGS GRID -->
-      <h3 style="margin-top:18px;margin-bottom:8px">⚡ کانفیگ‌های برتر Vercel با Address و SNI سفید تست‌شده</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">⚡ کانفیگ‌های برتر Vercel (مجهز به فرگمنت ضد فیلتر ClientHello)</h3>
+        <span class="badge ok">فرگمنت tlshello 0/104/1 فعال</span>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:10px">
         <!-- REACT.DEV (VERIFIED BEST) -->
         <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
             <div style="display:flex;align-items:center;gap:6px">
-              <span class="badge ok">تست‌شده و متصل</span>
+              <span class="badge ok">تست‌شده و فعال</span>
               <b style="font-size:12.5px">react.dev (توصیه اول)</b>
             </div>
             <div style="display:flex;gap:5px">
@@ -10577,7 +10746,7 @@ export const config = { path: "/*" };`;
               <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelUris[0])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: react.dev · SNI: react.dev · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: react.dev · SNI: react.dev · XHTTP (Auto)</div>
         </div>
 
         <!-- NEXTJS.ORG -->
@@ -10593,7 +10762,7 @@ export const config = { path: "/*" };`;
               <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelUris[1])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: nextjs.org · SNI: nextjs.org · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: nextjs.org · SNI: nextjs.org · XHTTP (Auto)</div>
         </div>
 
         <!-- CURSOR.COM -->
@@ -10609,7 +10778,23 @@ export const config = { path: "/*" };`;
               <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelUris[2])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: cursor.com · SNI: cursor.com · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: cursor.com · SNI: cursor.com · XHTTP (Auto)</div>
+        </div>
+
+        <!-- 76.76.21.21 VERCEL ANYCAST -->
+        <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="badge ok">Anycast IP رسمی</span>
+              <b style="font-size:12.5px">76.76.21.21</b>
+            </div>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(vercelIpUris[0])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vercelIpUris[0])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelIpUris[0])}">${d("qr")}</button>
+            </div>
+          </div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 76.76.21.21 · SNI: react.dev · XHTTP (Auto)</div>
         </div>
 
         <!-- 198.169.2.1 DIRECT IP -->
@@ -10620,12 +10805,12 @@ export const config = { path: "/*" };`;
               <b style="font-size:12.5px">198.169.2.1</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(vercelIpUris[0])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vercelIpUris[0])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelIpUris[0])}">${d("qr")}</button>
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(vercelIpUris[4])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vercelIpUris[4])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelIpUris[4])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 198.169.2.1 · SNI: react.dev · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 198.169.2.1 · SNI: react.dev · XHTTP (Auto)</div>
         </div>
 
         <!-- 18.173.154.0 CLOUDFRONT -->
@@ -10636,53 +10821,87 @@ export const config = { path: "/*" };`;
               <b style="font-size:12.5px">18.173.154.0</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(vercelIpUris[2])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vercelIpUris[2])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelIpUris[2])}">${d("qr")}</button>
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(vercelIpUris[6])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vercelIpUris[6])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelIpUris[6])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 18.173.154.0 · SNI: react.dev · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 18.173.154.0 · SNI: react.dev · XHTTP (Auto)</div>
         </div>
       </div>
     ` : `
       <!-- NETLIFY SECTION -->
       <div class="card" style="margin-top:12px;border-inline-start:3px solid #00c7b7">
         <div class="card-head">
-          <b style="color:#00c7b7;font-size:14px">◈ پکیج و فایل‌های آماده Netlify Edge (ساده‌ترین روش Drag & Drop)</b>
+          <b style="color:#00c7b7;font-size:14px">◈ راهنمای استقرار و پکیج‌های Netlify (Drop و Edge Functions v2)</b>
           <div class="spacer"></div>
-          <span class="badge ok">CloudFront / Fastly</span>
-        </div>
-        <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
-          <p class="muted" style="font-size:12px;margin:0 0 10px 0;line-height:1.7">
-            <b>ساده‌ترین راهکار بدون نیاز به هیچ کدی:</b> پکیج ZIP زیر را دانلود کرده و در صفحه <b>app.netlify.com/drop</b> بکشید و رها کنید (Drag & Drop)؛ سایت و پل ارتباطی بدون نیاز به نوشتن حتی یک خط کد آنلاین می‌شود:
-          </p>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-netlify-zip">
-              📦 دانلود پکیج آماده Netlify (.zip)
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-netlify-js">
-              📄 دانلود فایل bridge.js
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(netlifyCode)}">
-              ${d("copy")} کپی متن کد
-            </button>
-            <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(allNetlifyUris.join("
-"))}">
-              📋 کپی همه کانفیگ‌های نتلیفای (${allNetlifyUris.length} عدد)
-            </button>
-          </div>
+          <span class="badge ok">CloudFront / Fastly CDN</span>
         </div>
 
-        <details style="font-size:12px;margin-top:8px">
-          <summary style="cursor:pointer;font-weight:600;color:#00c7b7">
-            👁️ مشاهده کد اسکریپت netlify/edge-functions/bridge.js
-          </summary>
-          <div class="codebox" style="margin-top:8px;max-height:140px;overflow:auto"><code dir="ltr">${a(netlifyCode)}</code></div>
-        </details>
+        <!-- Netlify Mode Selector -->
+        <div style="display:flex;gap:6px;margin:10px 0;flex-wrap:wrap">
+          <button class="btn btn-sm ${NATNET.netlifyMode === "rewrite" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-netlify-mode" data-nmode="rewrite">
+            📦 متد ۱: پروکسی بدون کد Drop & Go (Zero-Compute Rewrite)
+          </button>
+          <button class="btn btn-sm ${NATNET.netlifyMode === "edge" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-netlify-mode" data-nmode="edge">
+            ⚡ متد ۲: اسکریپت لبه Netlify Edge Functions v2
+          </button>
+        </div>
+
+        <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
+          ${NATNET.netlifyMode === "rewrite" ? `
+            <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
+              <b>ساده‌ترین راهکار جهان (کشیدن و رها کردن در ۱۰ ثانیه):</b> فایل ZIP زیر شامل تنظیمات <code>netlify.toml</code> با وضعیت ۲۰۰ است. تنها کافیست آن را دانلود کرده و در صفحه <b>app.netlify.com/drop</b> با ماوس بکشید و رها کنید (Drop)؛ بدون نیاز به گیت‌هاب یا اجرای حتی یک خط کد، دامنه‌ی اختصاصی نتلیفای آنلاین می‌شود!
+            </p>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-netlify-zip">
+                📦 دانلود پکیج آماده Netlify Drop (.zip)
+              </button>
+              <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-netlify-code">
+                📄 دانلود فایل netlify.toml
+              </button>
+              <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(netlifyRewriteCode)}">
+                ${d("copy")} کپی متن netlify.toml
+              </button>
+              <a class="btn btn-sm" href="https://app.netlify.com/drop" target="_blank" rel="noopener">
+                🌐 باز کردن صفحه Netlify Drop
+              </a>
+              <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(allNetlifyUris.join("\n"))}">
+                📋 کپی همه کانفیگ‌های نتلیفای (${allNetlifyUris.length} عدد)
+              </button>
+            </div>
+            <details style="font-size:12px;margin-top:10px">
+              <summary style="cursor:pointer;font-weight:600;color:#00c7b7">👁️ مشاهده محتوای netlify.toml</summary>
+              <div class="codebox" style="margin-top:8px;max-height:140px;overflow:auto"><code dir="ltr">${a(netlifyRewriteCode)}</code></div>
+            </details>
+          ` : `
+            <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
+              <b>معماری لبه Netlify Edge Functions v2 (Deno Runtime):</b> مبتنی بر جریان خام ReadableStream با حذف تمام هدرهای ردیابی (<code>host</code>, <code>x-forwarded-host</code>) جهت مقابله کامل با فیلترینگ هوشمند و مسدودسازی پکت‌های DPI.
+            </p>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-netlify-zip">
+                📦 دانلود پکیج Netlify Edge Functions (.zip)
+              </button>
+              <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-netlify-code">
+                📄 دانلود فایل proxy.js
+              </button>
+              <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(netlifyEdgeCode)}">
+                ${d("copy")} کپی کد proxy.js
+              </button>
+            </div>
+            <details style="font-size:12px;margin-top:10px">
+              <summary style="cursor:pointer;font-weight:600;color:#00c7b7">👁️ مشاهده کد proxy.js</summary>
+              <div class="codebox" style="margin-top:8px;max-height:140px;overflow:auto"><code dir="ltr">${a(netlifyEdgeCode)}</code></div>
+            </details>
+          `}
+        </div>
       </div>
 
       <!-- NETLIFY READY CONFIGS GRID -->
-      <h3 style="margin-top:18px;margin-bottom:8px">⚡ کانفیگ‌های برتر Netlify با فرانتینگ مجاز K8s و شکن</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+        <h3 style="margin:0">⚡ کانفیگ‌های برتر Netlify با فرانتینگ مجاز K8s و شکن</h3>
+        <span class="badge ok">فرگمنت tlshello 0/104/1 فعال</span>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:10px">
         <!-- KUBERNETES.IO -->
         <div class="card" style="padding:12px;border-inline-start:3px solid #00c7b7">
@@ -10697,7 +10916,7 @@ export const config = { path: "/*" };`;
               <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyUris[0])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: kubernetes.io · SNI: kubernetes.io · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: kubernetes.io · SNI: kubernetes.io · XHTTP (Auto)</div>
         </div>
 
         <!-- HELM.SH -->
@@ -10713,7 +10932,23 @@ export const config = { path: "/*" };`;
               <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyUris[1])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: helm.sh · SNI: helm.sh · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: helm.sh · SNI: helm.sh · XHTTP (Auto)</div>
+        </div>
+
+        <!-- 104.198.14.52 NETLIFY DIRECT -->
+        <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="badge ok">آی‌پی مستقیم لبه</span>
+              <b style="font-size:12.5px">104.198.14.52</b>
+            </div>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyShecanUris[0])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyShecanUris[0])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyShecanUris[0])}">${d("qr")}</button>
+            </div>
+          </div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 104.198.14.52 · SNI: kubernetes.io · XHTTP (Auto)</div>
         </div>
 
         <!-- 138.201.54.122 SHECAN -->
@@ -10724,12 +10959,12 @@ export const config = { path: "/*" };`;
               <b style="font-size:12.5px">138.201.54.122</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyShecanUris[0])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyShecanUris[0])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyShecanUris[0])}">${d("qr")}</button>
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyShecanUris[5])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyShecanUris[5])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyShecanUris[5])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 138.201.54.122 · SNI: kubernetes.io · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 138.201.54.122 · SNI: kubernetes.io · XHTTP (Auto)</div>
         </div>
 
         <!-- 94.130.13.19 SHECAN -->
@@ -10740,34 +10975,34 @@ export const config = { path: "/*" };`;
               <b style="font-size:12.5px">94.130.13.19</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyShecanUris[6])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyShecanUris[6])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyShecanUris[6])}">${d("qr")}</button>
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyShecanUris[7])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyShecanUris[7])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyShecanUris[7])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 94.130.13.19 · SNI: kubernetes.io · XHTTP</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 94.130.13.19 · SNI: kubernetes.io · XHTTP (Auto)</div>
         </div>
       </div>
     `}
   ` : NATNET.tab === "spoofer" ? `
     <!-- ================= SUB-SECTION 2: LOCAL SPOOFER & LOOPBACK ================= -->
-    <div class="notice ok" style="margin-top:12px;padding:12px">
-      <b>💡 مکانیزم اسپوفر محلی لوپ‌بک (RSTA / RM SNI Spoofer):</b>
-      این سرویس سبک روی پورت <code>40443</code> لوپ‌بک دستگاه (Termux بدون روت در اندروید یا ویندوز) اجرا می‌شود. با شکستن هدر TLS (تکنیک <code>sni_split</code>) و فریب سنسور DPI فایروال با پکت فیک کم‌عمر (TTL Trick)، ارتباط مستقیماً به آی‌پی‌های کلودفلر وصل شده و فیلترینگ نت ملی بی‌اثر می‌شود.
-    </div>
-
-    <div class="card" style="margin-top:12px">
+    <div class="card" style="margin-top:12px;border-inline-start:3px solid #8b5cf6">
       <div class="card-head">
-        ${d("gear")}
-        <h3 style="margin:0">تنظیم پارامترهای موتور اسپوفر و TTL Trick</h3>
+        <b style="color:#8b5cf6;font-size:14px">🛡️ ابزار اسپوفر لوپ‌بک و تقلب SNI (معماری پورت ۴۰۴۴۳)</b>
+        <div class="spacer"></div>
+        <span class="badge ok">DPI TLS Fragmentation</span>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px">
+      <p class="muted" style="font-size:12.5px;margin:8px 0;line-height:1.8">
+        با اجرای ابزار اسپوفر روی گوشی یا کامپیوتر شما، پورت محلی <code>127.0.0.1:40443</code> باز می‌شود. فیلترشکن شما به این پورت وصل شده و اسپوفر بسته‌های SNI را در چند نقطه ریز خرد کرده (SNI Split) و با هدر جعلی (Fake SNI) به آی‌پی کلودفلر می‌فرستد تا سیستم فیلترینگ نت ملی نتواند آن را مسدود کند!
+      </p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:14px">
         <div class="field">
           <label for="natnet-spoofer-ip">آی‌پی سالم کلودفلر (Connect IP):</label>
           <input type="text" id="natnet-spoofer-ip" class="input mono" dir="ltr" value="${a(NATNET.spooferIp)}">
         </div>
         <div class="field">
-          <label for="natnet-fake-sni">دامنه فیک سفید داخلی (Fake SNI):</label>
+          <label for="natnet-fake-sni">نام دامنه جعلی (Fake SNI):</label>
           <input type="text" id="natnet-fake-sni" class="input mono" dir="ltr" value="${a(NATNET.fakeSni)}">
         </div>
         <div class="field">
@@ -10778,16 +11013,16 @@ export const config = { path: "/*" };`;
           <label for="natnet-spoofer-strat">استراتژی فرگمنت:</label>
           <select id="natnet-spoofer-strat" class="input">
             <option value="sni_split" ${NATNET.fragmentStrategy === "sni_split" ? "selected" : ""}>sni_split (برش دوگانه نام دامنه)</option>
-            <option value="tlshello_104" ${NATNET.fragmentStrategy === "tlshello_104" ? "selected" : ""}>tlshello_104 (SenPai Anti-DPI)</option>
-            <option value="split_mid" ${NATNET.fragmentStrategy === "split_mid" ? "selected" : ""}>split_mid (نیمه میانی)</option>
+            <option value="dual_split" ${NATNET.fragmentStrategy === "dual_split" ? "selected" : ""}>dual_split (تقسیم دوگانه بدنه پکت)</option>
+            <option value="tls_hello" ${NATNET.fragmentStrategy === "tls_hello" ? "selected" : ""}>tls_hello (شکستن بایت‌های اول ClientHello)</option>
           </select>
         </div>
         <div class="field">
           <label for="natnet-spoofer-delay">تاخیر فرگمنت (ثانیه):</label>
           <input type="text" id="natnet-spoofer-delay" class="input mono" dir="ltr" value="${a(NATNET.fragmentDelay)}">
         </div>
-        <div class="field" style="display:flex;align-items:center;gap:8px;padding-top:20px">
-          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer">
+        <div class="field" style="display:flex;align-items:center;margin-top:22px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" id="natnet-spoofer-ttl" ${NATNET.ttlTrick ? "checked" : ""}>
             <b>فعال‌سازی ترفند TTL Trick</b>
           </label>
@@ -10798,131 +11033,133 @@ export const config = { path: "/*" };`;
     <!-- SPOOFER READY FILES & ZIP PACKAGE -->
     <div class="card" style="margin-top:12px">
       <div class="card-head">
-        ${d("download")}
-        <h3 style="margin:0">فایل‌های آماده و پکیج کامل اسپوفر</h3>
+        <b>📦 پکیج آماده اجرای اسپوفر (ویندوز، ترموکس و لینوکس)</b>
       </div>
-      <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px;margin-top:8px">
-        <p class="muted" style="font-size:12px;margin:0 0 10px 0;line-height:1.7">
-          می‌توانید پکیج کامل را دریافت کنید که علاوه بر <code>config.json</code>، شامل فایل‌های اجرای خودکار برای ویندوز (bat تک‌کلیک) و اندروید (ترموکس) است:
-        </p>
-        <div style="display:flex;gap:7px;flex-wrap:wrap">
-          <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-spoofer-zip">
-            📦 دانلود پکیج کامل اسپوفر (.zip)
-          </button>
-          <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-spoofer">
-            📥 دانلود تک‌فایل config.json
-          </button>
-          <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(spooferJsonStr)}">
-            ${d("copy")} کپی متن JSON
-          </button>
-        </div>
+      <p class="muted" style="font-size:12px;margin:4px 0 10px 0">
+        پکیج زیپ شامل فایل کانفیگ اختصاصی <code>config.json</code> و اسکریپت‌های اجرایی یک‌کلیکی <code>run-windows.bat</code> و <code>run-termux.sh</code> می‌باشد:
+      </p>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-spoofer-zip">
+          📦 دانلود پکیج کامل اسپوفر (.zip)
+        </button>
+        <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-spoofer">
+          📥 دانلود تک‌فایل config.json
+        </button>
+        <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(spooferJsonStr)}">
+          ${d("copy")} کپی متن JSON کانفیگ
+        </button>
+        <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(termuxCmd)}">
+          📱 کپی دستور راه‌اندازی در Termux
+        </button>
       </div>
-      <details style="font-size:12px;margin-top:8px">
-        <summary style="cursor:pointer;font-weight:600;color:var(--accent);padding:4px 0">
-          👁️ مشاهده متن فایل config.json
-        </summary>
-        <div class="codebox" style="margin-top:8px;max-height:180px;overflow:auto"><code dir="ltr">${a(spooferJsonStr)}</code></div>
+
+      <details style="font-size:12px;margin-top:10px">
+        <summary style="cursor:pointer;font-weight:600;color:var(--accent)">👁️ مشاهده متن کانفیگ تولیدشده config.json</summary>
+        <div class="codebox" style="margin-top:8px;max-height:160px;overflow:auto"><code dir="ltr">${a(spooferJsonStr)}</code></div>
       </details>
     </div>
 
-    <!-- TERMINAL ONE-LINER -->
-    <div class="card" style="margin-top:12px;border-inline-start:3px solid var(--accent)">
-      <div class="card-head">
-        <b style="font-size:13px">📲 دستور اجرای سریع در ترموکس اندروید (بدون روت) یا لینوکس</b>
-        <div class="spacer"></div>
-        <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(termuxCmd)}">${d("copy")} کپی دستور ترمینال</button>
+    <!-- READY LOOPBACK CONFIGS -->
+    <h3 style="margin-top:18px;margin-bottom:8px">📲 کانفیگ‌های آماده کلاینت جهت اتصال به اسپوفر محلی (127.0.0.1:40443)</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:10px">
+      <!-- VLESS XHTTP LOOPBACK -->
+      <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <div>
+            <span class="badge ok">VLESS + XHTTP لوپ‌بک</span>
+            <b style="font-size:12.5px;margin-inline-start:6px">اسپوفر محلی ۴۰۴۴۳</b>
+          </div>
+          <div style="display:flex;gap:5px">
+            <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(vlessLoopback)}">${d("copy")} کپی</button>
+            <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vlessLoopback)}">📲 نصب</button>
+            <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vlessLoopback)}">${d("qr")}</button>
+          </div>
+        </div>
+        <div class="muted mono" style="font-size:11px;margin-top:6px">127.0.0.1:40443 · SNI: ${publicHost} · Type: xhttp</div>
       </div>
-      <div class="codebox" style="margin-top:6px"><code dir="ltr">${a(termuxCmd)}</code></div>
-    </div>
 
-    <!-- CLIENT CONFIG FOR LOOPBACK -->
-    <h3 style="margin-top:18px;margin-bottom:8px">⚡ کانفیگ اختصاصی اتصال کلاینت (v2rayNG / Sing-box) به پورت 40443</h3>
-    <div class="card" style="padding:12px;border-inline-start:3px solid var(--ok)">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="badge ok">127.0.0.1:40443</span>
-          <span class="badge info">XHTTP Loopback</span>
-          <b style="font-size:13px">کانفیگ لوپ‌بک اسپوفر</b>
+      <!-- TROJAN SPOOFER (COMMUNITY PROVEN) -->
+      <div class="card" style="padding:12px;border-inline-start:3px solid #8b5cf6">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <div>
+            <span class="badge">Trojan + WS لوپ‌بک</span>
+            <b style="font-size:12.5px;margin-inline-start:6px">تست‌شده با Host داخلی</b>
+          </div>
+          <div style="display:flex;gap:5px">
+            <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(trojanLoopback)}">${d("copy")} کپی</button>
+            <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(trojanLoopback)}">📲 نصب</button>
+            <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(trojanLoopback)}">${d("qr")}</button>
+          </div>
         </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vlessLoopback)}">${d("copy")} کپی کانفیگ</button>
-          <button class="btn btn-sm btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vlessLoopback)}">📲 نصب در v2rayNG</button>
-          <button class="btn btn-sm" type="button" data-action="omni-natnet-qr" data-uri="${a(vlessLoopback)}">${d("qr")} بارکد QR</button>
-        </div>
+        <div class="muted mono" style="font-size:11px;margin-top:6px">127.0.0.1:40443 · SNI: www.multiplydose.com · Type: ws</div>
       </div>
-      <div class="codebox" style="margin-top:8px;max-height:60px;overflow:auto"><code dir="ltr" style="font-size:11px">${a(vlessLoopback)}</code></div>
+
+      <!-- FASTLY RELAY -->
+      <div class="card" style="padding:12px;border-inline-start:3px solid #f59e0b">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+          <div>
+            <span class="badge">Fastly CDN XHTTP</span>
+            <b style="font-size:12.5px;margin-inline-start:6px">رله اضطراری بدون TLS</b>
+          </div>
+          <div style="display:flex;gap:5px">
+            <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(fastlyXhttpUri)}">${d("copy")} کپی</button>
+            <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(fastlyXhttpUri)}">📲 نصب</button>
+            <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(fastlyXhttpUri)}">${d("qr")}</button>
+          </div>
+        </div>
+        <div class="muted mono" style="font-size:11px;margin-top:6px">146.75.117.91:80 · Host: tignaltofansv4.global.ssl.fastly.net · Port 80</div>
+      </div>
     </div>
   ` : `
-    <!-- ================= SUB-SECTION 3: WHITE RELAYS & DNSTT ================= -->
-    <div class="notice ok" style="margin-top:12px;padding:12px">
-      <b>💡 مکانیزم رله‌های سفید و تانل‌های اضطراری:</b>
-      شامل تونل آماده DNSTT (عبور ترافیک از پورت ۵۳ DNS در زمان خاموشی کامل وب)، رله‌های CDN خورشید، ساب‌نت‌های هتزنر و DNSهای باز مخابرات برای دسترسی در هر شرایطی.
-    </div>
-
-    <!-- DNSTT XYZ FINLAND (EMERGENCY READY BOX) -->
-    <div class="card" style="margin-top:12px;border-inline-start:4px solid #3b82f6">
+    <!-- ================= SUB-SECTION 3: WHITE RELAYS, KHORSHID & DNSTT ================= -->
+    <div class="card" style="margin-top:12px;border-inline-start:3px solid #10b981">
       <div class="card-head">
-        <b style="color:#3b82f6;font-size:14px">🌐 کانفیگ آماده تونل دی‌ان‌اس (DNSTT.XYZ - پروتکل پورت ۵۳ UDP)</b>
+        <b style="color:#10b981;font-size:14px">📡 رله‌های مجاز سفید، سرورهای خورشید/شکن و تونل DNSTT</b>
         <div class="spacer"></div>
-        <span class="badge ok">فعال در قطعی ۱۰۰٪ وب</span>
+        <span class="badge ok">DNS Tunneling</span>
       </div>
-      <p class="muted" style="font-size:12px;margin:0 0 10px 0;line-height:1.7">
-        هنگامی که اینترنت کاملاً قطع است و هیچ سایتی باز نمی‌شود، درخواست‌های DNS (پورت ۵۳) باز می‌مانند. کلاینت DNSTT را نصب کرده، سرور دی‌ان‌اس را <code>${NATNET_DATA.dnstt.resolver}</code> بگذارید و کانفیگ JSON زیر را ایمپورت کنید تا پروکسی محلی <code>127.0.0.1:1080</code> فعال شود:
+      <p class="muted" style="font-size:12.5px;margin:8px 0;line-height:1.8">
+        در وخیم‌ترین سناریوهای قطعی که حتی رله‌های HTTPS هم قطع شوند، تونل‌های مبتنی بر DNS (مانند DNSTT) و رله‌های وایت‌لیست سازمانی شکن و مخابرات همچنان فعال می‌مانند چون سیستم بانکی و اداری کشور بدون آن‌ها از کار می‌افتد.
       </p>
-      <div style="display:flex;gap:7px;flex-wrap:wrap">
-        <button class="btn btn-primary btn-sm" type="button" data-action="omni-copy" data-text="${a(NATNET_DATA.dnstt.json)}">
-          📋 کپی کانفیگ JSON آماده DNSTT
-        </button>
-        <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="https://t.me/socks?server=127.0.0.1&port=1080">
-          ✈️ کپی لینک پروکسی تلگرام (127.0.0.1:1080)
-        </button>
-        <a class="btn btn-sm" href="${a(NATNET_DATA.dnstt.clientLink)}" target="_blank" rel="noopener">
-          📥 دانلود اپلیکیشن DNSTT Client
-        </a>
-      </div>
-      <div class="codebox" style="margin-top:10px;max-height:140px;overflow:auto"><code dir="ltr">${a(NATNET_DATA.dnstt.json)}</code></div>
-    </div>
 
-    <!-- EMERGENCY MOKHABERAT DNS & IR PROXIES -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-top:12px">
-      <!-- DNS BOX -->
-      <div class="card">
-        <div class="card-head"><b style="font-size:13px">📡 دی‌ان‌اس‌های باز مخابرات (رفع قطعی وای‌فای)</b></div>
-        <p class="muted" style="font-size:11.5px;margin:0 0 8px 0">اگر روی وای‌فای یا مودم سایت‌های داخلی هم باز نشدند، این دو دی‌ان‌اس را روی سیستم ست کنید:</p>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          ${NATNET_DATA.emergencyDns.map(dns => `
-            <span class="badge info mono" style="font-size:12px">${a(dns)}</span>
-            <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(dns)}">${d("copy")}</button>
-          `).join("")}
+      <h4 style="margin-top:14px;margin-bottom:8px">1️⃣ دی‌ان‌اس‌های سفید و بدون فیلتر فعال در زمان نت ملی:</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${NATNET_DATA.emergencyDns.map(dns => `
+          <div style="background:var(--bg-elev);padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;display:flex;align-items:center;gap:6px">
+            <code>${dns}</code>
+            <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${dns}">${d("copy")}</button>
+          </div>
+        `).join("")}
+      </div>
+
+      <h4 style="margin-top:18px;margin-bottom:8px">2️⃣ پکیج آماده تونل اضطراری DNSTT (پروتکل DNS Tunneling):</h4>
+      <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <b>سرور تانل DNSTT فعال (کشور فنلاند - بدون بلاک)</b>
+            <div class="muted mono" style="font-size:11px;margin-top:3px">Domain: rent.snapp.autos · Resolver: 2.189.44.44</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" type="button" data-action="omni-copy" data-text="${a(NATNET_DATA.dnstt.json)}">
+              ${d("copy")} کپی کانفیگ JSON تونل
+            </button>
+            <a class="btn btn-sm" href="${NATNET_DATA.dnstt.clientLink}" target="_blank" rel="noopener">
+              📥 دانلود نرم‌افزار کلاینت DNSTT
+            </a>
+          </div>
         </div>
       </div>
 
-      <!-- IR EXCLAVE PROXIES -->
-      <div class="card">
-        <div class="card-head"><b style="font-size:13px">🇮🇷 پروکسی‌های داخلی ایران (دسترسی به گیت‌هاب/سرور)</b></div>
-        <p class="muted" style="font-size:11.5px;margin:0 0 8px 0">جهت دسترسی به سرورهای ایران و دور زدن فیلتر پورت‌ها از داخل نرم‌افزار Exclave:</p>
-        <div style="display:flex;flex-direction:column;gap:5px">
-          ${NATNET_DATA.emergencyProxies.map(px => `
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <code class="mono" dir="ltr" style="font-size:11.5px">${a(px)}</code>
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(px)}">${d("copy")}</button>
-            </div>
-          `).join("")}
-        </div>
+      <h4 style="margin-top:18px;margin-bottom:8px">3️⃣ پروکسی‌های نجات و تونل‌های پروکسی داخل کشور:</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${NATNET_DATA.emergencyProxies.map(p => `
+          <div style="background:var(--bg-elev);padding:6px 12px;border-radius:8px;border:1px solid var(--border);font-size:12px;display:flex;align-items:center;gap:6px">
+            <span class="badge ok">فعال</span>
+            <code>${p}</code>
+            <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${p}">${d("copy")}</button>
+          </div>
+        `).join("")}
       </div>
-    </div>
-
-    <!-- SERVER XHTTP-INSTALLER SCRIPT -->
-    <div class="card" style="margin-top:12px;border-inline-start:3px solid #8b5cf6">
-      <div class="card-head">
-        <b style="font-size:13px">🖥️ اسکریپت خودکار سرور لینوکس (XHTTP-Installer)</b>
-        <div class="spacer"></div>
-        <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(NATNET_DATA.xhttpInstaller)}">${d("copy")} کپی دستور Bash</button>
-      </div>
-      <p class="muted" style="font-size:11.5px;margin:0 0 6px 0">
-        اگر سرور مجازی اختصاصی دارید، این اسکریپت به صورت خودکار تونل Vercel و Netlify را روی سرور شما بالا می‌آورد:
-      </p>
-      <div class="codebox"><code dir="ltr">${a(NATNET_DATA.xhttpInstaller)}</code></div>
     </div>
   `}
     `;
@@ -10954,9 +11191,15 @@ export const config = { path: "/*" };`;
       if (!s) return;
       let i = s.dataset.action;
       try {
-                } else if (i === "omni-natnet-subtab") {
+        if (i === "omni-natnet-subtab") {
           NATNET.bridgePlatform = s.dataset.sub || "vercel";
-          e.rerenderView("national_net");
+          e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
+        } else if (i === "omni-natnet-vercel-mode") {
+          NATNET.vercelMode = s.dataset.vmode || "rewrite";
+          e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
+        } else if (i === "omni-natnet-netlify-mode") {
+          NATNET.netlifyMode = s.dataset.nmode || "rewrite";
+          e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
         } else if (i === "omni-natnet-balancer") {
           let host = NATNET.bridgeDomain || e.settings()?.public_host || window.location.hostname;
           let activeUser = natnetActiveUser(e.S());
@@ -10966,9 +11209,9 @@ export const config = { path: "/*" };`;
           let core = s.dataset.core || "xray";
           let json = natnetBuildBalancerJson(core, host, xhttpPath, uuid, NATNET.bridgePlatform);
           Le({
-            title: `خروجی بالانسر چرخشی (${core === "xray" ? "Xray Balancer" : "Sing-box URL-Test"})`,
+            title: `خروجی بالانسر چرخشی (${core === "xray" ? "Xray Balancer (Round-Robin)" : "Sing-box URL-Test (با Fragment)"})`,
             body: `<div style="padding:10px">
-              <p class="muted" style="font-size:12px;margin:0 0 8px 0">این فایل تمام نودهای ${NATNET.bridgePlatform === "vercel" ? "ورسل" : "نتلیفای"} را تجمیع کرده و به صورت خودکار سریع‌ترین نود را انتخاب می‌کند:</p>
+              <p class="muted" style="font-size:12px;margin:0 0 8px 0">این پیکربندی تمام نودهای ${NATNET.bridgePlatform === "vercel" ? "ورسل" : "نتلیفای"} را با چک خودکار سلامت و ترفندهای ضد فیلتر ادغام می‌کند:</p>
               <div class="codebox" style="max-height:240px;overflow:auto"><code dir="ltr">${a(json)}</code></div>
             </div>`,
             footer: `<button class="btn btn-primary" data-action="omni-copy" data-text="${a(json)}">${d("copy")} کپی متن JSON</button>
@@ -10976,7 +11219,9 @@ export const config = { path: "/*" };`;
           });
         } else if (i === "omni-natnet-tab") {
           NATNET.tab = s.dataset.tab || "bridge";
-          e.rerenderView("national_net");
+          let targetView = NATNET.tab === "spoofer" ? "national_net_spoofer" : NATNET.tab === "relays" ? "national_net_relays" : "national_net_bridge";
+          l.view = targetView;
+          e.rerenderView(targetView);
         } else if (i === "omni-natnet-qr") {
           let uri = s.dataset.uri || "";
           Le({
@@ -10994,53 +11239,111 @@ export const config = { path: "/*" };`;
           location.href = "v2rayng://install-config?url=" + encodeURIComponent(uri);
         } else if (i === "omni-natnet-dl-vercel-zip") {
           let host = e.settings()?.public_host || window.location.hostname;
-          let code = natnetVercelCode(host);
-          let vercelCfg = JSON.stringify({ version: 2, env: { TARGET_WORKER: "https://" + host } }, null, 2);
-          let pkgJson = JSON.stringify({ name: "omni-vercel-edge-bridge", version: "1.0.0", private: true }, null, 2);
-          let guide = `راهنمای دیپلوی سریع در Vercel:
-۱. فایل‌های این پوشه را در یک ریپازیتوری شخصی گیت‌هاب آپلود کنید یا با Vercel CLI اجرا نمایید.
-۲. در داشبورد Vercel روی Add New Project کلیک کرده و پروژه را ایمپورت کنید.
-۳. متغیر TARGET_WORKER قبلاً درون vercel.json ست شده است!
-۴. روی Deploy کلیک کنید؛ ظرف ۳۰ ثانیه دامنه لبه شما ساخته می‌شود.`;
-          let zip = natnetCreateZip([
-            { name: "api/index.js", content: code },
-            { name: "vercel.json", content: vercelCfg },
-            { name: "package.json", content: pkgJson },
-            { name: "راهنمای_دیپلوی_Vercel.txt", content: guide }
-          ]);
-          Vt("omni-vercel-bridge.zip", zip);
-          y("پکیج آماده Vercel با موفقیت دانلود شد", "ok");
-        } else if (i === "omni-natnet-dl-vercel-js") {
+          if (NATNET.vercelMode === "rewrite") {
+            let vercelCfg = natnetVercelRewriteJson(host);
+            let pkgJson = JSON.stringify({ name: "omni-vercel-rewrite-proxy", version: "2.0.0", private: true }, null, 2);
+            let indexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Edge Rewrite Proxy</title></head><body style="background:#000;color:#fff;font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0"><h2>Omni Zero-Compute Edge Proxy Active</h2></body></html>`;
+            let guide = `راهنمای دیپلوی سریع در Vercel با متد Zero-Compute Rewrite (معماری ۲۰۲۶):
+۱. این متد هیچ تابع سرورلسی اجرا نمی‌کند و مستقیماً روی Anycast Edge ورسل ترافیک را ریورس پروکسی می‌نماید (مصرف صفر درصد، بدون تایم‌اوت ۱۰ ثانیه‌ای).
+۲. وارد داشبورد https://vercel.com/new شوید.
+۳. این پوشه را در یک ریپازیتوری گیت‌هاب قرار دهید یا با اجرای vercel --prod دیپلوی کنید.
+۴. دامنه پروژه بلافاصله فعال می‌شود.`;
+            let zip = natnetCreateZip([
+              { name: "vercel.json", content: vercelCfg },
+              { name: "package.json", content: pkgJson },
+              { name: "index.html", content: indexHtml },
+              { name: "راهنمای_دیپلوی_Vercel_Rewrite.txt", content: guide }
+            ]);
+            Vt("omni-vercel-rewrite-package.zip", zip);
+            y("پکیج آماده Vercel Rewrite با موفقیت دانلود شد", "ok");
+          } else {
+            let relayCode = natnetVercelRelayJs(host);
+            let vercelCfg = JSON.stringify({ version: 2, routes: [{ src: "/(.*)", dest: "/api/relay.js" }] }, null, 2);
+            let pkgJson = JSON.stringify({ name: "omni-vercel-streaming-relay", version: "2.0.0", type: "module", private: true }, null, 2);
+            let guide = `راهنمای استقرار رله استریمینگ Node.js (بر اساس XHTTPRelayECO v2.0.0):
+۱. این اسکریپت با غیرفعال کردن bodyParser ترافیک XHTTP را بدون بافر در حافظه انتقال می‌دهد.
+۲. پروژه را در Vercel ایمپورت کنید؛ فایل api/relay.js به عنوان Endpoint رله استریمینگ شروع به کار می‌کند.`;
+            let zip = natnetCreateZip([
+              { name: "api/relay.js", content: relayCode },
+              { name: "vercel.json", content: vercelCfg },
+              { name: "package.json", content: pkgJson },
+              { name: "راهنمای_دیپلوی_Vercel_Relay.txt", content: guide }
+            ]);
+            Vt("omni-vercel-relay-package.zip", zip);
+            y("پکیج رله استریمینگ Vercel با موفقیت دانلود شد", "ok");
+          }
+        } else if (i === "omni-natnet-dl-vercel-code") {
           let host = e.settings()?.public_host || window.location.hostname;
-          Vt("index.js", natnetVercelCode(host));
-          y("فایل api/index.js با موفقیت دانلود شد", "ok");
+          if (NATNET.vercelMode === "rewrite") {
+            Vt("vercel.json", natnetVercelRewriteJson(host));
+            y("فایل vercel.json با موفقیت دانلود شد", "ok");
+          } else {
+            Vt("relay.js", natnetVercelRelayJs(host));
+            y("فایل api/relay.js با موفقیت دانلود شد", "ok");
+          }
         } else if (i === "omni-natnet-dl-netlify-zip") {
           let host = e.settings()?.public_host || window.location.hostname;
-          let code = natnetNetlifyCode(host);
-          let toml = `[[edge_functions]]\n  function = "bridge"\n  path = "/*"\n\n[build.environment]\n  TARGET_WORKER = "https://${host}"\n`;
-          let indexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Bridge Active</title></head><body style="font-family:sans-serif;background:#111;color:#fff;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center"><h2>Omni Netlify Edge Active</h2><p style="opacity:.7">Ready to bypass censorship.</p></div></body></html>`;
-          let guide = `راهنمای آپلود در Netlify (Drag & Drop):
-۱. وارد سایت https://app.netlify.com شوید.
-۲. به صفحه https://app.netlify.com/drop بروید.
-۳. همین فایل ZIP را مستقیماً در کادر دایره‌ای وسط صفحه با ماوس بکشید و رها کنید (Drop).
-۴. نتلیفای بلافاصله بدون نیاز به کدنویسی ظرف چند ثانیه سایت را آنلاین کرده و یک دامنه‌ اختصاصی به شما می‌دهد!`;
-          let zip = natnetCreateZip([
-            { name: "netlify/edge-functions/bridge.js", content: code },
-            { name: "netlify.toml", content: toml },
-            { name: "index.html", content: indexHtml },
-            { name: "راهنمای_آپلود_Netlify.txt", content: guide }
-          ]);
-          Vt("omni-netlify-bridge.zip", zip);
-          y("پکیج آماده Netlify با موفقیت دانلود شد", "ok");
-        } else if (i === "omni-natnet-dl-netlify-js") {
+          if (NATNET.netlifyMode === "rewrite") {
+            let toml = natnetNetlifyRewriteToml(host);
+            let indexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Netlify Edge Proxy</title></head><body style="background:#111;color:#fff;font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0"><h2>Netlify Omni Proxy Active</h2></body></html>`;
+            let guide = `راهنمای کشیدن و رها کردن در Netlify Drop (بدون کد):
+۱. وارد آدرس https://app.netlify.com/drop شوید.
+۲. همین فایل ZIP را با ماوس در کادر وسط صفحه Drag & Drop کنید.
+۳. نتلیفای بلافاصله بدون نیاز به هیچ کدی سایت را بالا آورده و دامنه‌ای مثل your-app.netlify.app به شما می‌دهد.
+۴. این روش از پروکسی وضعیت ۲۰۰ لبه‌ای استفاده کرده و هیچ تایم‌اوت یا کردیت فانکشنی مصرف نمی‌کند.`;
+            let zip = natnetCreateZip([
+              { name: "netlify.toml", content: toml },
+              { name: "index.html", content: indexHtml },
+              { name: "راهنمای_نتلیفای_Drop.txt", content: guide }
+            ]);
+            Vt("omni-netlify-drop-package.zip", zip);
+            y("پکیج Drag & Drop نتلیفای با موفقیت دانلود شد", "ok");
+          } else {
+            let proxyCode = natnetNetlifyEdgeFunction(host);
+            let toml = `[build]
+  command = ""
+  publish = "public"
+  edge_functions = "edge-functions"
+
+[[edge_functions]]
+  path = "/*"
+  function = "proxy"
+`;
+            let indexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Netlify Edge v2</title></head><body style="background:#111;color:#fff;font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0"><h2>Netlify Edge Functions v2 Active</h2></body></html>`;
+            let guide = `راهنمای استقرار Netlify Edge Functions v2 (Deno Runtime):
+۱. این متد ترافیک XHTTP را از طریق ReadableStream و بدون بافر هدایت می‌کند و هدرهای DPI را پاک‌سازی می‌نماید.
+۲. فایل‌های این پوشه را در گیت‌هاب قرار دهید و در داشبورد نتلیفای متصل کنید.`;
+            let zip = natnetCreateZip([
+              { name: "edge-functions/proxy.js", content: proxyCode },
+              { name: "netlify.toml", content: toml },
+              { name: "public/index.html", content: indexHtml },
+              { name: "راهنمای_نتلیفای_Edge.txt", content: guide }
+            ]);
+            Vt("omni-netlify-edge-package.zip", zip);
+            y("پکیج Netlify Edge Functions با موفقیت دانلود شد", "ok");
+          }
+        } else if (i === "omni-natnet-dl-netlify-code") {
           let host = e.settings()?.public_host || window.location.hostname;
-          Vt("bridge.js", natnetNetlifyCode(host));
-          y("فایل bridge.js با موفقیت دانلود شد", "ok");
+          if (NATNET.netlifyMode === "rewrite") {
+            Vt("netlify.toml", natnetNetlifyRewriteToml(host));
+            y("فایل netlify.toml با موفقیت دانلود شد", "ok");
+          } else {
+            Vt("proxy.js", natnetNetlifyEdgeFunction(host));
+            y("فایل proxy.js با موفقیت دانلود شد", "ok");
+          }
         } else if (i === "omni-natnet-dl-spoofer-zip") {
           let host = e.settings()?.public_host || window.location.hostname;
           let json = natnetSpooferJson(host);
-          let bat = `@echo off\r\ntitle Omni SNI Spoofer\r\necho Starting Omni Local Spoofer on port 40443...\r\nsni-spoof.exe\r\npause\r\n`;
-          let sh = `#!/data/data/com.termux/files/usr/bin/bash\necho "اجرای اسپوفر محلی روی پورت 40443..."\n./sni-spoof\n`;
+          let bat = `@echo off
+title Omni SNI Spoofer
+echo Starting Omni Local Spoofer on port 40443...
+sni-spoof.exe
+pause
+`;
+          let sh = `#!/data/data/com.termux/files/usr/bin/bash
+echo "اجرای اسپوفر محلی روی پورت 40443..."
+./sni-spoof
+`;
           let guide = `راهنمای اجرای اسپوفر محلی:
 ۱. در ویندوز: فایل sni-spoof.exe را کنار config.json بگذارید و run-windows.bat را اجرا کنید.
 ۲. در اندروید: برنامه را در ترموکس اجرا کنید.
@@ -11058,6 +11361,7 @@ export const config = { path: "/*" };`;
           let json = natnetSpooferJson(host);
           Vt("config.json", json);
           y("فایل config.json اسپوفر با موفقیت دانلود شد", "ok");
+        
         } else if (i === "omni-mesh-mode") {
           MESH.mode = s.dataset.mode || "game";
           MESH.history = [];
@@ -11608,28 +11912,28 @@ export const config = { path: "/*" };`;
       let s = t.target;
       if (s.id === "natnet-user") {
         NATNET.user = s.value;
-        e.rerenderView("national_net");
+        e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
       } else if (s.id === "natnet-bridge-domain") {
         NATNET.bridgeDomain = s.value.trim();
-        e.rerenderView("national_net");
+        e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
       } else if (s.id === "natnet-spoofer-ip") {
         NATNET.spooferIp = s.value.trim();
-        e.rerenderView("national_net");
+        e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
       } else if (s.id === "natnet-fake-sni") {
         NATNET.fakeSni = s.value.trim();
-        e.rerenderView("national_net");
+        e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
       } else if (s.id === "natnet-spoofer-port") {
         NATNET.spooferPort = s.value.trim();
-        e.rerenderView("national_net");
+        e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
       } else if (s.id === "natnet-spoofer-strat") {
         NATNET.fragmentStrategy = s.value;
-        e.rerenderView("national_net");
+        e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
       } else if (s.id === "natnet-spoofer-delay") {
         NATNET.fragmentDelay = s.value;
-        e.rerenderView("national_net");
+        e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
       } else if (s.id === "natnet-spoofer-ttl") {
         NATNET.ttlTrick = s.checked;
-        e.rerenderView("national_net");
+        e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
       } else if (s.id === "mesh-region") {
         MESH.region = s.value || "all";
         MESH.country = "AUTO";
@@ -11945,7 +12249,9 @@ Connection: close\r
     { id: "dashboard", icon: "dash", label: () => n("nav.dashboard") },
     { id: "users", icon: "users", label: () => n("nav.users") },
     { id: "configs", icon: "qr", label: () => n("nav.configs") },
-    { id: "national_net", icon: "shield", label: () => "🇮🇷 نت ملی (بای‌پس)" },
+    { id: "national_net_bridge", icon: "activity", label: () => "🚀 ۱. نت ملی: پل‌های Edge" },
+    { id: "national_net_spoofer", icon: "shield", label: () => "🛡️ ۲. نت ملی: اسپوفر و لوپ‌بک" },
+    { id: "national_net_relays", icon: "zap", label: () => "📡 ۳. نت ملی: رله و خورشید" },
     { id: "mesh", icon: "activity", label: () => "Causal Mesh" },
     { id: "scanner", icon: "search", label: () => n("nav.scanner") },
     { id: "dns", icon: "globe", label: () => n("nav.dns") },
@@ -12006,7 +12312,10 @@ Connection: close\r
         scanner: n("nav.scanner"),
         dns: n("nav.dns"),
         configs: n("nav.configs"),
-        national_net: "🇮🇷 نت ملی (بای‌پس)",
+        national_net: "🇮🇷 نت ملی (بای‌پس جامع)",
+        national_net_bridge: "🚀 ۱. نت ملی: پل‌های ابری Edge (Vercel & Netlify)",
+        national_net_spoofer: "🛡️ ۲. نت ملی: اسپوفر محلی و لوپ‌بک",
+        national_net_relays: "📡 ۳. نت ملی: رله سفید، خورشید و DNSTT",
         mesh: "Causal Mesh",
       }[e] || n("app.name")
     );
@@ -12048,6 +12357,16 @@ Connection: close\r
         e.innerHTML = MeshView(l);
         break;
       case "national_net":
+      case "national_net_bridge":
+        NATNET.tab = "bridge";
+        e.innerHTML = NationalNetView(l);
+        break;
+      case "national_net_spoofer":
+        NATNET.tab = "spoofer";
+        e.innerHTML = NationalNetView(l);
+        break;
+      case "national_net_relays":
+        NATNET.tab = "relays";
         e.innerHTML = NationalNetView(l);
         break;
       case "scanner":
