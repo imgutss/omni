@@ -6043,11 +6043,15 @@ async function sha256Hex(text) {
   return [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 var UUID_ALIASES = {
+  "8746bf32-9a0c-4ade-bb3c-f2fb977dbe24": "Ali",
+  "82510e9e-1c7f-4147-872b-1a5a48c50038": "admin",
   "304ab7a9-7db0-4d10-9a3e-6237e533fcd0": "Mmm",
   "8f07153b-bfe4-4cb3-be34-2c92f8640a57": "Mmm",
   "247ae25a-5b9a-4679-a2c8-986e57153844": "Mmm"
 };
 var PREWARMED_USERS = /* @__PURE__ */ new Map([
+  ["8746bf32-9a0c-4ade-bb3c-f2fb977dbe24", { username: "Ali", uuid: "8746bf32-9a0c-4ade-bb3c-f2fb977dbe24", is_active: 1, quota_bytes: 5476083302, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 0, proxies: "[]", block_list: "[]" }],
+  ["82510e9e-1c7f-4147-872b-1a5a48c50038", { username: "admin", uuid: "82510e9e-1c7f-4147-872b-1a5a48c50038", is_active: 1, quota_bytes: 5476083302, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 0, proxies: "[]", block_list: "[]" }],
   ["247ae25a-5b9a-4679-a2c8-986e57153844", { username: "Mmm", uuid: "247ae25a-5b9a-4679-a2c8-986e57153844", is_active: 1, quota_bytes: 5476083302, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 1, proxies: "[]", block_list: "[]" }],
   ["8f07153b-bfe4-4cb3-be34-2c92f8640a57", { username: "Mmm", uuid: "247ae25a-5b9a-4679-a2c8-986e57153844", is_active: 1, quota_bytes: 5476083302, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 1, proxies: "[]", block_list: "[]" }],
   ["304ab7a9-7db0-4d10-9a3e-6237e533fcd0", { username: "Mmm", uuid: "247ae25a-5b9a-4679-a2c8-986e57153844", is_active: 1, quota_bytes: 5476083302, up_bytes: 0, down_bytes: 0, request_limit: 0, request_count: 0, first_connect: 1, proxies: "[]", block_list: "[]" }],
@@ -6418,8 +6422,14 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
   const rawCc = (reqUrl?.searchParams?.get("cc") || settings?.selected_country || "").trim().toUpperCase();
   const isDirectMode = reqMode === "direct" || rawCc === "DIRECT" || rawCc === "NONE";
   const selCountry = !isDirectMode && rawCc ? findCountry(rawCc) : null;
+  const countryProxies = [
+    ...reqProxy ? reqProxy.split(/[\s,]+/) : [],
+    ...selCountry?.proxies || [],
+    ...safeJsonArray(user?.proxies),
+    ...!isDirectMode ? safeJsonArray(settings?.proxy_ips) : []
+  ].filter(Boolean);
   if (geminiAi) {
-    addRaw({ type: "direct", hostname: dialHost, port, label: "direct-ai" });
+    addRaw({ type: "direct", hostname: effectiveHost || hostname, port, label: "direct-ai" });
     const countryVips = selCountry?.vipProxies || COUNTRY_VIP_PROXIES[selCountry?.cc] || [];
     const vipList = [
       ...countryVips,
@@ -6444,12 +6454,6 @@ async function buildDialCandidates(request, settings, user, hostname, port, reqU
       addEntry(raw, 443, "pool-proxy");
     return candidates;
   }
-  const countryProxies = [
-    ...reqProxy ? reqProxy.split(/[\s,]+/) : [],
-    ...selCountry?.proxies || [],
-    ...safeJsonArray(user?.proxies),
-    ...!isDirectMode ? safeJsonArray(settings?.proxy_ips) : []
-  ].filter(Boolean);
   const hLow = String(effectiveHost || hostname || "").trim().toLowerCase();
   const isIpCheck = hLow === "api.ipify.org" || hLow === "ipinfo.io" || hLow === "ifconfig.me" || hLow === "icanhazip.com" || hLow === "ident.me" || hLow === "ip-api.com" || hLow === "whoer.net" || hLow === "ipleak.net" || hLow === "myip.com" || hLow === "checkip.amazonaws.com" || selCountry?.cc === "US" && cfTarget;
   if (isIpCheck && selCountry) {
@@ -9017,23 +9021,28 @@ var worker_default = {
           }
         });
       }
+      // Diagnostic WebSocket Ping check before proxy routing
+      if (url.pathname === "/api/diag/ws-ping") {
+        if ((request.headers.get("Upgrade") || "").toLowerCase() === "websocket") {
+          const pair = new WebSocketPair();
+          const [client, server] = Object.values(pair);
+          server.accept();
+          server.addEventListener("message", (ev) => {
+            try {
+              const msg = JSON.parse(ev.data);
+              server.send(JSON.stringify({ type: "pong", client_t: msg.t || 0, server_t: Date.now(), colo: request?.cf?.colo || "EDGE" }));
+            } catch {
+              server.send(JSON.stringify({ type: "pong", server_t: Date.now() }));
+            }
+          });
+          return new Response(null, { status: 101, webSocket: client });
+        }
+        return json({ ok: true, colo: request?.cf?.colo || "EDGE", time: Date.now() });
+      }
+
       const upgrade = (request.headers.get("Upgrade") || "").toLowerCase();
       if (upgrade === "websocket") {
-        const fastSettings = settingsCachedSync() || {
-          panel_name: "Omni",
-          proto: "both",
-          path: "/JOGpAVgq",
-          trojan_password: "9Z6oc6_y7x04Ihqltcd9zw",
-          selected_country: "DIRECT",
-          dns_upstream: "https://1.1.1.1/dns-query",
-          block_ads: "0",
-          block_nsfw: "0",
-          block_list: "[]"
-        };
-        if (!settingsCachedSync()) {
-          ctx.waitUntil(bootstrap(env, url).catch(() => {
-          }));
-        }
+        const fastSettings = settingsCachedSync() || await settingsCached(env) || await bootstrap(env, url);
         try {
           return await handleProxy(request, env, ctx, url, fastSettings);
         } catch (e) {

@@ -20,10 +20,6 @@ BOT_USERNAME = "OmniAiGateBot"
 [triggers]
 crons = ["*/5 * * * *"]
 
-[observability]
-enabled = true
-
-[[rules]]
-type = "Text"
-globs = ["**/*.html"]
-fallthrough = true
+[[kv_namespaces]]
+binding = "RELEASES"
+id = "ec47b341007747f1a9d4d94c5855c35a"
