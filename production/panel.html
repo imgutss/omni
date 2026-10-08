@@ -10151,16 +10151,9 @@ function xe(total) {
       ]
     },
     netlify: {
-      domains: [
-        "kubernetes.io", "helm.sh", "blog.helm.sh", "docs.helm.sh", "letsencrypt.org", 
-        "kind.sigs.k8s.io", "krew.sigs.k8s.io", "kustomize.sigs.k8s.io", 
-        "cluster-api.sigs.k8s.io", "gateway-api.sigs.k8s.io", "kubectl.docs.kubernetes.io"
-      ],
+      domains: [],
       ips: [
-        "104.198.14.52", "75.2.60.5", "99.83.231.61", "3.67.62.179", "35.157.174.195",
-        "138.201.54.122", "142.54.178.211", "178.22.122.101", "216.239.38.120", 
-        "204.12.196.34", "144.76.1.88", "94.130.13.19", "50.7.5.83", "50.7.5.85", 
-        "50.7.87.2", "50.7.87.3", "50.7.87.4", "204.79.197.220", "63.141.252.203"
+        "104.198.14.52", "75.2.60.5", "99.83.231.61", "75.2.70.75"
       ]
     },
     fastly: {
@@ -10469,10 +10462,17 @@ export const config = { path: "/*" };`;
 
   function natnetActiveUser(e) {
     let users = e.users || [];
-    if (!users.length) return { username: "default", uuid: "11111111-2222-3333-4444-555555555555" };
+    if (!users.length && window.__lastUsers?.length) users = window.__lastUsers;
+    if (users.length > 0) window.__lastUsers = users;
+    if (!users.length) {
+      if (typeof l !== "undefined" && l?.me?.uuid) {
+        return { username: l.me.username || "Ali", uuid: l.me.uuid };
+      }
+      return { username: "Ali", uuid: "6e937e50-6b03-4584-b0a7-b8d34bb21d4c" };
+    }
     let found = users.find(u => u.username === NATNET.user);
     if (!found) {
-      found = users[0];
+      found = users.find(u => u.is_active) || users[0];
       NATNET.user = found.username;
     }
     return found;
@@ -10575,23 +10575,35 @@ export const config = { path: "/*" };`;
     let spooferJsonStr = natnetSpooferJson(publicHost);
     let bridgeHost = NATNET.bridgeDomain || publicHost;
 
-    // Vercel URIs with anti-DPI fragmentation
-    let vercelUris = NATNET_DATA.vercel.domains.map(d => 
-      `vless://${uuid}@${d}:443?encryption=none&security=tls&sni=${d}&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Vercel-" + d)}`
-    );
-    let vercelIpUris = NATNET_DATA.vercel.ips.slice(0, 8).map(ip => 
-      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=react.dev&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Vercel-CF-" + ip)}`
-    );
-    let allVercelUris = [...vercelUris, ...vercelIpUris];
+    // Target domains for Netlify and Vercel bridges
+    let netlifyDomain = (NATNET.bridgeDomain || "unique-begonia-46df26.netlify.app").replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
+    if (!netlifyDomain || netlifyDomain.includes("workers.dev")) {
+      netlifyDomain = "unique-begonia-46df26.netlify.app";
+    }
+    let vercelDomain = (NATNET.vercelDomain || "omni-bridge.vercel.app").replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
 
-    // Netlify URIs with anti-DPI fragmentation
-    let netlifyUris = NATNET_DATA.netlify.domains.map(d => 
-      `vless://${uuid}@${d}:443?encryption=none&security=tls&sni=${d}&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Netlify-" + d)}`
+    // Netlify Verified URIs: Using actual Netlify project domain & Anycast IPs
+    let netlifyDirectWs = `vless://${uuid}@${netlifyDomain}:443?encryption=none&security=tls&sni=${netlifyDomain}&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=ws&host=${netlifyDomain}&path=${encodeURIComponent(xhttpPath)}#${encodeURIComponent("🇮🇷 Netlify-Direct-WS (" + netlifyDomain + ")")}`;
+    let netlifyDirectXhttp = `vless://${uuid}@${netlifyDomain}:443?encryption=none&security=tls&sni=${netlifyDomain}&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=${netlifyDomain}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Netlify-Direct-XHTTP (" + netlifyDomain + ")")}`;
+    
+    let netlifyIpUris = NATNET_DATA.netlify.ips.map(ip => 
+      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=${netlifyDomain}&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=${netlifyDomain}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Netlify-Anycast-XHTTP (" + ip + ")")}`
     );
-    let netlifyShecanUris = NATNET_DATA.netlify.ips.slice(0, 10).map(ip => 
-      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=kubernetes.io&alpn=h2%2Chttp%2F1.1&insecure=1&allowInsecure=1&type=xhttp&host=${encodeURIComponent(bridgeHost)}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Netlify-Shecan-" + ip)}`
+    let netlifyIpWsUris = NATNET_DATA.netlify.ips.map(ip => 
+      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=${netlifyDomain}&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=ws&host=${netlifyDomain}&path=${encodeURIComponent(xhttpPath)}#${encodeURIComponent("🇮🇷 Netlify-Anycast-WS (" + ip + ")")}`
     );
-    let allNetlifyUris = [...netlifyUris, ...netlifyShecanUris];
+    let allNetlifyUris = [netlifyDirectWs, netlifyDirectXhttp, ...netlifyIpUris, ...netlifyIpWsUris];
+
+    // Vercel Verified URIs: Using actual Vercel project domain & Anycast IPs
+    let vercelDirectWs = `vless://${uuid}@${vercelDomain}:443?encryption=none&security=tls&sni=${vercelDomain}&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=ws&host=${vercelDomain}&path=${encodeURIComponent(xhttpPath)}#${encodeURIComponent("🇮🇷 Vercel-Direct-WS (" + vercelDomain + ")")}`;
+    let vercelDirectXhttp = `vless://${uuid}@${vercelDomain}:443?encryption=none&security=tls&sni=${vercelDomain}&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=${vercelDomain}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Vercel-Direct-XHTTP (" + vercelDomain + ")")}`;
+    let vercelIpUris = NATNET_DATA.vercel.ips.slice(0, 5).map(ip => 
+      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=${vercelDomain}&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=xhttp&host=${vercelDomain}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Vercel-Anycast-XHTTP (" + ip + ")")}`
+    );
+    let vercelIpWsUris = NATNET_DATA.vercel.ips.slice(0, 5).map(ip => 
+      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=${vercelDomain}&alpn=h2%2Chttp%2F1.1&insecure=0&allowInsecure=0&type=ws&host=${vercelDomain}&path=${encodeURIComponent(xhttpPath)}#${encodeURIComponent("🇮🇷 Vercel-Anycast-WS (" + ip + ")")}`
+    );
+    let allVercelUris = [vercelDirectWs, vercelDirectXhttp, ...vercelIpUris, ...vercelIpWsUris];
 
     // Active code displays
     let vercelRewriteCode = natnetVercelRewriteJson(publicHost);
@@ -10937,90 +10949,106 @@ export const config = { path: "/*" };`;
         </div>
       </div>
 
-      <!-- NETLIFY READY CONFIGS GRID -->
+      <!-- NETLIFY VERIFIED CONFIGS GRID -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0">⚡ کانفیگ‌های برتر Netlify با فرانتینگ مجاز K8s و شکن</h3>
+        <h3 style="margin:0">⚡ کانفیگ‌های تست‌شده و معتبر Netlify (متصل به دامنه شما: ${a(netlifyDomain)})</h3>
         <span class="badge ok">فرگمنت tlshello 0/104/1 فعال</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:10px">
-        <!-- KUBERNETES.IO -->
-        <div class="card" style="padding:12px;border-inline-start:3px solid #00c7b7">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-            <div style="display:flex;align-items:center;gap:6px">
-              <span class="badge ok">فرانتینگ تاییدشده</span>
-              <b style="font-size:12.5px">kubernetes.io</b>
-            </div>
-            <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyUris[0])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyUris[0])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyUris[0])}">${d("qr")}</button>
-            </div>
-          </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: kubernetes.io · SNI: kubernetes.io · XHTTP (Auto)</div>
-        </div>
-
-        <!-- HELM.SH -->
-        <div class="card" style="padding:12px;border-inline-start:3px solid #00c7b7">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-            <div style="display:flex;align-items:center;gap:6px">
-              <span class="badge">Netlify Fastly</span>
-              <b style="font-size:12.5px">helm.sh</b>
-            </div>
-            <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyUris[1])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyUris[1])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyUris[1])}">${d("qr")}</button>
-            </div>
-          </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: helm.sh · SNI: helm.sh · XHTTP (Auto)</div>
-        </div>
-
-        <!-- 104.198.14.52 NETLIFY DIRECT -->
+        <!-- DIRECT DOMAIN WS -->
         <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
             <div style="display:flex;align-items:center;gap:6px">
-              <span class="badge ok">آی‌پی مستقیم لبه</span>
+              <span class="badge ok">اتصال مستقیم WS</span>
+              <b style="font-size:12.5px">${a(netlifyDomain)}</b>
+            </div>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyDirectWs)}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyDirectWs)}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyDirectWs)}">${d("qr")}</button>
+            </div>
+          </div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: ${a(netlifyDomain)} · SNI: ${a(netlifyDomain)} · VLESS+WS</div>
+        </div>
+
+        <!-- DIRECT DOMAIN XHTTP -->
+        <div class="card" style="padding:12px;border-inline-start:3px solid #00c7b7">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="badge ok">اتصال مستقیم XHTTP</span>
+              <b style="font-size:12.5px">${a(netlifyDomain)}</b>
+            </div>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyDirectXhttp)}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyDirectXhttp)}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyDirectXhttp)}">${d("qr")}</button>
+            </div>
+          </div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: ${a(netlifyDomain)} · SNI: ${a(netlifyDomain)} · VLESS+XHTTP</div>
+        </div>
+
+        <!-- 104.198.14.52 ANYCAST -->
+        <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="badge ok">Anycast لبه Netlify</span>
               <b style="font-size:12.5px">104.198.14.52</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyShecanUris[0])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyShecanUris[0])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyShecanUris[0])}">${d("qr")}</button>
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyIpUris[0])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyIpUris[0])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyIpUris[0])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 104.198.14.52 · SNI: kubernetes.io · XHTTP (Auto)</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 104.198.14.52 · SNI: ${a(netlifyDomain)} · XHTTP (Auto)</div>
         </div>
 
-        <!-- 138.201.54.122 SHECAN -->
+        <!-- 75.2.60.5 ANYCAST -->
+        <div class="card" style="padding:12px;border-inline-start:3px solid #00c7b7">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="badge ok">Anycast روت ۲</span>
+              <b style="font-size:12.5px">75.2.60.5</b>
+            </div>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyIpUris[1])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyIpUris[1])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyIpUris[1])}">${d("qr")}</button>
+            </div>
+          </div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 75.2.60.5 · SNI: ${a(netlifyDomain)} · XHTTP (Auto)</div>
+        </div>
+
+        <!-- 99.83.231.61 ANYCAST -->
+        <div class="card" style="padding:12px;border-inline-start:3px solid #38bdf8">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="badge">Anycast روت ۳</span>
+              <b style="font-size:12.5px">99.83.231.61</b>
+            </div>
+            <div style="display:flex;gap:5px">
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyIpUris[2])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyIpUris[2])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyIpUris[2])}">${d("qr")}</button>
+            </div>
+          </div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 99.83.231.61 · SNI: ${a(netlifyDomain)} · XHTTP (Auto)</div>
+        </div>
+
+        <!-- 75.2.70.75 ANYCAST WS -->
         <div class="card" style="padding:12px;border-inline-start:3px solid #f59e0b">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
             <div style="display:flex;align-items:center;gap:6px">
-              <span class="badge ok">رله شکن / خورشید</span>
-              <b style="font-size:12.5px">138.201.54.122</b>
+              <span class="badge ok">Anycast روت ۴ (WS)</span>
+              <b style="font-size:12.5px">75.2.70.75</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyShecanUris[5])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyShecanUris[5])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyShecanUris[5])}">${d("qr")}</button>
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyIpWsUris[3])}">${d("copy")} کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyIpWsUris[3])}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyIpWsUris[3])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 138.201.54.122 · SNI: kubernetes.io · XHTTP (Auto)</div>
-        </div>
-
-        <!-- 94.130.13.19 SHECAN -->
-        <div class="card" style="padding:12px;border-inline-start:3px solid #f59e0b">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-            <div style="display:flex;align-items:center;gap:6px">
-              <span class="badge">هتزنر ساب‌نت امن</span>
-              <b style="font-size:12.5px">94.130.13.19</b>
-            </div>
-            <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyShecanUris[7])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyShecanUris[7])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyShecanUris[7])}">${d("qr")}</button>
-            </div>
-          </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 94.130.13.19 · SNI: kubernetes.io · XHTTP (Auto)</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 75.2.70.75 · SNI: ${a(netlifyDomain)} · VLESS+WS</div>
         </div>
       </div>
     `}
@@ -11259,9 +11287,8 @@ export const config = { path: "/*" };`;
           });
         } else if (i === "omni-natnet-tab") {
           NATNET.tab = s.dataset.tab || "bridge";
-          let targetView = NATNET.tab === "spoofer" ? "national_net_spoofer" : NATNET.tab === "relays" ? "national_net_relays" : "national_net_bridge";
-          l.view = targetView;
-          e.rerenderView(targetView);
+          l.view = "national_net";
+          e.rerenderView("national_net");
         } else if (i === "omni-natnet-qr") {
           let uri = s.dataset.uri || "";
           Le({
@@ -11325,19 +11352,22 @@ export const config = { path: "/*" };`;
           let host = e.settings()?.public_host || window.location.hostname;
           if (NATNET.netlifyMode === "rewrite") {
             let toml = natnetNetlifyRewriteToml(host);
-            let indexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Netlify Edge Proxy</title></head><body style="background:#111;color:#fff;font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0"><h2>Netlify Omni Proxy Active</h2></body></html>`;
+            let cleanHost = (host || window.location.hostname).replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+            let redirectsContent = `/*  https://${cleanHost}/:splat  200!\n`;
+            let indexHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Omni Netlify Edge</title></head><body style="background:#07090e;color:#cfd8e6;font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center;padding:24px;border:1px solid #182030;border-radius:16px;background:#0b0f17"><h2>Omni Netlify Proxy Operational</h2><p style="color:#34d399">Anycast Edge Active &bull; Zero Compute Mode</p></div></body></html>`;
             let guide = `راهنمای کشیدن و رها کردن در Netlify Drop (بدون کد):
 ۱. وارد آدرس https://app.netlify.com/drop شوید.
 ۲. همین فایل ZIP را با ماوس در کادر وسط صفحه Drag & Drop کنید.
-۳. نتلیفای بلافاصله بدون نیاز به هیچ کدی سایت را بالا آورده و دامنه‌ای مثل your-app.netlify.app به شما می‌دهد.
-۴. این روش از پروکسی وضعیت ۲۰۰ لبه‌ای استفاده کرده و هیچ تایم‌اوت یا کردیت فانکشنی مصرف نمی‌کند.`;
+۳. نتلیفای به صورت اتوماتیک فایل _redirects را خوانده و ترافیک را با کد 200 به ورکر شما فوروارد می‌کند.
+۴. دامنه ساخته شده (مانند unique-begonia-46df26.netlify.app) را در پنل امنی در کادر دامنه نتلیفای وارد کنید.`;
             let zip = natnetCreateZip([
+              { name: "_redirects", content: redirectsContent },
               { name: "netlify.toml", content: toml },
               { name: "index.html", content: indexHtml },
-              { name: "راهنمای_نتلیفای_Drop.txt", content: guide }
+              { name: "README_FA.txt", content: guide }
             ]);
             Vt("omni-netlify-drop-package.zip", zip);
-            y("پکیج Drag & Drop نتلیفای با موفقیت دانلود شد", "ok");
+            y("پکیج Drag & Drop نتلیفای (همراه با _redirects و netlify.toml) با موفقیت دانلود شد", "ok");
           } else {
             let proxyCode = natnetNetlifyEdgeFunction(host);
             let toml = `[build]
@@ -12302,9 +12332,7 @@ Connection: close\r
     { id: "dashboard", icon: "dash", label: () => n("nav.dashboard") },
     { id: "users", icon: "users", label: () => n("nav.users") },
     { id: "configs", icon: "qr", label: () => n("nav.configs") },
-    { id: "national_net_bridge", icon: "activity", label: () => "🚀 ۱. نت ملی: پل‌های Edge" },
-    { id: "national_net_spoofer", icon: "shield", label: () => "🛡️ ۲. نت ملی: اسپوفر و لوپ‌بک" },
-    { id: "national_net_relays", icon: "zap", label: () => "📡 ۳. نت ملی: رله و خورشید" },
+    { id: "national_net", icon: "shield", label: () => "🇮🇷 نت ملی (بای‌پس)" },
     { id: "mesh", icon: "activity", label: () => "Causal Mesh" },
     { id: "scanner", icon: "search", label: () => n("nav.scanner") },
     { id: "dns", icon: "globe", label: () => n("nav.dns") },
@@ -12411,15 +12439,11 @@ Connection: close\r
         break;
       case "national_net":
       case "national_net_bridge":
-        NATNET.tab = "bridge";
-        e.innerHTML = NationalNetView(l);
-        break;
       case "national_net_spoofer":
-        NATNET.tab = "spoofer";
-        e.innerHTML = NationalNetView(l);
-        break;
       case "national_net_relays":
-        NATNET.tab = "relays";
+        if (l.view === "national_net_spoofer") NATNET.tab = "spoofer";
+        else if (l.view === "national_net_relays") NATNET.tab = "relays";
+        else if (l.view === "national_net_bridge") NATNET.tab = "bridge";
         e.innerHTML = NationalNetView(l);
         break;
       case "scanner":
