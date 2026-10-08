@@ -278,7 +278,9 @@ svg { vertical-align: middle; }
 
 /* ── table ──────────────────────────────────────────────────────────────── */
 .table-wrap {
-  overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border); border-radius: var(--radius);
+}
+.users-table { min-width: 580px;
   background: var(--surface); backdrop-filter: var(--glass); box-shadow: var(--shadow);
 }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -996,7 +998,7 @@ main, .content, .card, .tabs, .chips, .notice, .view-head, .head-actions { min-w
 .notice.warn { border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); background: color-mix(in srgb, var(--warn) 9%, var(--surface-2)); }
 .notice.ok { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); background: color-mix(in srgb, var(--ok) 9%, var(--surface-2)); }
 .notice b { color: var(--text); }
-.badge { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: start; line-height: 1.55; }
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 99px; font-size: 11.5px; font-weight: 620; white-space: nowrap; word-break: keep-all; line-height: 1.2; }
 .tabs { flex-wrap: wrap; overflow-x: visible; }
 .tabs button { white-space: normal; min-width: 0; text-align: start; line-height: 1.6; }
 @media (max-width: 560px) {
@@ -4725,9 +4727,9 @@ var qrcode = function() {
       ${e.note ? `<div class="muted" style="font-size:11px">${a(e.note)}</div>` : ""}</td>
     <td>${Ce(e.status)}</td>
     <td><div style="display:flex;gap:8px;align-items:center">
-        <span class="mono" style="font-size:11.5px;min-width:62px">${D(e.used_bytes)}</span>
+        <span class="mono" style="font-size:11.5px;min-width:54px;direction:ltr;unicode-bidi:isolate">${D(e.used_bytes)}</span>
         <div style="flex:1;min-width:52px">${$e(s, "meter-thin")}</div>
-        <span class="muted" style="font-size:11px">${v(e.quota_gb)}GB</span>
+        <span class="muted mono" style="font-size:11px;direction:ltr;unicode-bidi:isolate">${e.quota_bytes ? D(e.quota_bytes) : (e.quota_gb ? v(e.quota_gb) + " GB" : "∞")}</span>
       </div></td>
     <td><span class="${e.ms_left != null && e.ms_left < 864e5 * 2 ? "badge warn" : "muted"}" style="${e.ms_left != null && e.ms_left < 864e5 * 2 ? "" : "font-size:12px"}">${ce(e.ms_left)}</span>
       ${e.first_connect && !e.activated_at ? '<div class="muted" style="font-size:10.5px">\u23F3 first-connect</div>' : ""}</td>
