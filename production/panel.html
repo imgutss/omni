@@ -10357,46 +10357,86 @@ export default function handler(req, res) {
 `;
   }
 
-  function natnetNetlifyEdgeFunction(host) {
+function natnetNetlifyEdgeFunction(host) {
     let clean = (host || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-    return `// netlify/edge-functions/proxy.js
-// Netlify Edge Functions v2 (Deno runtime with unbuffered ReadableStream)
-const BACKEND_URL = Netlify.env.get("BACKEND_URL") || "https://${clean}";
+    return `// netlify/edge-functions/relay.js
+// Netlify Edge Functions v2 (Deno runtime - Synthesized from avaco_cloud & Netlify Bridge v1.3.7)
+const TARGET_BASE = (Netlify.env.get("TARGET_DOMAIN") || "https://${clean}:443").replace(/\/$/, "");
 
-export default async function handler(request, context) {
+const STRIP_HEADERS = new Set([
+  "host",
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "forwarded",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-forwarded-port",
+]);
+
+export default async function handler(request) {
+  const url = new URL(request.url);
+
+  // Serve camouflage static pages to prevent automated scanner detection
+  if (url.pathname === "/" || url.pathname.endsWith(".html") || url.pathname.endsWith(".css") || url.pathname.endsWith(".ico") || url.pathname.endsWith(".png")) {
+    return;
+  }
+
+  if (!TARGET_BASE) {
+    return new Response("Misconfigured: TARGET_DOMAIN is not set", { status: 500 });
+  }
+
   try {
-    const url = new URL(request.url);
-    const targetPath = url.pathname + url.search;
-    const upstreamUrl = new URL(targetPath, BACKEND_URL).toString();
+    const targetUrl = TARGET_BASE + url.pathname + url.search;
+    const headers = new Headers();
+    let clientIp = null;
 
-    const headers = new Headers(request.headers);
-    headers.delete("host");
-    headers.delete("x-forwarded-proto");
-    headers.delete("x-forwarded-host");
-
-    const upstreamRequest = new Request(upstreamUrl, {
-      method: request.method,
-      headers: headers,
-      body: request.body,
-      redirect: "manual",
-    });
-
-    const upstreamResponse = await fetch(upstreamRequest);
-
-    const responseHeaders = new Headers();
-    for (const [key, value] of upstreamResponse.headers.entries()) {
-      if (!["transfer-encoding", "connection", "keep-alive"].includes(key.toLowerCase())) {
-        responseHeaders.set(key, value);
+    for (const [key, value] of request.headers) {
+      const k = key.toLowerCase();
+      if (STRIP_HEADERS.has(k)) continue;
+      if (k.startsWith("x-nf-") || k.startsWith("x-netlify-")) continue;
+      if (k === "x-real-ip") {
+        clientIp = value;
+        continue;
       }
+      if (k === "x-forwarded-for") {
+        if (!clientIp) clientIp = value;
+        continue;
+      }
+      headers.set(k, value);
     }
 
-    return new Response(upstreamResponse.body, {
-      status: upstreamResponse.status,
-      statusText: upstreamResponse.statusText,
+    if (clientIp) headers.set("x-forwarded-for", clientIp);
+    headers.set("x-relay-layer", "netlify-proxy");
+
+    const method = request.method;
+    const hasBody = method !== "GET" && method !== "HEAD";
+    const fetchOptions = {
+      method,
+      headers,
+      redirect: "manual",
+    };
+
+    if (hasBody) fetchOptions.body = request.body;
+
+    const upstream = await fetch(targetUrl, fetchOptions);
+    const responseHeaders = new Headers();
+    for (const [key, value] of upstream.headers) {
+      if (key.toLowerCase() === "transfer-encoding") continue;
+      responseHeaders.set(key, value);
+    }
+
+    return new Response(upstream.body, {
+      status: upstream.status,
       headers: responseHeaders,
     });
   } catch (error) {
-    return context.next();
+    return new Response("Bad Gateway: Relay Failed", { status: 502 });
   }
 };
 
@@ -11313,11 +11353,24 @@ export const config = { path: "/*" };`;
             let guide = `راهنمای استقرار Netlify Edge Functions v2 (Deno Runtime):
 ۱. این متد ترافیک XHTTP را از طریق ReadableStream و بدون بافر هدایت می‌کند و هدرهای DPI را پاک‌سازی می‌نماید.
 ۲. فایل‌های این پوشه را در گیت‌هاب قرار دهید و در داشبورد نتلیفای متصل کنید.`;
+            
+            let redir = `/           /index.html   200
+/about      /about.html    200
+/contact    /contact.html  200
+/style.css  /style.css     200
+`;
+            let aboutHtml = `<!doctype html><html><head><meta charset="utf-8"><title>About Us</title><link rel="stylesheet" href="/style.css"></head><body><h1>About Cloud Services</h1><p>Global edge delivery and acceleration network.</p></body></html>`;
+            let contactHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Contact</title><link rel="stylesheet" href="/style.css"></head><body><h1>Contact Us</h1><p>contact@edge-cloud.network</p></body></html>`;
+            let styleCss = `body{font-family:sans-serif;background:#0b0d13;color:#e2e8f0;padding:40px;line-height:1.6}h1{color:#38bdf8}`;
             let zip = natnetCreateZip([
-              { name: "edge-functions/proxy.js", content: proxyCode },
+              { name: "netlify/edge-functions/relay.js", content: proxyCode },
               { name: "netlify.toml", content: toml },
+              { name: "_redirects", content: redir },
               { name: "public/index.html", content: indexHtml },
-              { name: "راهنمای_نتلیفای_Edge.txt", content: guide }
+              { name: "public/about.html", content: aboutHtml },
+              { name: "public/contact.html", content: contactHtml },
+              { name: "public/style.css", content: styleCss },
+              { name: "README_FA.md", content: guide }
             ]);
             Vt("omni-netlify-edge-package.zip", zip);
             y("پکیج Netlify Edge Functions با موفقیت دانلود شد", "ok");
