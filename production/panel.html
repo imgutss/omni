@@ -11527,6 +11527,7 @@ Connection: close\r
     { id: "dashboard", icon: "dash", label: () => n("nav.dashboard") },
     { id: "users", icon: "users", label: () => n("nav.users") },
     { id: "configs", icon: "qr", label: () => n("nav.configs") },
+    { id: "national_net", icon: "shield", label: () => "🇮🇷 نت ملی (بای‌پس)" },
     { id: "mesh", icon: "activity", label: () => "Causal Mesh" },
     { id: "scanner", icon: "search", label: () => n("nav.scanner") },
     { id: "dns", icon: "globe", label: () => n("nav.dns") },
@@ -11587,6 +11588,7 @@ Connection: close\r
         scanner: n("nav.scanner"),
         dns: n("nav.dns"),
         configs: n("nav.configs"),
+        national_net: "🇮🇷 نت ملی (بای‌پس)",
         mesh: "Causal Mesh",
       }[e] || n("app.name")
     );
@@ -11626,6 +11628,9 @@ Connection: close\r
         break;
       case "mesh":
         e.innerHTML = MeshView(l);
+        break;
+      case "national_net":
+        e.innerHTML = NationalNetView(l);
         break;
       case "scanner":
         (e.innerHTML = Fe(l)),
