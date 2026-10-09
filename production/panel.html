@@ -10687,13 +10687,14 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
 
     let vercelDomain = (NATNET.vercelDomain || "omni-bridge.vercel.app").replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
 
-    // Green endpoints — live-tested 2026-10-09 with a REAL Xray client (socks→204):
-    // WS + TLS + CF clean IP carries traffic; every bridge-edge transport failed.
+    // Green endpoints v9.2 — CF clean-IP routes REMOVED (2026-10-09 night):
+    // the CF edge answers 101 from neutral networks, but Iranian carriers
+    // SNI-filter workers.dev on clean IPs → dead on real lines, not fixable
+    // from our side. Only the base domain + cloud relays survive.
     let verifiedDirectEndpoints = [
       ...(NATNET.denoEndpoints || []).map(x => ({ name: x.name, ip: x.ip, ping: "relay", relay: !!x.relay })),
       ...(NATNET.renderEndpoints || []).map(x => ({ name: x.name, ip: x.ip, ping: "relay", relay: !!x.relay })),
-      { name: "دامنهٔ خود ورکر (مستقیم)", ip: publicHost, ping: "پایه" },
-      ...NATNET_DATA.cf.cleanIps.map(ip => ({ name: `CF ${ip} (تست زنده ✅ Xray)`, ip, ping: "" }))
+      { name: "دامنهٔ خود ورکر (مستقیم)", ip: publicHost, ping: "پایه" }
     ];
 
     // relay rows (Deno): TLS SNI and WS Host MUST be the relay's own domain
@@ -10771,17 +10772,17 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
     </div>
     </div>
 
-  <!-- ================= 4 VERIFIED GREEN BENCHMARK ENDPOINTS ================= -->
+  <!-- ================= GREEN ROUTES: base + relays only (v9.2) ================= -->
   <div class="card" style="margin-top:16px;border-inline-start:4px solid #22c55e">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
       <div>
-        <b style="font-size:14px;color:#22c55e">⚡ روت‌های مستقیم فوق‌سریع + ۳۳ آی‌پی تمیز (تست زنده با کلاینت واقعی Xray — ۲۰۲۶-۱۰-۰۹)</b>
+        <b style="font-size:14px;color:#22c55e">⚡ روت‌های سبزِ اثبات‌شده روی خط خودت — پایه + رلهٔ ابری</b>
         <p class="muted" style="margin:4px 0 0 0;font-size:12px;line-height:1.7">
-          این ۴ روت مستقیماً با پینگ سبز در برنامه v2rayNG فعال و پاسخ‌دهنده هستند. در صورت اختلال در سرویس‌های ابری، به عنوان خط پشتیبان با سرعت بالا وصل می‌شوند.
+          روت‌های آی‌پی تمیز CF حذف شدند: لبهٔ CF سالم است ولی اپراتور ایرانی SNI روی workers.dev را فیلتر می‌کند و پینگ نمی‌دهد — از سمت ما قابل تعمیر نیست. آنچه این‌جا می‌بینی روی خط تو پینگ سبز داده است.
         </p>
       </div>
       <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(verifiedDirectUris.join('\n'))}">
-        📋 کپی هر ۴ کانفیگ سبز
+        📋 کپی کانفیگ‌های سبز (پایه + رله)
       </button>
     </div>
 
