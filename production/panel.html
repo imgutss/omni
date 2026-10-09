@@ -10142,24 +10142,37 @@ function xe(total) {
   };
 
   const NATNET_DATA = {
+    /* Live-verified 2026-10-09 against omni-bridge-okb6 / omni-net-okb6:
+       - Netlify's edge routes by the (encrypted) Host header even when the SNI
+         is another Netlify-hosted domain or a raw edge IP → the whitelisted-SNI
+         trick WORKS (200 + byte-identical tunnel page, POST/?ed= included).
+       - Vercel's edge now answers 403 when Host ≠ SNI → the old react.dev trick
+         is DEAD. Only direct SNI and clean-IP (defeats DNS poisoning) remain. */
+    verifiedAt: "2026-10-09",
     vercel: {
-      domains: [
-        "react.dev", "nextjs.org", "cursor.com", "ai.vercel.com", 
-        "api.vercel.com", "app.vercel.com", "blog.vercel.com", 
+      deadSniDomains: [
+        "react.dev", "nextjs.org", "cursor.com", "ai.vercel.com",
+        "api.vercel.com", "app.vercel.com", "blog.vercel.com",
         "botid.vercel.com", "analytics.vercel.com", "community.vercel.com",
         "turborepo.org", "swc.rs"
       ],
+      domains: [],
       ips: [
-        "76.76.21.21", "76.76.21.22", "76.76.21.98", "76.76.21.9",
-        "198.169.2.1", "198.169.2.65", "18.173.154.0", "18.173.154.27", 
-        "18.173.154.31", "18.173.154.32", "18.173.154.33", "18.173.154.59", 
-        "18.173.154.104", "18.173.154.111", "18.173.154.123", "18.173.154.129"
+        "76.76.21.21", "76.76.21.22", "76.76.21.98",
+        "198.169.2.1", "198.169.2.65"
       ]
     },
     netlify: {
-      domains: [],
+      domains: [
+        "helm.sh", "docs.helm.sh", "krew.sigs.k8s.io",
+        "kustomize.sigs.k8s.io", "letsencrypt.org"
+      ],
+      snis: [
+        "kubernetes.io", "letsencrypt.org", "helm.sh",
+        "blog.helm.sh", "docs.helm.sh", "krew.sigs.k8s.io"
+      ],
       ips: [
-        "104.198.14.52", "75.2.60.5", "99.83.231.61", "75.2.70.75"
+        "75.2.60.5", "104.198.14.52", "99.83.231.61"
       ]
     },
     fastly: {
@@ -10485,20 +10498,22 @@ export const config = { path: "/*" };`;
   }
 
   function natnetBuildBalancerJson(type, host, path, uuid, platform) {
-    let nodes = [];
+    const tag = platform === "vercel" ? "Vercel" : "Netlify";
+    let nodes = [{ name: `${tag}-direct`, address: host, sni: host, host: host, path: path, uuid: uuid }];
     if (platform === "vercel") {
-      NATNET_DATA.vercel.domains.forEach((d) => {
-        nodes.push({ name: `Vercel-${d}`, address: d, sni: d, host: host, path: path, uuid: uuid });
-      });
-      NATNET_DATA.vercel.ips.slice(0, 6).forEach((ip) => {
-        nodes.push({ name: `Vercel-CF-${ip}`, address: ip, sni: "react.dev", host: host, path: path, uuid: uuid });
+      /* SNI must stay the bridge itself (Host≠SNI ⇒ 403 at the edge since
+         2026-10); the clean IPs only defeat DNS poisoning / resolver blocks. */
+      NATNET_DATA.vercel.ips.forEach((ip) => {
+        nodes.push({ name: `Vercel-IP-${ip}`, address: ip, sni: host, host: host, path: path, uuid: uuid });
       });
     } else {
-      NATNET_DATA.netlify.domains.slice(0, 8).forEach((d) => {
-        nodes.push({ name: `Netlify-${d}`, address: d, sni: d, host: host, path: path, uuid: uuid });
+      NATNET_DATA.netlify.domains.forEach((d) => {
+        nodes.push({ name: `Netlify-DNS-${d}`, address: d, sni: d, host: host, path: path, uuid: uuid });
       });
-      NATNET_DATA.netlify.ips.slice(0, 8).forEach((ip) => {
-        nodes.push({ name: `Netlify-Shecan-${ip}`, address: ip, sni: "kubernetes.io", host: host, path: path, uuid: uuid });
+      NATNET_DATA.netlify.ips.forEach((ip) => {
+        NATNET_DATA.netlify.snis.forEach((sni) => {
+          nodes.push({ name: `Netlify-${sni}-${ip}`, address: ip, sni: sni, host: host, path: path, uuid: uuid });
+        });
       });
     }
 
@@ -10521,13 +10536,18 @@ export const config = { path: "/*" };`;
           ...outbounds,
           { protocol: "freedom", tag: "direct" }
         ],
+        observatory: {
+          subjectSelector: nodes.map((n) => n.name),
+          probeUrl: "http://cp.cloudflare.com/generate_204",
+          probeInterval: "45s"
+        },
         routing: {
           balancers: [{
-            tag: "omni-round-robin",
-            selector: platform === "vercel" ? ["Vercel-"] : ["Netlify-"],
-            strategy: { type: "roundRobin" }
+            tag: "omni-least-ping",
+            selector: nodes.map((n) => n.name),
+            strategy: { type: "leastPing" }
           }],
-          rules: [{ type: "field", network: "tcp,udp", balancerTag: "omni-round-robin" }]
+          rules: [{ type: "field", network: "tcp,udp", balancerTag: "omni-least-ping" }]
         }
       }, null, 2);
     } else {
@@ -10560,7 +10580,7 @@ export const config = { path: "/*" };`;
         tag: "AUTO-BALANCER",
         outbounds: nodes.map(n => n.name),
         url: "http://cp.cloudflare.com/generate_204",
-        interval: "3m",
+        interval: "1m",
         tolerance: 50
       };
       return JSON.stringify({
@@ -11083,9 +11103,9 @@ export const config = { path: "/*" };`;
           let core = s.dataset.core || "xray";
           let json = natnetBuildBalancerJson(core, host, xhttpPath, uuid, NATNET.bridgePlatform);
           Le({
-            title: `خروجی بالانسر چرخشی (${core === "xray" ? "Xray Balancer (Round-Robin)" : "Sing-box URL-Test (با Fragment)"})`,
+            title: `بالانسر تحریم‌شکن (${core === "xray" ? "Xray · leastPing + Observatory" : "Sing-box · URL-Test + Fragment"})`,
             body: `<div style="padding:10px">
-              <p class="muted" style="font-size:12px;margin:0 0 8px 0">این پیکربندی تمام نودهای ${NATNET.bridgePlatform === "vercel" ? "ورسل" : "نتلیفای"} را با چک خودکار سلامت و ترفندهای ضد فیلتر ادغام می‌کند:</p>
+              <p class="muted" style="font-size:12px;margin:0 0 8px 0">بررسی زنده ${NATNET_DATA.verifiedAt}: نتلیفای = SNI سفید‌لیست‌شده + آی‌پی لبه ✅ · ورسل = مستقیم و آی‌پی تمیز ✅ (ترفند SNI ورسل از این تاریخ ۴۰۳ می‌شود). بالانسر خودش نود مرده را کنار می‌گذارد:</p>
               <div class="codebox" style="max-height:240px;overflow:auto"><code dir="ltr">${a(json)}</code></div>
             </div>`,
             footer: `<button class="btn btn-primary" data-action="omni-copy" data-text="${a(json)}">${d("copy")} کپی متن JSON</button>

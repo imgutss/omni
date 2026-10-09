@@ -384,3 +384,44 @@ live panel HTML, the old tunnel-path response, the management account's
 could not be downloaded (`GET …/workers/scripts/omni-nova-f61e/content` → `405`
 `method_not_allowed` for that token's permission set) and the panel's own `RELEASES`
 KV namespace is empty, so those are the only rollback artifacts available.
+
+## 11. Sanction-breaker generator v7 (`tools/patch16.py`, deployed)
+
+Studied the blackout-era community toolkit (the "VLESS CONFIG GENERATOR V6.4" HTML
++ Telegram channel screenshots of the XHTTP-Installer method), then **live-verified
+every trick against our own okb6 bridges on 2026-10-09** before shipping anything:
+
+| Trick | Verdict (live) |
+|---|---|
+| Netlify: address = raw edge IP (`75.2.60.5`, `104.198.14.52`, `99.83.231.61`), SNI = whitelisted domain (`kubernetes.io`, `letsencrypt.org`, `helm.sh`, `blog.helm.sh`, `docs.helm.sh`, `krew.sigs.k8s.io`), Host = bridge | ✅ works — Netlify routes on the encrypted Host header; 200 + byte-identical tunnel page, POST `?ed=2048` included |
+| Netlify: address = SNI = whitelisted DNS domain (`helm.sh`, `docs.helm.sh`, `krew.sigs.k8s.io`, `kustomize.sigs.k8s.io`, `letsencrypt.org`), Host = bridge | ✅ works |
+| Vercel: whitelisted-SNI spoofing (`react.dev`, `nextjs.org`, `cursor.com`, …) | ❌ **dead** — edge answers 403 when Host ≠ SNI |
+| Vercel: clean IPs (`76.76.21.21/.22/.98`, `198.169.2.1/.65`) with SNI = bridge itself | ✅ works (defeats DNS poisoning only) |
+| `75.2.70.75`, Netlify IPv6 `…::258/::259`, `kubernetes.io` / `blog.helm.sh` as DNS addresses | ❌ dead (TLS failure / 429 — no longer Netlify-hosted) |
+
+Changes (`tools/patch16.py`, idempotent; run + `node production/build.mjs`):
+
+- **panel.html** — `NATNET_DATA` replaced with the verified tables (dead Vercel SNI
+  list kept as `deadSniDomains` documentation, `vercel.domains` emptied);
+  `natnetBuildBalancerJson` node builder rewritten (direct node first; Netlify =
+  5 DNS + 3 IP × 6 SNI = 24 nodes; Vercel = 5 clean IPs = 6 nodes); xray output
+  upgraded from roundRobin to **leastPing + Observatory (45 s probe)** with
+  `allowInsecure:false`/`fp:chrome`; sing-box urltest interval 3m → **1m**; modal
+  copy now states the live verdicts. New radio `omni-least-ping` + change handler.
+- **worker.js** — `buildBridgeSubscription` bot message gained one sanction-breaker
+  line (Netlify: `75.2.60.5` + `kubernetes.io`; Vercel: `76.76.21.21`), unicode-escaped.
+- **tools/sanction-generator.html (new)** — standalone offline v7 generator, the
+  better V6.4: paste any `vless://` link → rewrites it into all verified nodes;
+  outputs vless subscription list + Xray leastPing/Observatory JSON + Sing-box
+  URL-Test/fragment JSON; embeds the verification table. Playwright-checked:
+  24/6 nodes, both JSONs parse, rewriter decodes host+path, UUID guard, 0 JS errors.
+
+Deployed: omni version `7c4315dc-6d21-4a2d-8b19-3a0f8990f2de`, nova version
+`418567ec-0711-4885-b8f3-bafd76a23c90`, bundle SHA-256 `9888e028…ae49fd8`
+(identical file in `omni/deploy/` and `deploy-nova/`). All suites green after the
+patch: bridges 15/15, bot-bridge 16/16, local-smoke 15/15, scanner 18/18,
+playwright bridge 9/9, browser regression ok with 0 jsErrors.
+
+Note: the "Site not found"/404 pages in the user's screenshots were the **deleted
+cu67 test bridges**; the live pair is okb6 (Vercel `omni-bridge-okb6…vercel.app`,
+Netlify `omni-net-okb6.netlify.app`).

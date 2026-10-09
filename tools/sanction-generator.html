@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omni Sanction-Breaker Generator v7</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --line:#30363d; --tx:#e6edf3; --mut:#8b949e; --grn:#3fb950; --red:#f85149; --amb:#d29922; --acc:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--tx); font:14px/1.7 Vazirmatn, Tahoma, sans-serif; }
+  .wrap { max-width:960px; margin:0 auto; padding:18px 14px 60px; }
+  h1 { font-size:20px; margin:6px 0 2px; }
+  h2 { font-size:15px; margin:0 0 10px; color:var(--acc); }
+  .sub { color:var(--mut); font-size:12px; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:14px; }
+  label { display:block; color:var(--mut); font-size:12px; margin:8px 0 3px; }
+  input[type=text], textarea, select { width:100%; background:#0d1117; color:var(--tx); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:12px/1.6 Consolas, monospace; direction:ltr; text-align:left; }
+  textarea { resize:vertical; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:200px; }
+  button { background:#238636; color:#fff; border:0; border-radius:8px; padding:9px 18px; font:14px Vazirmatn, Tahoma; cursor:pointer; margin:4px 0 4px 8px; }
+  button.sec { background:#21262d; border:1px solid var(--line); color:var(--tx); }
+  button:hover { filter:brightness(1.12); }
+  .ok { color:var(--grn); } .bad { color:var(--red); } .warn { color:var(--amb); }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  td, th { border:1px solid var(--line); padding:6px 8px; text-align:right; }
+  th { background:#1c2129; color:var(--mut); font-weight:600; }
+  code { background:#0d1117; border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:11px; direction:ltr; display:inline-block; }
+  .badge { display:inline-block; border:1px solid var(--line); border-radius:20px; padding:2px 10px; font-size:11px; color:var(--mut); margin:2px 0 2px 6px; }
+  .hint { color:var(--mut); font-size:11px; margin-top:6px; }
+  #status { font-size:12px; min-height:18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛡 تحریم‌شکن Omni — نسخه ۷</h1>
+  <div class="sub">جانشین «VLESS CONFIG GENERATOR V6.4» · جدول‌ها <b class="ok">۲۰۲۶-۱۰-۰۹ زنده تست شده‌اند</b> (روی پل‌های واقعی omni) · ترفند SNI ورسل که در V6.4 بود الان <b class="bad">۴۰۳ می‌شود و حذف شد</b> · فقط فایل — بدون سرور، بدون اینترنت</div>
+
+  <div class="card">
+    <h2>۱) لینک فعلی‌ات را بچسبان (اختیاری)</h2>
+    <textarea id="paste" rows="2" placeholder="vless://uuid@host:443?..."></textarea>
+    <button class="sec" onclick="parsePaste()">تجزیه لینک ⏎</button>
+    <span id="status"></span>
+  </div>
+
+  <div class="card">
+    <h2>۲) مشخصات پل</h2>
+    <div class="row">
+      <div><label>UUID (از پنل ← کاربران)</label><input type="text" id="uuid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></div>
+      <div><label>دامنه پل (Host/SNI اصلی)</label><input type="text" id="host" placeholder="omni-net-okb6.netlify.app"></div>
+    </div>
+    <div class="row">
+      <div><label>مسیر تونل</label><input type="text" id="path" value="/VZLdh9Ft?ed=2048"></div>
+      <div><label>پلتفرم</label>
+        <select id="platform">
+          <option value="auto">تشخیص خودکار از دامنه</option>
+          <option value="netlify">Netlify</option>
+          <option value="vercel">Vercel</option>
+        </select>
+      </div>
+    </div>
+    <button onclick="build()">ساخت نودها و بالانسر ⚙</button>
+    <div class="hint">Netlify → ۲۴ نود (مستقیم + ۵ دامنه سفید + ۳ آی‌پی لبه × ۶ SNI) · Vercel → ۶ نود (مستقیم + ۵ آی‌پی تمیز ضد سم‌پاشی DNS)</div>
+  </div>
+
+  <div class="card" id="outLinks" style="display:none">
+    <h2>۳) لینک‌های vless (همه را یک‌جا کپی کن ← سابسکریپشن/Import)</h2>
+    <div id="badges"></div>
+    <textarea id="links" rows="10" readonly></textarea>
+    <button class="sec" onclick="cp('links')">کپی همه لینک‌ها 📋</button>
+  </div>
+
+  <div class="card" id="outXray" style="display:none">
+    <h2>۴) کانفیگ Xray — leastPing + Observatory (نود مرده خودکار حذف می‌شود)</h2>
+    <textarea id="xray" rows="10" readonly></textarea>
+    <button class="sec" onclick="cp('xray')">کپی JSON 📋</button>
+  </div>
+
+  <div class="card" id="outSing" style="display:none">
+    <h2>۵) کانفیگ Sing-box — URL-Test هر ۱ دقیقه + Fragment روی TLS</h2>
+    <textarea id="sing" rows="10" readonly></textarea>
+    <button class="sec" onclick="cp('sing')">کپی JSON 📋</button>
+  </div>
+
+  <div class="card">
+    <h2>📋 جدول راستی‌آزمایی زنده (۲۰۲۶-۱۰-۰۹)</h2>
+    <table>
+      <tr><th>ترفند</th><th>مقدار</th><th>وضعیت</th></tr>
+      <tr><td>Netlify — SNI سفید + آی‌پی لبه (Host = دامنه پل)</td><td><code>75.2.60.5</code> <code>104.198.14.52</code> <code>99.83.231.61</code> × SNI: <code>kubernetes.io</code> <code>letsencrypt.org</code> <code>helm.sh</code> <code>blog.helm.sh</code> <code>docs.helm.sh</code> <code>krew.sigs.k8s.io</code></td><td class="ok">✅ کار می‌کند (GET/POST یکی)</td></tr>
+      <tr><td>Netlify — دامنه DNS جای آدرس</td><td><code>helm.sh</code> <code>docs.helm.sh</code> <code>krew.sigs.k8s.io</code> <code>kustomize.sigs.k8s.io</code> <code>letsencrypt.org</code></td><td class="ok">✅ کار می‌کند</td></tr>
+      <tr><td>Vercel — آی‌پی تمیز (ضد سم‌پاشی DNS، SNI = خود پل)</td><td><code>76.76.21.21/.22/.98</code> <code>198.169.2.1/.65</code></td><td class="ok">✅ کار می‌کند</td></tr>
+      <tr><td>Vercel — SNI سفید (react.dev و…)</td><td><code>react.dev</code> <code>nextjs.org</code> <code>cursor.com</code> …</td><td class="bad">❌ مرده — لبه ورسل ۴۰۳ می‌دهد</td></tr>
+      <tr><td>Netlify — آی‌پی/دامنه مرده</td><td><code>75.2.70.75</code> <code>…::258/::259</code> <code>kubernetes.io</code>(DNS) <code>blog.helm.sh</code>(DNS)</td><td class="bad">❌ حذف شد (TLS fail / ۴۲۹)</td></tr>
+      <tr><td>WS روی پل</td><td>—</td><td class="warn">⚠️ ۲۰۰ می‌دهد نه ۱۰۱ — فقط xhttp/stream</td></tr>
+    </table>
+    <div class="hint">نکته V6.4: مقدار <code>insecure=1</code> لازم نیست (سرت لبه معتبر است) — اینجا <code>insecure=0</code> گذاشته شده. بالانسر نودهای مرده را خودش کنار می‌گذارد.</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ── Verified tables — live-tested 2026-10-09 against omni-bridge-okb6 / omni-net-okb6 ── */
+const DATA = {
+  verifiedAt: "2026-10-09",
+  netlify: {
+    domains: ["helm.sh", "docs.helm.sh", "krew.sigs.k8s.io", "kustomize.sigs.k8s.io", "letsencrypt.org"],
+    snis: ["kubernetes.io", "letsencrypt.org", "helm.sh", "blog.helm.sh", "docs.helm.sh", "krew.sigs.k8s.io"],
+    ips: ["75.2.60.5", "104.198.14.52", "99.83.231.61"]
+  },
+  vercel: { ips: ["76.76.21.21", "76.76.21.22", "76.76.21.98", "198.169.2.1", "198.169.2.65"] }
+};
+
+function st(msg, cls) { const e = document.getElementById("status"); e.textContent = msg; e.className = cls || ""; }
+
+function parsePaste() {
+  const raw = document.getElementById("paste").value.trim();
+  if (!raw) return st("اول یک لینک vless:// بچسبان", "warn");
+  const m = raw.match(/^vless:\/\/([^@]+)@([^:/?#]+)(?::(\d+))?(\?[^#]*)?(#.*)?$/i);
+  if (!m) return st("لینک vless معتبر نیست", "bad");
+  const uuid = m[1];
+  const q = new URLSearchParams((m[4] || "?").slice(1));
+  const host = q.get("host") || m[2];
+  let path = q.get("path") || "/";
+  try { path = decodeURIComponent(path); } catch {}
+  document.getElementById("uuid").value = uuid;
+  document.getElementById("host").value = host;
+  if (path && path !== "/") document.getElementById("path").value = path;
+  st("تجزیه شد ✔ — UUID و Host و مسیر پر شد؛ دکمه ساخت را بزن", "ok");
+}
+
+function detectPlatform(host) {
+  const sel = document.getElementById("platform").value;
+  if (sel !== "auto") return sel;
+  if (/\.netlify\.app$/i.test(host)) return "netlify";
+  if (/\.vercel\.app$/i.test(host)) return "vercel";
+  return null;
+}
+
+function buildNodes(platform, host, path, uuid) {
+  const tag = platform === "vercel" ? "Vercel" : "Netlify";
+  const nodes = [{ name: tag + "-direct", address: host, sni: host, host: host, path: path, uuid: uuid }];
+  if (platform === "vercel") {
+    DATA.vercel.ips.forEach(ip => nodes.push({ name: "Vercel-IP-" + ip, address: ip, sni: host, host: host, path: path, uuid: uuid }));
+  } else {
+    DATA.netlify.domains.forEach(d => nodes.push({ name: "Netlify-DNS-" + d, address: d, sni: d, host: host, path: path, uuid: uuid }));
+    DATA.netlify.ips.forEach(ip => DATA.netlify.snis.forEach(sni =>
+      nodes.push({ name: "Netlify-" + sni + "-" + ip, address: ip, sni: sni, host: host, path: path, uuid: uuid })));
+  }
+  return nodes;
+}
+
+function vlessUri(n) {
+  return "vless://" + n.uuid + "@" + n.address + ":443?encryption=none&security=tls" +
+    "&sni=" + encodeURIComponent(n.sni) + "&alpn=h2,http/1.1&insecure=0&allowInsecure=0" +
+    "&type=xhttp&host=" + encodeURIComponent(n.host) + "&path=" + encodeURIComponent(n.path) +
+    "&mode=auto&fragment=100-200,10-20,tlshello#" + encodeURIComponent("🇮🇷 " + n.name);
+}
+
+function xrayJson(nodes) {
+  const outbounds = nodes.map(n => ({
+    tag: n.name, protocol: "vless",
+    settings: { vnext: [{ address: n.address, port: 443, users: [{ id: n.uuid, encryption: "none" }] }] },
+    streamSettings: {
+      network: "xhttp", security: "tls",
+      tlsSettings: { serverName: n.sni, allowInsecure: false, fingerprint: "chrome" },
+      xhttpSettings: { host: n.host, path: n.path, mode: "auto" }
+    }
+  }));
+  return JSON.stringify({
+    log: { loglevel: "warning" },
+    inbounds: [{ port: 10808, protocol: "socks", settings: { auth: "noauth", udp: true }, sniffing: { enabled: true, destOverride: ["http", "tls"] } }],
+    outbounds: outbounds.concat([{ protocol: "freedom", tag: "direct" }]),
+    observatory: { subjectSelector: nodes.map(n => n.name), probeUrl: "http://cp.cloudflare.com/generate_204", probeInterval: "45s" },
+    routing: {
+      balancers: [{ tag: "omni-least-ping", selector: nodes.map(n => n.name), strategy: { type: "leastPing" } }],
+      rules: [{ type: "field", network: "tcp,udp", balancerTag: "omni-least-ping" }, { type: "field", ip: ["geoip:private"], outboundTag: "direct" }]
+    }
+  }, null, 2);
+}
+
+function singJson(nodes) {
+  const outbounds = nodes.map(n => ({
+    type: "vless", tag: n.name, server: n.address, server_port: 443, uuid: n.uuid,
+    tls: { enabled: true, server_name: n.sni, insecure: false, utls: { enabled: true, fingerprint: "chrome" },
+           fragment: { enabled: true, length: "100-200", interval: "10-20" } },
+    transport: { type: "xhttp", host: n.host, path: n.path, mode: "auto" }
+  }));
+  return JSON.stringify({
+    log: { level: "warn" },
+    inbounds: [{ type: "mixed", tag: "mixed-in", listen: "127.0.0.1", listen_port: 20808 }],
+    outbounds: [
+      { type: "urltest", tag: "AUTO-BALANCER", outbounds: nodes.map(n => n.name), url: "http://cp.cloudflare.com/generate_204", interval: "1m", tolerance: 50 },
+      ...outbounds,
+      { type: "direct", tag: "direct" }
+    ]
+  }, null, 2);
+}
+
+function build() {
+  const uuid = document.getElementById("uuid").value.trim();
+  const host = document.getElementById("host").value.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+  const path = document.getElementById("path").value.trim() || "/";
+  if (!/^[0-9a-fA-F-]{36}$/.test(uuid)) return st("UUID معتبر (۳۶ نویسه) وارد کن", "bad");
+  if (!host) return st("دامنه پل را وارد کن", "bad");
+  const platform = detectPlatform(host);
+  if (!platform) return st("پلتفرم از دامنه تشخیص نشد — دستی Netlify/Vercel را انتخاب کن", "warn");
+  const nodes = buildNodes(platform, host, path, uuid);
+  document.getElementById("links").value = nodes.map(vlessUri).join("\n");
+  document.getElementById("xray").value = xrayJson(nodes);
+  document.getElementById("sing").value = singJson(nodes);
+  document.getElementById("badges").innerHTML =
+    '<span class="badge ok">✅ ' + nodes.length + ' نود</span>' +
+    '<span class="badge">' + (platform === "vercel" ? "Vercel" : "Netlify") + '</span>' +
+    '<span class="badge">جدول‌ها: ' + DATA.verifiedAt + '</span>' +
+    '<span class="badge">xhttp · mode=auto · fragment</span>';
+  ["outLinks", "outXray", "outSing"].forEach(id => document.getElementById(id).style.display = "block");
+  st("ساخته شد ✔", "ok");
+}
+
+function cp(id) {
+  const el = document.getElementById(id);
+  el.select();
+  (navigator.clipboard ? navigator.clipboard.writeText(el.value) : Promise.reject())
+    .then(() => st("کپی شد 📋", "ok"))
+    .catch(() => { document.execCommand("copy"); st("کپی شد 📋", "ok"); });
+}
+</script>
+</body>
+</html>
