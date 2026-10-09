@@ -562,3 +562,18 @@ the old-format SNI-front card removed; a permanent verdict notice explains why.
 Ready Deno rows now auto-populate the green relay configs on page load
 (no extra «use» click). Bridge engine backend kept (HTTP mirrors still work
 for browser access); client configs = Deno relay + CF clean IPs only.
+
+## 19. Cloud-relay roadmap verdict (which platform next, 2026-10-09)
+
+Checked 2026 billing/sleep facts before recommending:
+- **Render** = stage 1: permanent free plan, NO card, open from IR (FRA), full WS;
+  15-min idle sleep neutralised by a worker-cron keepalive ping.
+- **Fly.io** = stage 2 (gated on user account/card): best ping (fra/ams) and UDP
+  (Reality/Hysteria2) but no free tier since 2024 (trial ≈ 2 VM-hours), ≈$5/mo.
+- **Koyeb** = skipped: card + $29 pre-auth hold since Feb 2026 AND scale-to-zero
+  after 1 h idle (1–5 s wake) — worse than Render on every axis for a VPN relay.
+- **Railway** = skipped (paid trial only). **Fastly** = skipped (no long-lived
+  connections by design).
+Panel: permanent roadmap card in the national-net view with these stages.
+Render engine (GitHub-repo + Render API auto-deploy, Deno-style) starts on the
+user's «اوکی».
