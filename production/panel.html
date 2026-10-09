@@ -10149,6 +10149,8 @@ function xe(total) {
        - Vercel's edge now answers 403 when Host ≠ SNI → the old react.dev trick
          is DEAD. Only direct SNI and clean-IP (defeats DNS poisoning) remain. */
     verifiedAt: "2026-10-09",
+    cf: { cleanIps: ["104.16.5.5", "104.18.32.1", "162.159.130.25", "188.114.96.3"] },
+    cf: { cleanIps: ["104.16.5.5", "104.18.32.1", "162.159.130.25", "188.114.96.3"] },
     vercel: {
       deadSniDomains: [
         "react.dev", "nextjs.org", "cursor.com", "ai.vercel.com",
@@ -10498,24 +10500,15 @@ export const config = { path: "/*" };`;
   }
 
   function natnetBuildBalancerJson(type, host, path, uuid, platform) {
-    const tag = platform === "vercel" ? "Vercel" : "Netlify";
-    let nodes = [{ name: `${tag}-direct`, address: host, sni: host, host: host, path: path, uuid: uuid }];
-    if (platform === "vercel") {
-      /* SNI must stay the bridge itself (Host≠SNI ⇒ 403 at the edge since
-         2026-10); the clean IPs only defeat DNS poisoning / resolver blocks. */
-      NATNET_DATA.vercel.ips.forEach((ip) => {
-        nodes.push({ name: `Vercel-IP-${ip}`, address: ip, sni: host, host: host, path: path, uuid: uuid });
-      });
-    } else {
-      NATNET_DATA.netlify.domains.forEach((d) => {
-        nodes.push({ name: `Netlify-DNS-${d}`, address: d, sni: d, host: host, path: path, uuid: uuid });
-      });
-      NATNET_DATA.netlify.ips.forEach((ip) => {
-        NATNET_DATA.netlify.snis.forEach((sni) => {
-          nodes.push({ name: `Netlify-${sni}-${ip}`, address: ip, sni: sni, host: host, path: path, uuid: uuid });
-        });
-      });
-    }
+    /* 2026-10-09: the only client transport proven end-to-end (real Xray,
+       socks→204) is WS+TLS to Cloudflare: direct workers.dev domain or a clean
+       CF anycast IP with SNI/Host = the panel domain. Bridges carry no client
+       traffic, so the balancer is built from the CF set regardless of platform. */
+    const panelHost = (typeof location !== "undefined" && location.hostname) ? location.hostname : host;
+    let nodes = [{ name: "CF-direct", address: panelHost, sni: panelHost, host: panelHost, path: path, uuid: uuid }];
+    NATNET_DATA.cf.cleanIps.forEach((ip) => {
+      nodes.push({ name: `CF-IP-${ip}`, address: ip, sni: panelHost, host: panelHost, path: path, uuid: uuid });
+    });
 
     if (type === "xray") {
       let outbounds = nodes.map(n => ({
@@ -10523,11 +10516,10 @@ export const config = { path: "/*" };`;
         protocol: "vless",
         settings: { vnext: [{ address: n.address, port: 443, users: [{ id: n.uuid, encryption: "none" }] }] },
         streamSettings: {
-          network: "xhttp",
+          network: "ws",
           security: "tls",
-          tlsSettings: { serverName: n.sni, allowInsecure: true },
-          xhttpSettings: { host: n.host, path: n.path, mode: "auto" },
-          sockopt: { dialerProxy: "" }
+          tlsSettings: { serverName: n.sni, allowInsecure: false, fingerprint: "chrome", alpn: ["http/1.1"] },
+          wsSettings: { host: n.host, path: n.path, headers: { Pragma: "no-cache" } }
         }
       }));
       return JSON.stringify({
@@ -10568,12 +10560,7 @@ export const config = { path: "/*" };`;
             interval: "10-20"
           }
         },
-        transport: {
-          type: "xhttp",
-          host: n.host,
-          path: n.path,
-          mode: "auto"
-        }
+        transport: { type: "ws", host: n.host, path: n.path, headers: { Pragma: "no-cache" } }
       }));
       let balancer = {
         type: "urltest",
@@ -10697,6 +10684,8 @@ export const config = { path: "/*" };`;
           ${r.domain ? `<button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-auto-use" data-plat="${platform}" data-domain="${a(r.domain)}">📥 استفاده در کانفیگ‌ها</button>` : ""}
           ${r.url ? `<a class="btn btn-xs" href="${a(r.url)}" target="_blank" rel="noopener">🌐 باز کردن</a>` : ""}
           ${r.dashboard_url ? `<a class="btn btn-xs" href="${a(r.dashboard_url)}" target="_blank" rel="noopener">🎛 داشبورد</a>` : ""}
+          <button class="btn btn-xs" type="button" data-action="omni-bridge-ping" data-row="${Number(r.id)}" data-domain="${a(r.domain || "")}" data-path="${a(r.tunnel_path || "")}">🩺 تست زنده</button><span id="bp-${Number(r.id)}" style="font-size:11px"></span>
+          <button class="btn btn-xs" type="button" data-action="omni-bridge-ping" data-row="${Number(r.id)}" data-domain="${a(r.domain || "")}" data-path="${a(r.tunnel_path || "")}">🩺 تست زنده</button><span id="bp-${Number(r.id)}" style="font-size:11px"></span>
           <button class="btn btn-xs" type="button" data-action="omni-natnet-auto-redeploy" data-id="${Number(r.id)}" data-plat="${platform}">♻️ دیپلوی دوباره</button>
           ${r.error ? `<div style="flex-basis:100%" class="muted" dir="ltr"><code style="font-size:11px">${a(String(r.error).slice(0, 180))}</code></div>` : ""}
         </div>`).join("")}
@@ -10727,33 +10716,26 @@ export const config = { path: "/*" };`;
 
     let vercelDomain = (NATNET.vercelDomain || "omni-bridge.vercel.app").replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
 
-    // 4 Verified Green Benchmark Endpoints (Tested live with Xray: 58ms - 126ms in Iran)
+    // Green endpoints — live-tested 2026-10-09 with a REAL Xray client (socks→204):
+    // WS + TLS + CF clean IP carries traffic; every bridge-edge transport failed.
     let verifiedDirectEndpoints = [
-      { name: "همراه اول (تست‌شده ۷۰ms)", ip: "188.114.96.73", ping: "70ms" },
-      { name: "ایرانسل (تست‌شده ۱۲۶ms)", ip: "162.159.192.140", ping: "126ms" },
-      { name: "مخابرات (تست‌شده ۵۸ms)", ip: "162.159.137.74", ping: "58ms" },
-      { name: "رایتل و شاتل (تست‌شده ۱۲۰ms)", ip: "162.159.195.1", ping: "120ms" }
+      { name: "دامنهٔ خود ورکر (مستقیم)", ip: publicHost, ping: "پایه" },
+      { name: "CF-1 104.16.5.5 (تست زنده ✅)", ip: "104.16.5.5", ping: "0.21s" },
+      { name: "CF-2 104.18.32.1 (تست زنده ✅)", ip: "104.18.32.1", ping: "0.37s" },
+      { name: "CF-3 162.159.130.25 (تست زنده ✅)", ip: "162.159.130.25", ping: "0.20s" },
+      { name: "CF-4 188.114.96.3 (تست زنده ✅)", ip: "188.114.96.3", ping: "1.8s" }
     ];
 
     let verifiedDirectUris = verifiedDirectEndpoints.map(item => 
       `vless://${uuid}@${item.ip}:443?encryption=none&security=tls&sni=${publicHost}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=ws&host=${publicHost}&path=${encodeURIComponent(xhttpPath)}&fragment=100-200,10-20,tlshello&fp=chrome#${encodeURIComponent("🇮🇷 " + item.name)}`
     );
 
-    // Vercel Relay Configs
-    let vercelDirectWs = `vless://${uuid}@${vercelDomain}:443?encryption=none&security=tls&sni=${vercelDomain}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=ws&host=${vercelDomain}&path=${encodeURIComponent(xhttpPath)}#${encodeURIComponent("🇮🇷 Vercel-WS (" + vercelDomain + ")")}`;
-    let vercelDirectXhttp = `vless://${uuid}@${vercelDomain}:443?encryption=none&security=tls&sni=${vercelDomain}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=xhttp&host=${vercelDomain}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Vercel-XHTTP (" + vercelDomain + ")")}`;
-    let vercelAnycastUris = ["76.76.21.21", "76.76.21.112", "76.76.21.98"].map(ip => 
-      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=${vercelDomain}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=ws&host=${vercelDomain}&path=${encodeURIComponent(xhttpPath)}&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Vercel-Anycast (" + ip + ")")}`
-    );
-    let allVercelUris = [vercelDirectWs, vercelDirectXhttp, ...vercelAnycastUris];
-
-    // Netlify Relay Configs
-    let netlifyDirectWs = `vless://${uuid}@${netlifyDomain}:443?encryption=none&security=tls&sni=${netlifyDomain}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=ws&host=${netlifyDomain}&path=${encodeURIComponent(xhttpPath)}#${encodeURIComponent("🇮🇷 Netlify-WS (" + netlifyDomain + ")")}`;
-    let netlifyDirectXhttp = `vless://${uuid}@${netlifyDomain}:443?encryption=none&security=tls&sni=${netlifyDomain}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=xhttp&host=${netlifyDomain}&path=${encodeURIComponent(xhttpPath)}&mode=auto&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Netlify-XHTTP (" + netlifyDomain + ")")}`
-    let netlifyAnycastUris = ["104.198.14.52", "75.2.60.5", "99.83.231.61"].map(ip => 
-      `vless://${uuid}@${ip}:443?encryption=none&security=tls&sni=${netlifyDomain}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=ws&host=${netlifyDomain}&path=${encodeURIComponent(xhttpPath)}&fragment=100-200,10-20,tlshello#${encodeURIComponent("🇮🇷 Netlify-Anycast (" + ip + ")")}`
-    );
-    let allNetlifyUris = [netlifyDirectWs, netlifyDirectXhttp, ...netlifyAnycastUris];
+    // 2026-10-09, real Xray client tests: NO client transport survives the
+    // Vercel/Netlify edge (WS upgrade refused → 200 not 101; the panel server
+    // speaks WS only, so xhttp clients fail everywhere). Bridges stay useful
+    // as HTTP mirrors for browser access — client traffic = CF WS below.
+    let allVercelUris = [];
+    let allNetlifyUris = [];
 
     let vercelRewriteCode = natnetVercelRewriteJson(publicHost);
     let vercelRelayCode = natnetVercelRelayJs(publicHost);
@@ -10849,9 +10831,7 @@ export const config = { path: "/*" };`;
             <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vercelRewriteCode)}">
               ${d("copy")} کپی متن vercel.json
             </button>
-            <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(allVercelUris.join('\n'))}">
-              📋 کپی همه کانفیگ‌های ورسل
-            </button>
+            <div class="badge warn" style="margin:4px 0">⛔ ترافیک کلاینت از لبهٔ ورسل رد نمی‌شود (نه WS، نه xhttp — تست زنده Xray). پل ورسل = آینهٔ HTTP برای مرورگر. کانفیگ‌های کاری: «endpointهای سبز» همین پایین.</div>
           </div>
           <details style="font-size:12px;margin-top:10px">
             <summary style="cursor:pointer;font-weight:600;color:var(--accent)">👁️ مشاهده فایل vercel.json</summary>
@@ -10888,31 +10868,25 @@ export const config = { path: "/*" };`;
         <div class="card" style="padding:12px;border-inline-start:3px solid var(--accent)">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
             <div>
-              <span class="badge ok">اتصال مستقیم WS</span>
+              <span class="badge warn">آینهٔ HTTP — فقط مرورگر</span>
               <b style="font-size:12.5px">${a(vercelDomain)}</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(vercelDirectWs)}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vercelDirectWs)}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelDirectWs)}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: ${a(vercelDomain)} · VLESS+WS</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Mirror: https://${a(vercelDomain)} — ورود به پنل از مرورگر وقتی دامنه فیلتر است</div>
         </div>
 
         <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
             <div>
-              <span class="badge ok">اتصال Anycast ورسل</span>
+              <span class="badge danger">ترافیک کلاینت: ❌ تست زنده</span>
               <b style="font-size:12.5px">76.76.21.21</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(vercelAnycastUris[0])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(vercelAnycastUris[0])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(vercelAnycastUris[0])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 76.76.21.21 · SNI: ${a(vercelDomain)}</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">WS upgrade در لبه ورسل رد می‌شود (۲۰۰ نه ۱۰۱) — کانفیگ کلاینت نسازید</div>
         </div>
       </div>
     </div>
@@ -10961,9 +10935,7 @@ export const config = { path: "/*" };`;
             <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(netlifyEdgeCode)}">
               ${d("copy")} کپی کد relay.js
             </button>
-            <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(allNetlifyUris.join('\n'))}">
-              📋 کپی همه کانفیگ‌های نتلیفای
-            </button>
+            <div class="badge warn" style="margin:4px 0">⛔ ترافیک کلاینت از لبهٔ نتلیفای رد نمی‌شود — پل نتلیفای = آینهٔ HTTP برای مرورگر (ورود به پنل وقتی دامنه فیلتر است). کانفیگ‌های کاری: «endpointهای سبز».</div>
           </div>
           <details style="font-size:12px;margin-top:10px">
             <summary style="cursor:pointer;font-weight:600;color:#00c7b7">👁️ مشاهده کد relay.js</summary>
@@ -10993,31 +10965,25 @@ export const config = { path: "/*" };`;
         <div class="card" style="padding:12px;border-inline-start:3px solid #00c7b7">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
             <div>
-              <span class="badge ok">اتصال مستقیم WS</span>
+              <span class="badge warn">آینهٔ HTTP — فقط مرورگر</span>
               <b style="font-size:12.5px">${a(netlifyDomain)}</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyDirectWs)}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyDirectWs)}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyDirectWs)}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: ${a(netlifyDomain)} · VLESS+WS</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">Mirror: https://${a(netlifyDomain)} — ورود به پنل از مرورگر وقتی دامنه فیلتر است</div>
         </div>
 
         <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
             <div>
-              <span class="badge ok">Anycast لبه نتلیفای</span>
+              <span class="badge danger">ترافیک کلاینت: ❌ تست زنده</span>
               <b style="font-size:12.5px">104.198.14.52</b>
             </div>
             <div style="display:flex;gap:5px">
-              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(netlifyAnycastUris[0])}">${d("copy")} کپی</button>
-              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(netlifyAnycastUris[0])}">📲 نصب</button>
-              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(netlifyAnycastUris[0])}">${d("qr")}</button>
             </div>
           </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Address: 104.198.14.52 · SNI: ${a(netlifyDomain)}</div>
+          <div class="muted mono" style="font-size:11px;margin-top:4px">WS upgrade در لبه نتلیفای رد می‌شود (۲۰۰ نه ۱۰۱) — کانفیگ کلاینت نسازید</div>
         </div>
       </div>
     </div>
@@ -11105,7 +11071,7 @@ export const config = { path: "/*" };`;
           Le({
             title: `بالانسر تحریم‌شکن (${core === "xray" ? "Xray · leastPing + Observatory" : "Sing-box · URL-Test + Fragment"})`,
             body: `<div style="padding:10px">
-              <p class="muted" style="font-size:12px;margin:0 0 8px 0">بررسی زنده ${NATNET_DATA.verifiedAt}: نتلیفای = SNI سفید‌لیست‌شده + آی‌پی لبه ✅ · ورسل = مستقیم و آی‌پی تمیز ✅ (ترفند SNI ورسل از این تاریخ ۴۰۳ می‌شود). بالانسر خودش نود مرده را کنار می‌گذارد:</p>
+              <p class="muted" style="font-size:12px;margin:0 0 8px 0">تست زنده با کلاینت واقعی Xray (${NATNET_DATA.verifiedAt}): ترافیک کلاینت فقط با WS روی آی‌پی تمیز کلاودفلر رد می‌شود ✅ — لبهٔ ورسل/نتلیفای نه WS upgrade می‌دهد نه سرور xhttp دارد ⛔ (پل‌ها فقط آینهٔ HTTP برای مرورگرند). این بالانسر = ۵ نود کاری CF و خودش نود مرده را کنار می‌گذارد:</p>
               <div class="codebox" style="max-height:240px;overflow:auto"><code dir="ltr">${a(json)}</code></div>
             </div>`,
             footer: `<button class="btn btn-primary" data-action="omni-copy" data-text="${a(json)}">${d("copy")} کپی متن JSON</button>
@@ -11130,6 +11096,22 @@ export const config = { path: "/*" };`;
         } else if (i === "omni-natnet-v2rayng") {
           let uri = s.dataset.uri || "";
           location.href = "v2rayng://install-config?url=" + encodeURIComponent(uri);
+        } else if (i === "omni-bridge-ping") {
+          const sp = document.getElementById(`bp-${s.dataset.row || 0}`);
+          if (sp) sp.innerHTML = `<span class="badge warn">…</span>`;
+          try {
+            const r = await b.post("/api/bridge/ping", { domain: s.dataset.domain || "", path: s.dataset.path || "" });
+            if (sp) sp.innerHTML = r.ok ? `<span class="badge ok">✅ ${r.status} · ${r.ms}ms</span>` : `<span class="badge danger">❌ ${r.status || "ERR"}</span>`;
+          } catch (err) { if (sp) sp.innerHTML = `<span class="badge danger">❌ ${a(String(err.message || err).slice(0, 60))}</span>`; }
+          return;
+        } else if (i === "omni-bridge-ping") {
+          const sp = document.getElementById(`bp-${s.dataset.row || 0}`);
+          if (sp) sp.innerHTML = `<span class="badge warn">…</span>`;
+          try {
+            const r = await b.post("/api/bridge/ping", { domain: s.dataset.domain || "", path: s.dataset.path || "" });
+            if (sp) sp.innerHTML = r.ok ? `<span class="badge ok">✅ ${r.status} · ${r.ms}ms</span>` : `<span class="badge danger">❌ ${r.status || "ERR"}</span>`;
+          } catch (err) { if (sp) sp.innerHTML = `<span class="badge danger">❌ ${a(String(err.message || err).slice(0, 60))}</span>`; }
+          return;
         } else if (i === "omni-natnet-auto-deploy" || i === "omni-natnet-auto-redeploy") {
           let plat = s.dataset.plat || NATNET.bridgePlatform || "vercel";
           let bridgeId = Number(s.dataset.id || 0);

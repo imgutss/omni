@@ -425,3 +425,40 @@ playwright bridge 9/9, browser regression ok with 0 jsErrors.
 Note: the "Site not found"/404 pages in the user's screenshots were the **deleted
 cu67 test bridges**; the live pair is okb6 (Vercel `omni-bridge-okb6…vercel.app`,
 Netlify `omni-net-okb6.netlify.app`).
+
+## 12. v8: the fake-ping post-mortem — what actually carries traffic
+
+User report (v2rayNG screenshots): bridge configs show a green ~312 ms "ping" but
+the real-delay test returns -1 ms. Root-caused with a REAL Xray client
+(v26.3.27, socks5 → generate_204) on 2026-10-09:
+
+| Path | Result |
+|---|---|
+| WS → panel workers.dev (direct) | ✅ 204, 0.33 s |
+| WS → CF clean IP (104.16.5.5 / 104.18.32.1 / 162.159.130.25 / 188.114.96.3) + SNI/Host = panel | ✅ 204, 0.20–1.8 s (172.64.45.20 ❌) |
+| XHTTP (auto / packet-up / stream-one, any ALPN, ±fragment) → panel direct | ❌ 000 — panel server implements WS only |
+| WS or XHTTP → Vercel/Netlify bridge | ❌ — edges refuse WS upgrade (200 not 101); xhttp has no server side |
+
+So the green numbers were TLS-handshake-only ("fake"); every client config that
+targeted a bridge edge was dead, including all of v7's xhttp sanction sets and
+the community V6.4 sets. v6/v7 "verified" probes had measured the HTTP mirror
+(byte-identical GET/POST), not a VLESS session — corrected here.
+
+v8 changes (`tools/patch17.py`, `tools/patch18.py`):
+- Green endpoints rebuilt from the live-verified CF WS set (direct + 4 IPs).
+- Bridge client configs removed; bridge cards relabelled «آینهٔ HTTP — فقط مرورگر».
+- Balancer JSON (xray leastPing / sing-box urltest) now emits WS CF nodes.
+- New `POST /api/bridge/ping` (admin): worker-side GET of `https://{domain}{tunnel}`
+  → {ok,status,ms}; bridge rows gained a 🩺 تست زنده button (shows the 404 on dead
+  bridges like the user's `ali-…` row).
+- Bot sanction line rewritten to the WS-CF truth.
+- `tools/sanction-generator.html` → v8 (CF WS primary, mirror table).
+- `production/test/bridge.test.mjs` updated: client configs must never target the
+  bridge edge and must be WS.
+
+Deployed: omni `6cb925bc-26e6-4e5b-bc52-84bde77afd83`, nova
+`69bd334b-018e-4f1f-9a1c-29174ef3b738`, bundle SHA `73f26966…ec8ac35e0ca0e`→
+see commit. Suites: 15+16+15+18+9 green, browser regression ok.
+
+Open items (awaiting user go-ahead): platform adapters (Deno Deploy = WS-capable
+relay; Fly.io/Koyeb = real xray/sing-box core ⇒ Reality/TUIC + honest pings).

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Omni Sanction-Breaker Generator v7</title>
+<title>Omni Sanction-Breaker Generator v8</title>
 <style>
   :root { --bg:#0d1117; --card:#161b22; --line:#30363d; --tx:#e6edf3; --mut:#8b949e; --grn:#3fb950; --red:#f85149; --amb:#d29922; --acc:#58a6ff; }
   * { box-sizing:border-box; }
@@ -33,8 +33,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>🛡 تحریم‌شکن Omni — نسخه ۷</h1>
-  <div class="sub">جانشین «VLESS CONFIG GENERATOR V6.4» · جدول‌ها <b class="ok">۲۰۲۶-۱۰-۰۹ زنده تست شده‌اند</b> (روی پل‌های واقعی omni) · ترفند SNI ورسل که در V6.4 بود الان <b class="bad">۴۰۳ می‌شود و حذف شد</b> · فقط فایل — بدون سرور، بدون اینترنت</div>
+  <h1>🛡 تحریم‌شکن Omni — نسخه ۸</h1>
+  <div class="sub">جانشین V6.4 و v7 · <b class="ok">۲۰۲۶-۱۰-۰۹ با کلاینت واقعی Xray تست شده</b> · درس بزرگ v7: ترافیک کلاینت از لبهٔ ورسل/نتلیفای <b class="bad">اصلاً رد نمی‌شود</b> (نه WS upgrade دارند، نه سرور xhttp) — پس ست کاری = <b>WS روی آی‌پی تمیز کلاودفلر</b> · پل‌ها = آینهٔ HTTP برای مرورگر</div>
 
   <div class="card">
     <h2>۱) لینک فعلی‌ات را بچسبان (اختیاری)</h2>
@@ -44,29 +44,22 @@
   </div>
 
   <div class="card">
-    <h2>۲) مشخصات پل</h2>
+    <h2>۲) مشخصات</h2>
     <div class="row">
       <div><label>UUID (از پنل ← کاربران)</label><input type="text" id="uuid" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></div>
-      <div><label>دامنه پل (Host/SNI اصلی)</label><input type="text" id="host" placeholder="omni-net-okb6.netlify.app"></div>
+      <div><label>دامنهٔ ورکر پنل (SNI/Host)</label><input type="text" id="host" placeholder="omni-nova-….workers.dev"></div>
     </div>
     <div class="row">
       <div><label>مسیر تونل</label><input type="text" id="path" value="/VZLdh9Ft?ed=2048"></div>
-      <div><label>پلتفرم</label>
-        <select id="platform">
-          <option value="auto">تشخیص خودکار از دامنه</option>
-          <option value="netlify">Netlify</option>
-          <option value="vercel">Vercel</option>
-        </select>
-      </div>
     </div>
-    <button onclick="build()">ساخت نودها و بالانسر ⚙</button>
-    <div class="hint">Netlify → ۲۴ نود (مستقیم + ۵ دامنه سفید + ۳ آی‌پی لبه × ۶ SNI) · Vercel → ۶ نود (مستقیم + ۵ آی‌پی تمیز ضد سم‌پاشی DNS)</div>
+    <button onclick="build()">ساخت نودهای کاری ⚙</button>
+    <div class="hint">خروجی: ۱ نود مستقیم + ۴ آی‌پی تمیز CF (همه WS+TLS، تست زنده ✅) + بالانسر Xray/Sing-box</div>
   </div>
 
   <div class="card" id="outLinks" style="display:none">
-    <h2>۳) لینک‌های vless (همه را یک‌جا کپی کن ← سابسکریپشن/Import)</h2>
+    <h2>۳) لینک‌های vless کاری (کپی همه ← Import در v2rayNG/Happ)</h2>
     <div id="badges"></div>
-    <textarea id="links" rows="10" readonly></textarea>
+    <textarea id="links" rows="8" readonly></textarea>
     <button class="sec" onclick="cp('links')">کپی همه لینک‌ها 📋</button>
   </div>
 
@@ -77,37 +70,31 @@
   </div>
 
   <div class="card" id="outSing" style="display:none">
-    <h2>۵) کانفیگ Sing-box — URL-Test هر ۱ دقیقه + Fragment روی TLS</h2>
+    <h2>۵) کانفیگ Sing-box — URL-Test هر ۱ دقیقه</h2>
     <textarea id="sing" rows="10" readonly></textarea>
     <button class="sec" onclick="cp('sing')">کپی JSON 📋</button>
   </div>
 
   <div class="card">
-    <h2>📋 جدول راستی‌آزمایی زنده (۲۰۲۶-۱۰-۰۹)</h2>
+    <h2>📋 جدول راستی‌آزمایی زنده (۲۰۲۶-۱۰-۰۹، کلاینت واقعی Xray → socks → 204)</h2>
     <table>
-      <tr><th>ترفند</th><th>مقدار</th><th>وضعیت</th></tr>
-      <tr><td>Netlify — SNI سفید + آی‌پی لبه (Host = دامنه پل)</td><td><code>75.2.60.5</code> <code>104.198.14.52</code> <code>99.83.231.61</code> × SNI: <code>kubernetes.io</code> <code>letsencrypt.org</code> <code>helm.sh</code> <code>blog.helm.sh</code> <code>docs.helm.sh</code> <code>krew.sigs.k8s.io</code></td><td class="ok">✅ کار می‌کند (GET/POST یکی)</td></tr>
-      <tr><td>Netlify — دامنه DNS جای آدرس</td><td><code>helm.sh</code> <code>docs.helm.sh</code> <code>krew.sigs.k8s.io</code> <code>kustomize.sigs.k8s.io</code> <code>letsencrypt.org</code></td><td class="ok">✅ کار می‌کند</td></tr>
-      <tr><td>Vercel — آی‌پی تمیز (ضد سم‌پاشی DNS، SNI = خود پل)</td><td><code>76.76.21.21/.22/.98</code> <code>198.169.2.1/.65</code></td><td class="ok">✅ کار می‌کند</td></tr>
-      <tr><td>Vercel — SNI سفید (react.dev و…)</td><td><code>react.dev</code> <code>nextjs.org</code> <code>cursor.com</code> …</td><td class="bad">❌ مرده — لبه ورسل ۴۰۳ می‌دهد</td></tr>
-      <tr><td>Netlify — آی‌پی/دامنه مرده</td><td><code>75.2.70.75</code> <code>…::258/::259</code> <code>kubernetes.io</code>(DNS) <code>blog.helm.sh</code>(DNS)</td><td class="bad">❌ حذف شد (TLS fail / ۴۲۹)</td></tr>
-      <tr><td>WS روی پل</td><td>—</td><td class="warn">⚠️ ۲۰۰ می‌دهد نه ۱۰۱ — فقط xhttp/stream</td></tr>
+      <tr><th>مسیر</th><th>جزئیات</th><th>وضعیت ترافیک کلاینت</th></tr>
+      <tr><td>WS مستقیم به دامنهٔ ورکر</td><td><code>type=ws</code> + TLS + SNI/Host = دامنه ورکر</td><td class="ok">✅ 0.33s</td></tr>
+      <tr><td>WS روی آی‌پی تمیز CF</td><td><code>104.16.5.5</code> <code>104.18.32.1</code> <code>162.159.130.25</code> <code>188.114.96.3</code> + SNI/Host = دامنه ورکر</td><td class="ok">✅ 0.20–1.8s</td></tr>
+      <tr><td>WS روی آی‌پی تمیز CF (مرده)</td><td><code>172.64.45.20</code></td><td class="bad">❌ حذف شد</td></tr>
+      <tr><td>ورسل/نتلیفای: WS یا xhttp یا SNI-trick</td><td>لبه WS upgrade نمی‌دهد (۲۰۰ نه ۱۰۱)؛ سرور پنل فقط WS دارد؛ SNI-trick ورسل ۴۰۳</td><td class="bad">⛔ ترافیک رد نمی‌شود</td></tr>
+      <tr><td>ورسل/نتلیفای به‌عنوان آینهٔ HTTP</td><td>مرورگر: <code>https://پل/مسیرتونل</code> → پنل باز می‌شود</td><td class="warn">✅ فقط مرورگر</td></tr>
     </table>
-    <div class="hint">نکته V6.4: مقدار <code>insecure=1</code> لازم نیست (سرت لبه معتبر است) — اینجا <code>insecure=0</code> گذاشته شده. بالانسر نودهای مرده را خودش کنار می‌گذارد.</div>
+    <div class="hint">پینگ‌های سبزِ بدون تست واقعی در کلاینت‌ها «فیک»اند (فقط دست‌دادن TLS با لبه). عدد واقعی = تست ترافیک از داخل تونل (در v2rayNG: منو ← Test real delay).</div>
   </div>
 </div>
 
 <script>
 "use strict";
-/* ── Verified tables — live-tested 2026-10-09 against omni-bridge-okb6 / omni-net-okb6 ── */
+/* Verified live 2026-10-09 with a real Xray client (socks5 → generate_204). */
 const DATA = {
   verifiedAt: "2026-10-09",
-  netlify: {
-    domains: ["helm.sh", "docs.helm.sh", "krew.sigs.k8s.io", "kustomize.sigs.k8s.io", "letsencrypt.org"],
-    snis: ["kubernetes.io", "letsencrypt.org", "helm.sh", "blog.helm.sh", "docs.helm.sh", "krew.sigs.k8s.io"],
-    ips: ["75.2.60.5", "104.198.14.52", "99.83.231.61"]
-  },
-  vercel: { ips: ["76.76.21.21", "76.76.21.22", "76.76.21.98", "198.169.2.1", "198.169.2.65"] }
+  cf: { cleanIps: ["104.16.5.5", "104.18.32.1", "162.159.130.25", "188.114.96.3"] }
 };
 
 function st(msg, cls) { const e = document.getElementById("status"); e.textContent = msg; e.className = cls || ""; }
@@ -117,43 +104,27 @@ function parsePaste() {
   if (!raw) return st("اول یک لینک vless:// بچسبان", "warn");
   const m = raw.match(/^vless:\/\/([^@]+)@([^:/?#]+)(?::(\d+))?(\?[^#]*)?(#.*)?$/i);
   if (!m) return st("لینک vless معتبر نیست", "bad");
-  const uuid = m[1];
   const q = new URLSearchParams((m[4] || "?").slice(1));
-  const host = q.get("host") || m[2];
+  const host = q.get("host") || q.get("sni") || m[2];
   let path = q.get("path") || "/";
   try { path = decodeURIComponent(path); } catch {}
-  document.getElementById("uuid").value = uuid;
-  document.getElementById("host").value = host;
+  document.getElementById("uuid").value = m[1];
+  document.getElementById("host").value = host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
   if (path && path !== "/") document.getElementById("path").value = path;
-  st("تجزیه شد ✔ — UUID و Host و مسیر پر شد؛ دکمه ساخت را بزن", "ok");
+  st("تجزیه شد ✔ — اگر لینکت روی پل ورسل/نتلیفای بود، host واقعی همان دامنهٔ ورکر است؛ دکمه ساخت را بزن", "ok");
 }
 
-function detectPlatform(host) {
-  const sel = document.getElementById("platform").value;
-  if (sel !== "auto") return sel;
-  if (/\.netlify\.app$/i.test(host)) return "netlify";
-  if (/\.vercel\.app$/i.test(host)) return "vercel";
-  return null;
-}
-
-function buildNodes(platform, host, path, uuid) {
-  const tag = platform === "vercel" ? "Vercel" : "Netlify";
-  const nodes = [{ name: tag + "-direct", address: host, sni: host, host: host, path: path, uuid: uuid }];
-  if (platform === "vercel") {
-    DATA.vercel.ips.forEach(ip => nodes.push({ name: "Vercel-IP-" + ip, address: ip, sni: host, host: host, path: path, uuid: uuid }));
-  } else {
-    DATA.netlify.domains.forEach(d => nodes.push({ name: "Netlify-DNS-" + d, address: d, sni: d, host: host, path: path, uuid: uuid }));
-    DATA.netlify.ips.forEach(ip => DATA.netlify.snis.forEach(sni =>
-      nodes.push({ name: "Netlify-" + sni + "-" + ip, address: ip, sni: sni, host: host, path: path, uuid: uuid })));
-  }
+function buildNodes(host, path, uuid) {
+  const nodes = [{ name: "CF-direct", address: host, sni: host, host: host, path: path, uuid: uuid }];
+  DATA.cf.cleanIps.forEach(ip => nodes.push({ name: "CF-IP-" + ip, address: ip, sni: host, host: host, path: path, uuid: uuid }));
   return nodes;
 }
 
 function vlessUri(n) {
   return "vless://" + n.uuid + "@" + n.address + ":443?encryption=none&security=tls" +
-    "&sni=" + encodeURIComponent(n.sni) + "&alpn=h2,http/1.1&insecure=0&allowInsecure=0" +
-    "&type=xhttp&host=" + encodeURIComponent(n.host) + "&path=" + encodeURIComponent(n.path) +
-    "&mode=auto&fragment=100-200,10-20,tlshello#" + encodeURIComponent("🇮🇷 " + n.name);
+    "&sni=" + encodeURIComponent(n.sni) + "&alpn=http/1.1&insecure=0&allowInsecure=0" +
+    "&type=ws&host=" + encodeURIComponent(n.host) + "&path=" + encodeURIComponent(n.path) +
+    "&fp=chrome#" + encodeURIComponent("🇮🇷 " + n.name);
 }
 
 function xrayJson(nodes) {
@@ -161,9 +132,9 @@ function xrayJson(nodes) {
     tag: n.name, protocol: "vless",
     settings: { vnext: [{ address: n.address, port: 443, users: [{ id: n.uuid, encryption: "none" }] }] },
     streamSettings: {
-      network: "xhttp", security: "tls",
-      tlsSettings: { serverName: n.sni, allowInsecure: false, fingerprint: "chrome" },
-      xhttpSettings: { host: n.host, path: n.path, mode: "auto" }
+      network: "ws", security: "tls",
+      tlsSettings: { serverName: n.sni, allowInsecure: false, fingerprint: "chrome", alpn: ["http/1.1"] },
+      wsSettings: { host: n.host, path: n.path, headers: { Pragma: "no-cache" } }
     }
   }));
   return JSON.stringify({
@@ -181,9 +152,8 @@ function xrayJson(nodes) {
 function singJson(nodes) {
   const outbounds = nodes.map(n => ({
     type: "vless", tag: n.name, server: n.address, server_port: 443, uuid: n.uuid,
-    tls: { enabled: true, server_name: n.sni, insecure: false, utls: { enabled: true, fingerprint: "chrome" },
-           fragment: { enabled: true, length: "100-200", interval: "10-20" } },
-    transport: { type: "xhttp", host: n.host, path: n.path, mode: "auto" }
+    tls: { enabled: true, server_name: n.sni, insecure: false, utls: { enabled: true, fingerprint: "chrome" } },
+    transport: { type: "ws", host: n.host, path: n.path, headers: { Pragma: "no-cache" } }
   }));
   return JSON.stringify({
     log: { level: "warn" },
@@ -201,18 +171,15 @@ function build() {
   const host = document.getElementById("host").value.trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
   const path = document.getElementById("path").value.trim() || "/";
   if (!/^[0-9a-fA-F-]{36}$/.test(uuid)) return st("UUID معتبر (۳۶ نویسه) وارد کن", "bad");
-  if (!host) return st("دامنه پل را وارد کن", "bad");
-  const platform = detectPlatform(host);
-  if (!platform) return st("پلتفرم از دامنه تشخیص نشد — دستی Netlify/Vercel را انتخاب کن", "warn");
-  const nodes = buildNodes(platform, host, path, uuid);
+  if (!host) return st("دامنهٔ ورکر را وارد کن", "bad");
+  const nodes = buildNodes(host, path, uuid);
   document.getElementById("links").value = nodes.map(vlessUri).join("\n");
   document.getElementById("xray").value = xrayJson(nodes);
   document.getElementById("sing").value = singJson(nodes);
   document.getElementById("badges").innerHTML =
-    '<span class="badge ok">✅ ' + nodes.length + ' نود</span>' +
-    '<span class="badge">' + (platform === "vercel" ? "Vercel" : "Netlify") + '</span>' +
-    '<span class="badge">جدول‌ها: ' + DATA.verifiedAt + '</span>' +
-    '<span class="badge">xhttp · mode=auto · fragment</span>';
+    '<span class="badge ok">✅ ' + nodes.length + ' نود کاری</span>' +
+    '<span class="badge">WS + TLS + CF</span>' +
+    '<span class="badge">جدول‌ها: ' + DATA.verifiedAt + '</span>';
   ["outLinks", "outXray", "outSing"].forEach(id => document.getElementById(id).style.display = "block");
   st("ساخته شد ✔", "ok");
 }

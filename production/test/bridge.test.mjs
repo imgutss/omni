@@ -129,7 +129,12 @@ try {
     assert.equal((await page.inputValue('#natnet-bridge-domain')).trim(), NEW_DOMAIN);
     const uris = await page.locator('[data-uri]').evaluateAll((els) => els.map((e) => e.dataset.uri).filter((v) => v.startsWith('vless://')));
     assert.ok(uris.length >= 2, 'no vless configs rendered');
-    assert.ok(uris.some((v) => new URL(v).hostname === NEW_DOMAIN), 'generated config does not use the deployed domain');
+    // v8 (2026-10-09): client configs must NEVER target the bridge edge — no
+    // client transport survives it. They target the panel over CF WS instead.
+    assert.ok(uris.every((v) => new URL(v).hostname !== NEW_DOMAIN), 'bridge edge must not appear in client configs');
+    assert.ok(uris.every((v) => v.includes('type=ws')), 'client configs must be WS');
+    const body = await page.evaluate(() => document.body.innerText);
+    assert.ok(body.includes(NEW_DOMAIN), 'mirror card must still show the deployed bridge domain');
     assert(!page.url().includes('about:blank'));
   });
 
