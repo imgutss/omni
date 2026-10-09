@@ -331,3 +331,56 @@ the schedule with an API token.
 **Not committed by design:** `.wrangler/`, `node_modules/`, Playwright screenshots,
 and any credential. No token — Vercel, Netlify, Telegram or GitHub — appears anywhere
 in this repository.
+## 10. The bridges were re-pointed at the real panel — 2026-10-09 08:22 UTC
+
+Section 7 deployed both bridges against the *management* worker
+(`omni.4lifm29.workers.dev`, tunnel path `/JOGpAVgq`) because that was the panel
+the bot resolves from its own D1. The panel that actually serves proxy clients is
+`omni-nova-f61e.catclient-59gk2mui.workers.dev` in a **second Cloudflare account**
+(`1cec82a30519cab690a42d5fd872b30d`, tunnel path `/VZLdh9Ft`), so the two test
+bridges were deleted and rebuilt against that target.
+
+That panel was also running an older build with no automatic bridge UI, so it was
+upgraded first with the same artifact (version `15c4c710-1603-4a57-b4ac-8dc6f561d05d`).
+Before touching it, the old and new frontends were compared marker by marker: the
+new panel keeps all 64 element ids, all 104 `data-action` values, all 157 functions
+and all 56 i18n keys of the old one and only adds the five `omni-natnet-auto-*`
+actions — a strict superset, so nothing the user had disappears. Bindings were
+mirrored (D1 only) plus the four plain vars, **without** `BOT_TOKEN`, so the panel
+cannot touch Telegram or steal the webhook from the management worker. Its
+`*/5 * * * *` cron was already set and stayed.
+
+| | Vercel | Netlify |
+|---|---|---|
+| project / site | `omni-bridge-okb6` | `omni-net-okb6` |
+| domain | `omni-bridge-okb6-4lifm27-4000s-projects.vercel.app` | `omni-net-okb6.netlify.app` |
+| build time | 8.5 s | 2.8 s |
+| target | `omni-nova-f61e.catclient-59gk2mui.workers.dev` | same |
+| tunnel path | `/VZLdh9Ft` | `/VZLdh9Ft` |
+
+Verified against the live panel:
+
+```
+GET  /VZLdh9Ft              200  869 B  identical on both bridges
+GET  /VZLdh9Ft?ed=2048      200  869 B  identical
+POST /VZLdh9Ft   (1.2 KB)   200  869 B  identical
+POST /VZLdh9Ft?ed=2048      200  869 B  identical
+PUT  /VZLdh9Ft              200  869 B  identical
+GET  /VZLdh9Ft/sub          200  869 B  identical  (sub-paths are proxied)
+GET  /sub/VZLdh9Ft          404        on the bridges, 200 on the panel — by design,
+                                       only the tunnel path and its sub-tree are proxied
+GET  /                      200  decoy page on both, panel not leaked
+GET  /__bridge              vercel {"ok":true,"status":200,"ms":155,"relay":"omni-vercel"}
+                            netlify serves the decoy (redirect-only proxy, expected)
+```
+
+So the transport clients actually use — XHTTP `POST`/`GET` with `?ed=2048` and a
+body — is confirmed working through both bridges, byte-for-byte.
+
+`deploy-nova/wrangler.toml` (outside the repo) holds the exact config used for the
+panel upgrade, and `/home/user/backups/` holds the pre-upgrade artifacts: the old
+live panel HTML, the old tunnel-path response, the management account's
+`releases/current` bundle and the panel's binding record. The old script itself
+could not be downloaded (`GET …/workers/scripts/omni-nova-f61e/content` → `405`
+`method_not_allowed` for that token's permission set) and the panel's own `RELEASES`
+KV namespace is empty, so those are the only rollback artifacts available.
