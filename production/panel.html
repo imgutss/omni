@@ -10150,6 +10150,7 @@ function xe(total) {
        - Vercel's edge now answers 403 when Host ≠ SNI → the old react.dev trick
          is DEAD. Only direct SNI and clean-IP (defeats DNS poisoning) remain. */
     verifiedAt: "2026-10-09",
+    expDomains: ["www.ncnk.org", "dokteronline.com", "www.renewableenergyhub.co.uk", "www.sos-accessoire.com", "community.rocketeergames.com", "image.evidea.com"],
     cf: { cleanIps: ["104.16.5.5", "104.18.32.1", "162.159.130.25", "188.114.96.3", "104.16.1.1", "104.16.2.2", "104.16.8.8", "104.16.16.16", "104.16.32.32", "104.16.64.64", "104.16.128.128", "104.17.3.3", "104.17.64.64", "104.18.8.8", "104.18.64.64", "104.19.16.16", "104.19.64.64", "104.20.5.5", "104.21.9.9", "104.21.64.64", "104.24.8.8", "104.25.16.16", "141.101.120.120", "162.159.128.128", "162.159.192.140", "162.159.137.74", "162.159.195.1", "188.114.96.73", "188.114.97.97", "188.114.98.98", "188.114.99.99", "190.93.244.244", "190.93.245.245"] },
     vercel: {
       deadSniDomains: [
@@ -10694,7 +10695,8 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
     let verifiedDirectEndpoints = [
       ...(NATNET.denoEndpoints || []).map(x => ({ name: x.name, ip: x.ip, ping: "relay", relay: !!x.relay })),
       ...(NATNET.renderEndpoints || []).map(x => ({ name: x.name, ip: x.ip, ping: "relay", relay: !!x.relay })),
-      { name: "دامنهٔ خود ورکر (مستقیم)", ip: publicHost, ping: "پایه" }
+      { name: "دامنهٔ خود ورکر (مستقیم)", ip: publicHost, ping: "پایه" },
+      ...NATNET_DATA.expDomains.map(d => ({ name: "🧪 آدرس دامنه‌ای — " + d, ip: d, ping: "آزمایشی" }))
     ];
 
     // relay rows (Deno): TLS SNI and WS Host MUST be the relay's own domain
@@ -10778,7 +10780,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       <div>
         <b style="font-size:14px;color:#22c55e">⚡ روت‌های سبزِ اثبات‌شده روی خط خودت — پایه + رلهٔ ابری</b>
         <p class="muted" style="margin:4px 0 0 0;font-size:12px;line-height:1.7">
-          روت‌های آی‌پی تمیز CF حذف شدند: لبهٔ CF سالم است ولی اپراتور ایرانی SNI روی workers.dev را فیلتر می‌کند و پینگ نمی‌دهد — از سمت ما قابل تعمیر نیست. آنچه این‌جا می‌بینی روی خط تو پینگ سبز داده است.
+          روت‌های آی‌پی تمیز CF حذف شدند: لبهٔ CF سالم است ولی اپراتور ایرانی SNI روی workers.dev را فیلتر می‌کند و پینگ نمی‌دهد — از سمت ما قابل تعمیر نیست. ردیف‌های 🧪 آدرس‌های دامنه‌ای از لیست جدید تو هستند (لبه زنده: 101) — روی خط خودت پینگ بگیر؛ سبز بود بگو تا دائمی و داخل اشتراکشان کنم.
         </p>
       </div>
       <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(verifiedDirectUris.join('\n'))}">
