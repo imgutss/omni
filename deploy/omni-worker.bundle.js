@@ -3636,7 +3636,7 @@ ${panelStatusLabel(health.state)}`, { reply_markup: panelActionsKeyboard(refresh
       }
       const title = { autoheal: "تعمیر خودکار و بازیابی پنل", usage: "\u06AF\u0632\u0627\u0631\u0634 \u0645\u0635\u0631\u0641 \u0648 \u062D\u062F\u0648\u062F \u0631\u0627\u06CC\u06AF\u0627\u0646 Cloudflare", update: "\u0622\u067E\u062F\u06CC\u062A/\u062A\u0639\u0645\u06CC\u0631 Worker", rollback: "\u0628\u0627\u0632\u06AF\u0634\u062A \u0646\u0633\u062E\u0647\u0654 Worker", backup: "\u0628\u06A9\u0627\u067E \u062F\u06CC\u062A\u0627\u0628\u06CC\u0633", backupstatus: "\u067E\u06CC\u06AF\u06CC\u0631\u06CC \u0628\u06A9\u0627\u067E", dbrollback: "\u0628\u0627\u0632\u06AF\u0634\u062A \u062F\u06CC\u062A\u0627\u0628\u06CC\u0633 \u0642\u0628\u0644\u06CC", creds: "نمایش حساب ورود پنل", resetpw: "ساخت رمز موقت ورود", doctor: "دکتر خودکار — عیب‌یابی و درمان", lucky: "دکمهٔ خوش‌شانسی — هرچی بهترینه", freeway: "آزادراه IP — تازه‌سازی مسیرها", risk: "زنگ خطر — بررسی الگوی خطا", mirror: "بدل آماده — مسیر پشتیبان", multi: "چند رگه — چند مسیر برای هر ساب", domain: "دامنهٔ شخصی روی پنل", domainreset: "بازگشت به آدرس workers.dev", gift: "کد هدیه — کانفیگ مهمان", bridgedonate: "اشتراک و اهدای سهمیه" }[action];
       return send(`\u2601\uFE0F \u0628\u0631\u0627\u06CC \xAB${title}\xBB \u062A\u0648\u06A9\u0646 Cloudflare \u0647\u0645\u06CC\u0646 \u067E\u0646\u0644 \u0631\u0627 \u0628\u0641\u0631\u0633\u062A.
-\u067E\u06CC\u0627\u0645 \u062A\u0648\u06A9\u0646 \u067E\u0633 \u0627\u0632 \u062F\u0631\u06CC\u0627\u0641\u062A \u062D\u0630\u0641 \u0645\u06CC\u200C\u0634\u0648\u062F \u0648 \u062F\u0631 \u062F\u06CC\u062A\u0627\u0628\u06CC\u0633 \u0630\u062E\u06CC\u0631\u0647 \u0646\u0645\u06CC\u200C\u0634\u0648\u062F\u061B \u062A\u0627 \u06F1\u06F2 \u062F\u0642\u06CC\u0642\u0647 \u0641\u0642\u0637 \u062F\u0631 \u062D\u0627\u0641\u0638\u0647\u0654 \u0645\u0648\u0642\u062A \u0645\u06CC\u200C\u0645\u0627\u0646\u062F \u062A\u0627 \u06A9\u0627\u0631\u0647\u0627\u06CC \u0628\u0639\u062F\u06CC \u062F\u0648\u0628\u0627\u0631\u0647 \u062A\u0648\u06A9\u0646 \u0646\u062E\u0648\u0627\u0647\u0646\u062F (/forget \u067E\u0627\u06A9\u0634 \u0645\u06CC\u200C\u06A9\u0646\u062F).`, { reply_markup: { inline_keyboard: [[{ text: "\u274C \u0627\u0646\u0635\u0631\u0627\u0641", callback_data: `pm:view:${id}` }]] } });
+پیام توکن پس از دریافت از چت حذف شده و تا زمان زدن دستور /forget به صورت دائمی در دیتابیس برای دسترسی‌های بعدی شما ذخیره می‌ماند.`, { reply_markup: { inline_keyboard: [[{ text: "\u274C \u0627\u0646\u0635\u0631\u0627\u0641", callback_data: `pm:view:${id}` }]] } });
     }
     if (action === "delete") {
       await setUiState(env, chatId, "panel_delete_confirm", { id });
@@ -4774,8 +4774,11 @@ function vlessUri(user, settings, host, {
   if (tls) {
     params.push("insecure=0", `fp=${fp}`, "allowInsecure=0", `sni=${sni}`);
   }
-  const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset);
+  const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset) || { size: "100-200", interval: "10-20", packets: "tlshello" };
   if (tls) {
+    if (frag && frag.size) {
+      params.push(`fragment=${frag.size},${frag.interval || "1-2"},${frag.packets || "tlshello"}`);
+    }
     if (pattEchMode(settings) === "on" && settings.ech_config) {
       params.push(`ech=${encodeURIComponent(settings.ech_config)}`);
     }
@@ -4816,8 +4819,11 @@ function trojanUri(user, settings, host, {
   if (tls) {
     params.push("insecure=0", `fp=${fp}`, "allowInsecure=0", `sni=${sni}`);
   }
-  const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset);
+  const frag = forceFragment || fragmentValue(user.fragment || settings.fragment_preset) || { size: "100-200", interval: "10-20", packets: "tlshello" };
   if (tls) {
+    if (frag && frag.size) {
+      params.push(`fragment=${frag.size},${frag.interval || "1-2"},${frag.packets || "tlshello"}`);
+    }
     if (pattEchMode(settings) === "on" && settings.ech_config) {
       params.push(`ech=${encodeURIComponent(settings.ech_config)}`);
     }
@@ -4949,18 +4955,18 @@ function buildConfigs(user, settings, cleanIps = []) {
   const both = String(settings.proto || "both") === "both" && Boolean(settings.trojan_password);
   const uris = [];
   const items = [];
-  const noFragSettings = { ...settings, fragment_preset: "none" };
-  const noFragUser = { ...user, fragment: "none" };
+  const effectiveFrag = forceFragment => forceFragment || fragmentValue(user.fragment || settings.fragment_preset) || { size: "100-200", interval: "10-20", packets: "tlshello" };
   const emit = (entry) => {
     const { address, port, cat, forceFragment, forceFp, overrideCc, overrideProxy, directMode } = entry;
     for (const proto of both ? ["vless", "trojan"] : ["vless"]) {
       if (uris.length >= maxConfigs)
         return;
       const n = uris.length + 1;
-      const opts = { index: n, port, cat, forceFragment, forceFp, overrideCc, overrideProxy, directMode };
-      const uri = proto === "vless" ? vlessUri(noFragUser, noFragSettings, address, opts) : trojanUri(noFragUser, noFragSettings, address, opts);
-      const hasFrag = Boolean(forceFragment && forceFragment.size);
-      const remark = formatConfigRemark(noFragUser, noFragSettings, address, {
+      const fragToUse = effectiveFrag(forceFragment);
+      const opts = { index: n, port, cat, forceFragment: fragToUse, forceFp, overrideCc, overrideProxy, directMode };
+      const uri = proto === "vless" ? vlessUri(user, settings, address, opts) : trojanUri(user, settings, address, opts);
+      const hasFrag = Boolean(fragToUse && fragToUse.size);
+      const remark = formatConfigRemark(user, settings, address, {
         index: n,
         port,
         cat,
@@ -4995,8 +5001,8 @@ function buildConfigs(user, settings, cleanIps = []) {
     verified: 0,
     candidateCount: items.length,
     measurementScope: "config-generation-only; candidates and tunnels are not live-tested",
-    singbox: buildSingbox(noFragUser, noFragSettings, usedAddrs.slice(0, 12), [443]),
-    clash: buildClash(noFragUser, noFragSettings, usedAddrs.slice(0, 12), [443])
+    singbox: buildSingbox(user, settings, usedAddrs.slice(0, 12), [443]),
+    clash: buildClash(user, settings, usedAddrs.slice(0, 12), [443])
   };
 }
 var MESH_AI_DOMAINS = [
@@ -6448,9 +6454,14 @@ async function authorizeRequest(env, settings, request, cred) {
   if (user.first_connect && !user.activated_at) {
     const days = Number(user.pending_days || settings.default_expiry_days || 30);
     const expires = new Date(Date.now() + days * 864e5).toISOString().slice(0, 19).replace("T", " ");
-    user.activated_at = (/* @__PURE__ */ new Date()).toISOString().slice(0, 19).replace("T", " ");
+    const nowIso = new Date().toISOString().slice(0, 19).replace("T", " ");
+    user.activated_at = nowIso;
     user.expires_at = expires;
-    invalidateUser(user.uuid);
+    try {
+      await env.DB.prepare("UPDATE users SET activated_at = ?, expires_at = ? WHERE username = ?")
+        .bind(nowIso, expires, user.username).run();
+    } catch {}
+    USER_CACHE.set(String(user.uuid).toLowerCase(), { at: Date.now(), user });
   }
   const st = userStatus(user);
   if (st !== "active")
