@@ -923,6 +923,147 @@ Deno.serve((req) => {
 `;
 }
 
+// ── Render relay (stage-1 cloud relay, 2026-10-09) ───────────────────────────
+// Node + ws pipe, same shape as the Deno relay: client WS <-> panel WS, with
+// CF-style ?ed= early-data decoded from the handshake header. Render free web
+// services sleep after 15 idle minutes; the worker cron keepalives them.
+export function renderRelaySource(targetHost, tunnelPath) {
+  const target = 'wss://' + targetHost + tunnelPath;
+  return `// Omni - Render WS relay: client WebSocket <-> panel worker WebSocket.
+const http = require("http");
+const { WebSocketServer, WebSocket } = require("ws");
+const TARGET = process.env.OMNI_TARGET || ${JSON.stringify(target)};
+
+const wss = new WebSocketServer({ noServer: true });
+
+function edBytes(req) {
+  const tok = String(req.headers["sec-websocket-protocol"] || "").split(",")[0].trim();
+  if (!tok) return null;
+  try {
+    const b64 = tok.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64 + "===".slice((b64.length + 3) % 4);
+    const bin = Buffer.from(pad, "base64");
+    return bin.length ? bin : null;
+  } catch (e) { return null; }
+}
+
+const server = http.createServer((req, res) => {
+  if (req.headers.upgrade && req.headers.upgrade.toLowerCase() === "websocket") {
+    const early = edBytes(req);
+    wss.handleUpgrade(req, req.socket, Buffer.alloc(0), (client) => {
+      const q = [];
+      if (early) q.push(early);
+      let opened = false;
+      let remote = null;
+      const kill = (why) => { try { client.close(1011, why); } catch (e) {} };
+      client.on("message", (data) => {
+        if (opened && remote && remote.readyState === WebSocket.OPEN) remote.send(data);
+        else q.push(Buffer.from(data));
+      });
+      client.on("close", () => { if (remote) { try { remote.close(); } catch (e) {} } });
+      client.on("error", () => { if (remote) { try { remote.close(); } catch (e) {} } });
+      remote = new WebSocket(TARGET);
+      remote.on("open", () => {
+        opened = true;
+        while (q.length && remote.readyState === WebSocket.OPEN) remote.send(q.shift());
+        q.length = 0;
+      });
+      remote.on("message", (data) => { if (client.readyState === WebSocket.OPEN) client.send(data); });
+      remote.on("close", (code, reason) => kill("upstream closed"));
+      remote.on("error", () => kill("upstream error"));
+    });
+    return;
+  }
+  res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+  res.end("Omni mirror - Render relay alive");
+});
+
+server.listen(Number(process.env.PORT) || 10000);
+`;
+}
+
+export async function deployRenderBridge(opts) {
+  const { token, ghToken, target, tunnelPath, name } = opts;
+  if (!token) throw new Error('توکن Render خالی است');
+  if (!ghToken) throw new Error('توکن گیت‌هاب برای ساخت repo لازم است');
+  const gh = async (path, o = {}) => {
+    const r = await fetch('https://api.github.com' + path, {
+      ...o,
+      headers: {
+        authorization: 'Bearer ' + ghToken,
+        accept: 'application/vnd.github+json',
+        'user-agent': 'omni-panel',
+        ...(o.body ? { 'content-type': 'application/json' } : {}),
+      },
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok && r.status !== 422) throw new Error('گیت‌هاب: ' + r.status + ' ' + String(j.message || '').slice(0, 120));
+    return j;
+  };
+  const me = await gh('/user');
+  const owner = me.login;
+  const repoName = (name || 'omni-render-relay').toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40) || 'omni-render-relay';
+  await gh('/user/repos', { method: 'POST', body: JSON.stringify({ name: repoName, private: true, auto_init: true }) });
+  const put = async (file, content) => {
+    const cur = await gh('/repos/' + owner + '/' + repoName + '/contents/' + file).catch(() => null);
+    const b64 = (str) => { const bin = new TextEncoder().encode(str); let out = ''; for (let i = 0; i < bin.length; i++) out += String.fromCharCode(bin[i]); return btoa(out); };
+    const body = { message: 'omni relay ' + file, content: b64(content), branch: 'main' };
+    if (cur && cur.sha) body.sha = cur.sha;
+    const r = await gh('/repos/' + owner + '/' + repoName + '/contents/' + file, { method: 'PUT', body: JSON.stringify(body) });
+    return r;
+  };
+  const pkg = JSON.stringify({ name: repoName, private: true, version: '1.0.0', dependencies: { ws: '^8.18.0' }, scripts: { start: 'node server.js' } }, null, 2);
+  await put('package.json', pkg);
+  await put('server.js', renderRelaySource(target, tunnelPath));
+
+  const rd = async (path, o = {}) => {
+    const r = await fetch('https://api.render.com/v1' + path, {
+      ...o,
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json', ...(o.headers || {}) },
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error('Render: ' + r.status + ' ' + String(j.message || j.error || '').slice(0, 140));
+    return j;
+  };
+  const svcName = repoName;
+  const created = await rd('/services', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'web', name: svcName, plan: 'free', region: 'frankfurt', runtime: 'node',
+      repo: { ownerLogin: owner, repo: repoName }, branch: 'main',
+      buildCommand: 'npm install', startCommand: 'node server.js',
+      envVars: [{ key: 'OMNI_TARGET', value: 'wss://' + target + tunnelPath }],
+      autoDeploy: 'yes',
+    }),
+  });
+  const svc = (created && created.service) || created;
+  const svcId = svc && svc.id;
+  if (!svcId) throw new Error('Render سرویس نساخت: پاسخ نامشخص');
+  // real *.onrender.com hostname comes from the API, never guessed
+  let domain = '';
+  let status = 'building';
+  for (let i = 0; i < 60; i++) {
+    await bridgeSleep(3000);
+    const one = await rd('/services/' + svcId).catch(() => null);
+    const sv = (one && one.service) || one || {};
+    domain = sv.subdomain || (sv.serviceDetails && sv.serviceDetails.subdomain) || domain;
+    const deps = await rd('/services/' + svcId + '/deploys?limit=1').catch(() => null);
+    const dep = Array.isArray(deps) ? deps[0] && deps[0].deploy : deps && deps.deploy;
+    const st = dep && dep.status;
+    if (st === 'failed' || st === 'canceled') { status = 'failed'; break; }
+    if (domain && (st === 'live' || st === 'active' || st === 'succeeded')) { status = 'ready'; break; }
+  }
+  if (!domain) throw new Error('Render دامنه را برنگرداند — داشبورد را چک کنید');
+  if (status !== 'ready') throw new Error('مهلت انتظار برای دیپلوی Render تمام شد (وضعیت: ' + status + ')');
+  return {
+    domain,
+    url: 'https://' + domain,
+    dashboard_url: 'https://dashboard.render.com/services/' + svcId,
+    service_id: svcId,
+    status: 'ready',
+  };
+}
+
 async function denoFetch(token, path, opts = {}) {
   const r = await fetch(DENO_API + path, {
     ...opts,

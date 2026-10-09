@@ -577,3 +577,19 @@ Checked 2026 billing/sleep facts before recommending:
 Panel: permanent roadmap card in the national-net view with these stages.
 Render engine (GitHub-repo + Render API auto-deploy, Deno-style) starts on the
 user's «اوکی».
+
+## 20. Render relay engine (stage 1 of the roadmap, user-approved 2026-10-09)
+
+- `renderRelaySource()`: Node + `ws` pipe (client WS ⇄ panel WS), CF-style
+  `?ed=` early-data decoded from the handshake header, frames queued from the
+  first tick, HTTP mirror on non-upgrade requests.
+- `deployRenderBridge()`: GitHub API (user's PAT) creates a private repo +
+  `package.json`/`server.js`, then Render API creates a **free** web service in
+  `frankfurt` with `OMNI_TARGET` env; the real `*.onrender.com` hostname is read
+  from the API (service.subdomain), never guessed; deploy polled until `live`.
+- Panel: 🌙 Render subtab with Render API-key + GitHub PAT inputs, auto
+  deploy/verify/redeploy, ready rows auto-populate the green relay configs
+  (SNI/host = relay domain, alpn=http/1.1, no ed, no fragment).
+- Keepalive: worker cron (`*/5`, both workers) GETs every ready render row so
+  the free instance never hits the 15-minute idle sleep.
+- Tests: test/render.test.mjs 3/3 (mocked GitHub+Render), suite green.
