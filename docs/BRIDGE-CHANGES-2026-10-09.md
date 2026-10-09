@@ -162,24 +162,67 @@ wrangler deploy                    # or: npm run deploy:auto
 After deploying, the bot picks up the new command menu on its next `/start`
 (`CREATOR_COMMANDS_VERSION` changed, so `setMyCommands` runs once per bot).
 
-## 6. Still blocked / not verified end-to-end
+## 6. Deployed live — 2026-10-09 07:38 UTC
+
+The token that was originally handed over as a "Vercel" token is a **Cloudflare**
+token (`cfut_` = Cloudflare API Token). It verifies as `active`, so the worker was
+deployed with it straight away:
+
+| | |
+|---|---|
+| Account | `9a3aabde4bdecbff1e298100985c7e7e` (`4lifm29@gmail.com`) |
+| Worker | `omni` → **https://omni.4lifm29.workers.dev** |
+| Uploaded artifact | `production/worker.js`, SHA-256 `42751fc7…d5e0523`, 1,155,199 bytes |
+| Bindings after deploy | `BOT_TOKEN` (secret, preserved), `DB` (D1 `omni-db`), `RELEASES` (KV `omni-release-store`), `PANEL_NAME`, `BOT_WEBHOOK_SECRET`, `BOT_USERNAME` |
+
+Post-deploy verification against the live URL:
+
+- `/healthz` → `200 ok`
+- `/api/whoami` → `{"installed":true,"panelName":"Omni"}` (D1 binding intact)
+- `/api/bridge` anonymously → `401 unauthorized` — the new route is live
+- `/` → **byte-identical** to `production/panel.html`
+  (`sha256 dce572184adb12fee1afb4d1d6e76268afe4bd44fcec06ac71c7aa72ade8cee7`, 552,949 bytes)
+  and contains the new automatic-bridge fields (`natnet-auto-token-vercel`,
+  `natnet-auto-name-vercel`, `natnet-auto-target-vercel`, `data-vmode="auto"`).
+- `getWebhookInfo` → `https://omni.4lifm29.workers.dev/tg/omni-hook`, `last_error_message: None`
+- A real `/natbridge` update was POSTed to the live webhook → `200 ok`, and the bot
+  then re-registered its command menu: `getMyCommands` now returns
+  `natbridge → "ساخت پل Vercel/Netlify با توکن"`. That only happens when the new
+  bundle runs and its `BOT_TOKEN` secret is readable.
+
+Two notes about the deployment itself:
+
+- The previous live script had **no** KV binding, **no** plain-text vars and **no**
+  cron trigger, even though `wrangler.toml` declares them. KV/vars are now set. The
+  cron trigger still is not: `PUT …/workers/scripts/omni/settings` answers
+  `10405 Method not allowed for this authentication scheme` and
+  `…/workers/triggers/schedules` is not routable with an API token. Add
+  `*/5 * * * *` in the dashboard (Workers → omni → Settings → Triggers), or deploy
+  once with `wrangler deploy` using an account-scoped token, which sets it from
+  `wrangler.toml`.
+- Content uploads (`PUT …/workers/scripts/omni`) **replace the binding list** with
+  whatever the multipart `metadata` carries. Bindings must be sent with every upload
+  or they are dropped; that is what the second upload above does.
+
+## 7. Still blocked / not verified end-to-end
 
 This is the only part that could not be finished, and it is not a code problem:
 
-- The Vercel token supplied for testing (`cfut_g••••a624`) is **revoked**:
-  `api.vercel.com/v2/user` answers `Not authorized`. That is precisely what the new
-  verify endpoint now reports to the user, and the failure path is tested with it.
-- No Netlify token was supplied (`api.netlify.com` answers `Access Denied` for the
-  placeholder used in tests).
-- `*.alisarani7021.workers.dev` does not resolve from this environment, so a live
-  deployment of the panel itself could not be smoke-tested.
+- **No Vercel token exists yet.** The `cfut_…` token is a Cloudflare token; tested
+  against `api.vercel.com` (`/v2/user`, `/v2/teams`, `/v9/projects`) it answers
+  `403 {"invalidToken":true}`, which is exactly what the new verify endpoint reports
+  to the user. A real Vercel token is needed from `https://vercel.com/account/tokens`
+  (Scope = the account itself, not a team; Access = Full Access; no expiration).
+- **No Netlify token exists yet** — `https://app.netlify.com/user/applications#personal-access-tokens`.
+- Consequently no bridge has been deployed to a real Vercel/Netlify account yet. Every
+  step up to the provider's answer is covered by the suites above, including live
+  `403 Not authorized` / `Access Denied` responses from both providers.
 
 With one valid token per platform, the remaining verification is a single
-`/natbridge` run in Telegram (or one click of "ساخت و دیپلوی" in the panel) — every
-step of it is already covered by the tests above against mocked and real provider
-responses.
+`/natbridge` run in Telegram (or one click of "ساخت و دیپلوی" in the panel at
+https://omni.4lifm29.workers.dev).
 
-## 7. Files
+## 8. Files
 
 **Changed:** `production/worker.js`, `production/panel.html`,
 `deploy/omni-worker.bundle.js` (generated), `package.json` (new test scripts),
