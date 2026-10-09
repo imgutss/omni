@@ -462,3 +462,20 @@ see commit. Suites: 15+16+15+18+9 green, browser regression ok.
 
 Open items (awaiting user go-ahead): platform adapters (Deno Deploy = WS-capable
 relay; Fly.io/Koyeb = real xray/sing-box core ⇒ Reality/TUIC + honest pings).
+
+## 13. v8.1 — full clean-IP sweep (33 greens)
+
+Prefilter (curl --resolve, TLS+HTTP 200 on /healthz) over 54 candidate CF anycast
+IPs, then REAL Xray WS verification (socks5 → gstatic 204) on every survivor:
+**33/33 green** (0.16–1.8 s). Only 172.64.45.20 and the non-200 prefilter group
+dropped. All 33 are now in `NATNET_DATA.cf.cleanIps`, the green-endpoint cards
+(auto-generated from the list), the balancer JSON, `sanction-generator.html`
+v8.1 and the Drive links file (34 URIs = direct + 33).
+
+Fresh edge probes (same session): WS and xhttp packet-up to Vercel
+(`gutsm-…`, 76.76.21.21, 198.169.2.1) and Netlify (`o4jvv-…`, 75.2.60.5,
+104.198.14.52) all fail (000) — the edge refusal is IP-independent; no clean IP
+can rescue client traffic there. Bridges remain HTTP mirrors.
+
+Deployed: omni `44a1b224-00eb-4f28-94d8-12f488ed3fd1`, nova
+`151e6bb9-5b83-4c1b-bece-953340d9c449`. Suites green: 15+16+15+18+9 + browser ok.
