@@ -11,7 +11,7 @@
 | ربات تلگرام | @OmniAiGateBot — وبهوک `POST https://omni.4lifm29.workers.dev/tg/omni-hook` |
 | پل ورسل | https://omni-bridge-cu67-4lifm27-4000s-projects.vercel.app |
 | پل نتلیفای | https://omni-net-cu67.netlify.app |
-| ریپو | https://github.com/Alisarani7021/omni — شاخهٔ `main`، کامیت `bbf46ad` |
+| ریپو | https://github.com/Alisarani7021/omni — شاخهٔ `main`، کامیت `23cb5bb` |
 
 هر دو پل، مسیر تونل پنل را بایت‌به‌بایت پروکسی می‌کنند (۸۶۹ بایت، کاملاً یکسان با
 پنل). صفحهٔ اول هر دو (`/`) یک صفحهٔ فریب است، نه پنل. سلامت پل ورسل:
