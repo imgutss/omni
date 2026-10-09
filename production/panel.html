@@ -10678,9 +10678,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
     if (!users.length && window.__lastUsers?.length) users = window.__lastUsers;
 
     // Platform selection: vercel or netlify ONLY
-    if (!NATNET.bridgePlatform || (NATNET.bridgePlatform !== "vercel" && NATNET.bridgePlatform !== "netlify" && NATNET.bridgePlatform !== "deno" && NATNET.bridgePlatform !== "render")) {
-      NATNET.bridgePlatform = "deno";
-    }
+    NATNET.bridgePlatform = "deno";
 
     let netlifyDomain = (NATNET.bridgeDomain || "unique-begonia-46df26.netlify.app").replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
     if (!netlifyDomain || netlifyDomain.includes("workers.dev")) {
@@ -10728,14 +10726,12 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
   <!-- HERO BANNER -->
   <section class="card mesh-hero" style="border-inline-start:4px solid var(--accent)">
     <div style="position:relative;z-index:1;max-width:960px">
-      <div class="mesh-kicker" style="color:var(--accent)">OMNI / NATIONAL INTERNET SUITE · نت ملی (ورسل و نتلیفای)</div>
-      <h2 class="mesh-title">سامانه عبور از فیلترینگ نت ملی (پل‌های ابری Vercel و Netlify)</h2>
+      <div class="mesh-kicker" style="color:var(--accent)">OMNI / NATIONAL INTERNET SUITE · نت ملی (رلهٔ زندهٔ Deno)</div>
+      <h2 class="mesh-title">سامانه عبور از فیلترینگ نت ملی (رلهٔ WebSocket واقعی روی Deno Deploy)</h2>
       <p class="muted" style="margin:0;max-width:820px;line-height:1.8">
-        در شرایط اختلال و قطعی نت بین‌الملل، ترافیک پروکسی از طریق بازنویسی لبه‌ای (Zero-Compute Rewrite) یا توابع رله سرورلس به سمت ورکر شما هدایت می‌شود تا فیلترینگ دامنه‌ها دور زده شود.
+        در شرایط اختلال و قطعی نت بین‌الملل، ترافیک پروکسی از رلهٔ زنده Deno Deploy (ارتقای واقعی WebSocket) و روت مستقیم روی آی‌پی‌های تمیز کلودفلر به سمت ورکر شما می‌رسد تا فیلترینگ دامنه دور زده شود.
       </p>
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
-        <span class="badge ok">▲ Vercel Edge Relay</span>
-        <span class="badge ok">◈ Netlify Edge Relay</span>
         <span class="badge ok">🦕 Deno Deploy WS Relay</span>
         <span class="badge info">⚡ روت مستقیم + آی‌پی تمیز — تست زنده با کلاینت واقعی Xray (۲۰۲۶-۱۰-۰۹)</span>
       </div>
@@ -10756,17 +10752,8 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
     </div>
   </div>
 
-  <!-- PLATFORM: DENO ONLY (vercel/netlify removed 2026-10-09: edge policy blocks client traffic) -->
-  <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-    <button class="btn ${NATNET.bridgePlatform === "deno" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-subtab" data-sub="deno" style="flex:1;min-width:240px;padding:14px;font-weight:700;font-size:14px">
-      🦕 ۱. Deno Deploy — ترافیک واقعی (WS Relay)
-    </button>
-    <button class="btn ${NATNET.bridgePlatform === "render" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-subtab" data-sub="render" style="flex:1;min-width:240px;padding:14px;font-weight:700;font-size:14px">
-      🌙 ۲. Render — رلهٔ WS فقط با یک توکن (مثل دنو)
-    </button>
-  </div>
 
-  ${NATNET.bridgePlatform === "deno" ? `
+  
     <!-- ================= DENO PLATFORM ================= -->
     <div class="card" style="margin-top:12px;border-inline-start:3px solid #10b981">
       <div class="card-head">
@@ -10782,46 +10769,6 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       <div class="badge ok" style="margin-bottom:10px">✅ ترافیک کلاینت: رله WS — قابل تست واقعی</div>
       ${autoCard}
     </div>
-  ` : NATNET.bridgePlatform === "render" ? `
-    <!-- ================= RENDER PLATFORM ================= -->
-    <div class="card" style="margin-top:12px;border-inline-start:3px solid #46e3b7">
-      <div class="card-head">
-        <b style="color:#46e3b7;font-size:14px">🌙 Render — رلهٔ واقعی WebSocket (مثل دنو: فقط یک توکن)</b>
-        <div class="spacer"></div>
-      </div>
-      <p class="muted" style="font-size:12.5px;line-height:1.9;margin:6px 0 10px">
-        فقط توکن API خودِ Render را بده — پنل خودش سرویس رایگان را از repo عمومی رله
-        (<code dir="ltr">omni-render-relay</code>) می‌سازد، دیپلوی می‌کند و دامنهٔ
-        <code dir="ltr">*.onrender.com</code> را برمی‌گرداند. توکن گیت‌هاب لازم نیست.
-        خواب ۱۵ دقیقه‌ای پلن رایگان با keepalive کروْن ورکر خنثی می‌شود.
-      </p>
-      <div class="badge warn" style="margin-bottom:10px">⚠️ تست زندهٔ API (۲۰۲۶-۱۰-۰۹): اکانت <b>جدید</b> Render حتی برای پلن Free ثبت کارت می‌خواهد (خطای ۴۰۲). اگر ساخت با ۴۰۲ رد شد، از <code dir="ltr">dashboard.render.com/billing</code> کارت اضافه کن — روی پلن Free هزینه‌ای نمی‌آید.</div>
-      ${autoCard}
-    </div>
-  ` : ``}
-    <!-- ================= VERCEL / NETLIFY REMOVED 2026-10-09 ================= -->
-    <div class="card" style="margin-top:12px;border-inline-start:3px solid #ef4444">
-      <div class="card-head"><b style="color:#ef4444;font-size:14px">🗑 ورسل و نتلیفای حذف شدند — امکان فنی نداشتند</b></div>
-      <div style="padding:12px;font-size:12.5px;line-height:2">
-        تست زندهٔ لبه‌ها (۲۰۲۶-۱۰-۰۹):<br>
-        • ورسل: WS upgrade هرگز ۱۰۱ نمی‌شود (۲۰۰/۴۰۴)؛ SNI-front هم 404 DEPLOYMENT_NOT_FOUND.<br>
-        • نتلیفای: ترفند قدیمی SNI-front امروز از لبه 429 می‌گیرد (SNI=blog.helm.sh + Host=پل → 429، دسترسی عادی → 200)؛ WS upgrade هم ۲۰۰ نه ۱۰۱.<br>
-        این‌ها سیاست لبهٔ آن سکوهاست، نه باگ کد — از سمت ما قابل تعمیر نیست.<br>
-        تنها رلهٔ ابری زنده: <b>Deno Deploy</b> (همین تب 🦕) + روت‌های سبز CF پایین صفحه.
-      </div>
-    </div>
-
-    <!-- ================= CLOUD RELAY ROADMAP (live verdicts 2026-10-09) ================= -->
-    <div class="card" style="margin-top:12px;border-inline-start:3px solid #6366f1">
-      <div class="card-head"><b style="color:#818cf8;font-size:14px">🚧 نقشهٔ راه رله‌های ابری — به ترتیب اولویت</b></div>
-      <div style="padding:12px;font-size:12.5px;line-height:2.1">
-        <b>۱) 🌙 Render</b> — <span class="badge ok">موتور آماده ✅</span> مثل دنو فقط یک توکن (<code dir="ltr">rnd_…</code>)؛ WS کامل، FRA، خواب ۱۵ دقیقه‌ای با keepalive کروْن خنثی می‌شود. <span class="badge warn">تست زندهٔ ۲۰۲۶-۱۰-۰۹</span>: اکانت <b>جدید</b> Render حتی برای پلن Free ثبت کارت می‌خواهد (۴۰۲) — با کارت یا اکانت قدیمی، همان یک توکن کافی است.<br>
-        <b>۲) 🪽 Fly.io</b> — مرحلهٔ ۲، <span class="badge warn">منتظر اکانت/کارت</span>: بهترین پینگ (fra/ams) + UDP یعنی Reality/Hysteria2؛ ترک رایگان ندارد (ترایل ۲ ساعت) ≈ ۵ دلار/ماه.<br>
-        <b>۳) ❌ Koyeb</b> — از فوریهٔ ۲۰۲۶ کارت می‌خواهد (هولد ۲۹ دلار) و بعد از ۱ ساعت بی‌ترافیک scale-to-zero می‌شود → به‌درد نخور.<br>
-        <b>۴)  Railway</b> — فقط ترایل پولی ۳۰ روزه.<br>
-        <b>۵) ❌ Fastly Compute</b> — معماری‌اش کانکشن زندهٔ طولانی نمی‌برد.<br>
-        <span class="badge ok">✅ انجام‌شده: Deno Deploy</span> — رلهٔ WS با پینگ سبز واقعی.
-      </div>
     </div>
 
   <!-- ================= 4 VERIFIED GREEN BENCHMARK ENDPOINTS ================= -->
@@ -12141,7 +12088,7 @@ Connection: close\r
         dns: n("nav.dns"),
         configs: n("nav.configs"),
         national_net: "🇮🇷 نت ملی (بای‌پس جامع)",
-        national_net_bridge: "🚀 ۱. نت ملی: پل‌های ابری Edge (Vercel & Netlify)",
+        national_net_bridge: "🚀 ۱. نت ملی: رلهٔ ابری Deno (WS واقعی)",
         national_net_spoofer: "🛡️ ۲. نت ملی: اسپوفر محلی و لوپ‌بک",
         national_net_relays: "📡 ۳. نت ملی: رله سفید، خورشید و DNSTT",
         mesh: "Causal Mesh",
