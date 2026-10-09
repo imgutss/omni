@@ -11,6 +11,7 @@ globalThis.fetch = async (url, opts = {}) => {
   if (u.endsWith('/v2/apps') && opts.method === 'POST') return json({ id: 'app-1', slug: JSON.parse(opts.body).slug });
   if (/\/v2\/apps\/[^/]+\/deploy$/.test(u)) return json({ id: 'rev-1', status: 'building' });
   if (/\/v2\/revisions\/rev-1$/.test(u)) { revPolls += 1; return json(revPolls >= 2 ? { id: 'rev-1', status: 'succeeded' } : { id: 'rev-1', status: 'building' }); }
+  if (/\/v2\/revisions\/rev-1\/timelines$/.test(u)) return json([{ name: 'Production', context: 'prod', hostnames: ['ali.guts.deno.net'] }]);
   return new Response('{"error":"nf"}', { status: 404 });
 };
 
@@ -25,7 +26,7 @@ assert.equal(m.bridgeTokenShape('deno', 'short'), false);
 const src = m.denoRelaySource('omni-x.workers.dev', '/VZLdh9Ft');
 assert.ok(src.includes('wss://omni-x.workers.dev/VZLdh9Ft'));
 assert.ok(src.includes('Deno.upgradeWebSocket'));
-assert.ok(src.includes('remote.binaryType'));
+assert.ok(src.includes('connectUp')); assert.ok(src.includes('res.webSocket'));
 
 // 3) full deploy flow
 const r = await m.deployDenoBridge({
@@ -34,8 +35,8 @@ const r = await m.deployDenoBridge({
   target: 'https://omni-nova-f61e.catclient-59gk2mui.workers.dev/',
   tunnelPath: '/VZLdh9Ft',
 });
-assert.equal(r.domain, 'omni-relay.deno.dev');
-assert.equal(r.url, 'https://omni-relay.deno.dev');
+assert.equal(r.domain, 'ali.guts.deno.net'); // real hostname from timelines, not guessed
+assert.equal(r.url, 'https://ali.guts.deno.net');
 assert.equal(r.status, 'ready');
 
 const deployCall = calls.find((c) => /\/deploy$/.test(c.url));

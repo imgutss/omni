@@ -520,3 +520,21 @@ Panel: Netlify subtab now has card «⚡ فرمت قدیمی (SNI-front + xhttp)
 3 ready configs (blog.helm.sh front, kubernetes.io front, bridge-direct) once a
 netlify bridge is ready. **Requires one «♻️ دیپلوی دوباره» of the bridge with the
 new code** (token paste) before the fronts carry traffic.
+
+## 16. Deno relay v5 post-mortem (three of my bugs, all fixed + traffic-proven)
+
+1. **Wrong domain**: unverified Deno orgs publish `{slug}.{org-slug}.deno.net`
+   (revision timelines), not `{slug}.deno.dev`. `deployDenoBridge` now reads
+   `GET /v2/revisions/{id}/timelines` and stores the real production hostname.
+2. **Lost VLESS hello**: client frames were only queued after the upstream dial
+   resolved. v3 attaches `socket.onmessage` in the same tick as the upgrade.
+3. **CF early-data**: with `?ed=2048` xray ships the hello inside the
+   `sec-websocket-protocol` header; the relay now decodes it (same base64url
+   routine as the panel) and sends it as the first upstream frame. The header
+   must be read BEFORE `Deno.upgradeWebSocket()` (request closes afterwards).
+4. fetch-upgrade strategy uses the `https:` scheme (fetch rejects `wss:`).
+
+Local proof (Deno 2.9.7 + Xray 26.3.27, socks→gstatic): **204 in 1.95 s with
+ed=2048 and 0.41 s without**. Deployed omni `b3ef3641`, nova `d20a75bf`.
+Existing D1 row patched to the real hostname; one «♻️ redeploy» from the panel
+installs relay v5 onto the user's Deno app.

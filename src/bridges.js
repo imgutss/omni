@@ -846,25 +846,79 @@ const DENO_API = 'https://api.deno.com/v2';
 
 export function denoRelaySource(targetHost, tunnelPath) {
   const target = 'wss://' + targetHost + tunnelPath;
-  return `// Omni - Deno Deploy WS relay: pipes the client WebSocket straight to the panel worker.
-const TARGET = ${JSON.stringify(target)};
+  return `// Omni - Deno Deploy WS relay v3: client WebSocket <-> panel worker WebSocket.
+// v4 fixes: (a) fetch-upgrade must use the https: scheme, (b) client frames are
+// queued from the first microtask, (c) CF-style ?ed= early-data header is decoded
+// queued from the very first microtask so the VLESS hello is never lost while
+// the upstream dial is in flight.
+const TARGET_WS = ${JSON.stringify(target)};
+const TARGET_HTTPS = TARGET_WS.replace(/^wss:/, "https:");
+
+async function connectUp() {
+  try {
+    const key = crypto.randomUUID().replace(/-/g, "").slice(0, 24);
+    const res = await fetch(TARGET_HTTPS, {
+      headers: {
+        upgrade: "websocket",
+        connection: "upgrade",
+        "sec-websocket-key": key,
+        "sec-websocket-version": "13",
+      },
+    });
+    if (res.webSocket) return res.webSocket;
+  } catch (e) { /* fall through to classic client */ }
+  return new WebSocket(TARGET_WS);
+}
+
 Deno.serve((req) => {
-  if ((req.headers.get("upgrade") || "").toLowerCase() === "websocket") {
-    const { socket, response } = Deno.upgradeWebSocket(req);
-    const remote = new WebSocket(TARGET);
-    remote.binaryType = "arraybuffer";
-    let opened = false;
-    const q = [];
-    remote.onopen = () => { opened = true; while (q.length) remote.send(q.shift()); };
-    remote.onmessage = (ev) => { if (socket.readyState === 1) socket.send(ev.data); };
-    remote.onclose = () => { try { socket.close(); } catch {} };
-    remote.onerror = () => { try { socket.close(); } catch {} };
-    socket.onmessage = (ev) => { if (opened && remote.readyState === 1) remote.send(ev.data); else q.push(ev.data); };
-    socket.onclose = () => { try { remote.close(); } catch {} };
-    socket.onerror = () => { try { remote.close(); } catch {} };
-    return response;
+  if ((req.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+    return new Response("Omni mirror - Deno relay alive", { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
   }
-  return new Response("Omni mirror - Deno relay alive", { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
+  // read the early-data header BEFORE upgrading: the request closes afterwards
+  const edToken = (req.headers.get("sec-websocket-protocol") || "").split(",")[0].trim();
+  const { socket, response } = Deno.upgradeWebSocket(req);
+  let remote = null;
+  let opened = false;
+  const q = [];
+  const kill = (msg) => { try { socket.close(1011, String(msg || "upstream").slice(0, 60)); } catch (e) {} };
+
+  // CF-style WS early-data: xray puts the VLESS hello into the
+  // sec-websocket-protocol header when the path carries ?ed=2048. Decode it and
+  // queue it as the first upstream frame, exactly like the panel does.
+  if (edToken) {
+    try {
+      const b64 = edToken.replace(/-/g, "+").replace(/_/g, "/");
+      const pad = b64 + "===".slice((b64.length + 3) % 4);
+      const bin = atob(pad);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      if (bytes.length) q.push(bytes.buffer);
+    } catch (e) { /* malformed early-data: ignore */ }
+  }
+
+  // attached IMMEDIATELY: nothing the client sends can be lost
+  socket.onmessage = (ev) => {
+    if (opened && remote && remote.readyState === 1) remote.send(ev.data);
+    else q.push(ev.data);
+  };
+  socket.onclose = () => { if (remote) { try { remote.close(); } catch (e) {} } };
+  socket.onerror = () => { if (remote) { try { remote.close(); } catch (e) {} } };
+
+  connectUp().then((r) => {
+    remote = r;
+    r.binaryType = "arraybuffer";
+    const flush = () => {
+      opened = true;
+      while (q.length && r.readyState === 1) r.send(q.shift());
+      q.length = 0;
+    };
+    if (r.readyState === 1) flush(); else r.onopen = flush;
+    r.onmessage = (ev) => { if (socket.readyState === 1) socket.send(ev.data); };
+    r.onclose = (ev) => { try { socket.close(ev.code === 1005 ? 1011 : ev.code, ev.reason || "upstream closed"); } catch (e) {} };
+    r.onerror = () => kill("upstream error");
+  }).catch((e) => kill(e && e.message ? e.message : e));
+
+  return response;
 });
 `;
 }
@@ -927,7 +981,6 @@ export async function deployDenoBridge({ token, name = '', target, tunnelPath = 
     body: JSON.stringify({ assets: { 'main.ts': { kind: 'file', encoding: 'utf-8', content: denoRelaySource(cleanTarget, tp) } } }),
   });
   const revId = (rev && rev.id) || (rev && rev.revision && rev.revision.id) || null;
-  const domain = appSlug + '.deno.dev';
   const started = Date.now();
   let status = (rev && rev.status) || 'building';
   let failInfo = '';
@@ -945,6 +998,17 @@ export async function deployDenoBridge({ token, name = '', target, tunnelPath = 
     step('وضعیت Deno: ' + status);
   }
   if (status !== 'succeeded') throw new Error('مهلت انتظار برای دیپلوی Deno تمام شد (وضعیت: ' + status + ')');
+  // real production hostname: unverified orgs get {slug}.{org}.deno.net, not {slug}.deno.dev
+  let domain = appSlug + '.deno.dev';
+  if (revId) {
+    for (let k = 0; k < 10; k++) {
+      const tls = await denoFetch(token, '/revisions/' + encodeURIComponent(revId) + '/timelines').catch(() => null);
+      const items = Array.isArray(tls) ? tls : (tls && tls.items) || [];
+      const withHost = items.find((x) => x && Array.isArray(x.hostnames) && x.hostnames.length);
+      if (withHost) { domain = withHost.hostnames[0]; break; }
+      await bridgeSleep(2000);
+    }
+  }
   return {
     domain,
     url: 'https://' + domain,
