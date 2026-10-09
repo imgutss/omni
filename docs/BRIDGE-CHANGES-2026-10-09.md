@@ -479,3 +479,21 @@ can rescue client traffic there. Bridges remain HTTP mirrors.
 
 Deployed: omni `44a1b224-00eb-4f28-94d8-12f488ed3fd1`, nova
 `151e6bb9-5b83-4c1b-bece-953340d9c449`. Suites green: 15+16+15+18+9 + browser ok.
+
+## 14. Deno Deploy bridge (real WS relay) — stage 4
+
+New provider `deno` in the bridge engine (`src/bridges.js`):
+- `denoRelaySource()` — a `Deno.serve` WS pipe: client WebSocket ⇄ panel worker
+  WebSocket (VLESS bytes flow; Deno edge accepts upgrade, unlike Vercel/Netlify).
+- `deployDenoBridge()` — Deno REST **v2** (v1/subhosting sunset 2026-07-20):
+  `GET /v2/apps` → `POST /v2/apps {slug}` → `POST /v2/apps/{slug}/deploy`
+  with inline `main.ts` asset → poll `GET /v2/revisions/{id}` until `succeeded`.
+  Result domain `{slug}.deno.dev`.
+- `verifyDenoToken()` via `GET /v2/apps`.
+Panel: third subtab «🦕 Deno Deploy — ترافیک واقعی» in the national-net bridge
+view; token field, auto-deploy, list rows, live-ping; «استفاده در کانفیگ‌ها» on a
+deno row injects the relay domain into the green routes + balancer
+(`NATNET.denoEndpoints`). Worker/bot accept `platform=deno` everywhere.
+Tests: `production/test/deno.test.mjs` 5/5 (mocked v2 API), Playwright UI check
+(3 subtabs, deno card/row/input, no page errors). Suites still green
+(15+16+15+18+9+browser).

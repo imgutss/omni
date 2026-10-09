@@ -10119,7 +10119,7 @@ function xe(total) {
      ========================================================================= */
   var NATNET = {
     tab: "bridge", // "bridge" | "spoofer" | "relays"
-    bridgePlatform: "vercel", // "vercel" | "netlify"
+    bridgePlatform: "vercel", // "vercel" | "netlify" | "deno"
     vercelMode: "auto", // "auto" | "rewrite" | "relay"
     netlifyMode: "auto", // "auto" | "edge" | "rewrite"
     user: "",
@@ -10600,6 +10600,9 @@ export const config = { path: "/*" };`;
     return natnetBridges;
   }
 
+  function natnetTokKey(p) { return p === "vercel" ? "vercelAutoToken" : p === "deno" ? "denoAutoToken" : "netlifyAutoToken"; }
+  function natnetPlatFa(p) { return p === "vercel" ? "ورسل" : p === "deno" ? "دنو" : "نتلیفای"; }
+
   function natnetTunnelPath(settings) {
     let p = String((settings || {}).path || natnetBridgeCtx.path || "/VZLdh9Ft").trim().split("?")[0];
     if (!p || p === "/") p = "/VZLdh9Ft";
@@ -10608,15 +10611,19 @@ export const config = { path: "/*" };`;
   }
 
   function natnetAutoCardHtml(platform) {
-    const accent = platform === "vercel" ? "var(--accent)" : "#00c7b7";
-    const brand = platform === "vercel" ? "▲ ورسل (Vercel)" : "◈ نتلیفای (Netlify)";
-    const tokenKey = platform === "vercel" ? "vercelAutoToken" : "netlifyAutoToken";
+    const accent = platform === "vercel" ? "var(--accent)" : platform === "deno" ? "#10b981" : "#00c7b7";
+    const brand = platform === "vercel" ? "▲ ورسل (Vercel)" : platform === "deno" ? "🦕 دنو (Deno Deploy)" : "◈ نتلیفای (Netlify)";
+    const tokenKey = platform === "vercel" ? "vercelAutoToken" : platform === "deno" ? "denoAutoToken" : "netlifyAutoToken";
     const tokenUrl = platform === "vercel"
       ? "https://vercel.com/account/tokens"
-      : "https://app.netlify.com/user/applications#personal-access-tokens";
+      : platform === "deno"
+        ? "https://dash.deno.com/account/access-tokens"
+        : "https://app.netlify.com/user/applications#personal-access-tokens";
     const tokenHint = platform === "vercel"
       ? "Create Token → Scope = Full Account → Expiration = No Expiration"
-      : "User settings → Applications → Personal access tokens → New access token";
+      : platform === "deno"
+        ? "Account → Access Tokens → New access token"
+        : "User settings → Applications → Personal access tokens → New access token";
     const savedToken = a(NATNET[tokenKey] || "");
     const rows = (natnetBridges || []).filter((r) => r.platform === platform);
     const busy = NATNET.autoBusy;
@@ -10628,15 +10635,15 @@ export const config = { path: "/*" };`;
         </div>
         <p class="muted" style="font-size:12.5px;margin:0 0 12px 0;line-height:1.9">
           توکن API ${brand} را وارد کن. پنل خودش پروژه/سایت را می‌سازد، فایل‌های
-          <code dir="ltr">${platform === "vercel" ? "vercel.json + api/relay.js" : "netlify.toml + edge function"}</code>
+          <code dir="ltr">${platform === "vercel" ? "vercel.json + api/relay.js" : platform === "deno" ? "main.ts (رله WS)" : "netlify.toml + edge function"}</code>
           را می‌نویسد، دیپلوی پروداکشن می‌زند و دامنهٔ زنده را برمی‌گرداند.
           بعد از آن همهٔ کانفیگ‌های پایین همین بخش با همان دامنه ساخته می‌شوند.
         </p>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px">
           <div class="field">
-            <label for="natnet-auto-token-${platform}">توکن API ${platform === "vercel" ? "ورسل" : "نتلیفای"}</label>
+            <label for="natnet-auto-token-${platform}">توکن API ${platform === "vercel" ? "ورسل" : platform === "deno" ? "دنو" : "نتلیفای"}</label>
             <input type="password" id="natnet-auto-token-${platform}" class="input mono" dir="ltr"
-                   autocomplete="off" spellcheck="false" placeholder="${platform === "vercel" ? "cfut_… یا vercel_…" : "nlp_… / توکن شخصی"}"
+                   autocomplete="off" spellcheck="false" placeholder="${platform === "vercel" ? "cfut_… یا vercel_…" : platform === "deno" ? "توکن دسترسی Deno" : "nlp_… / توکن شخصی"}"
                    value="${savedToken}">
             <small class="muted"><a href="${tokenUrl}" target="_blank" rel="noopener">${tokenUrl.replace(/^https:\/\//, "")}</a> · ${tokenHint}</small>
           </div>
@@ -10672,7 +10679,7 @@ export const config = { path: "/*" };`;
 
   function natnetBridgeListHtml(platform, rows, accent) {
     if (!rows || !rows.length)
-      return `<div class="muted" style="font-size:12px;margin-top:12px">هنوز پل ${platform === "vercel" ? "ورسلی" : "نتلیفایی"} با این پنل نساخته‌ای.</div>`;
+      return `<div class="muted" style="font-size:12px;margin-top:12px">هنوز پل ${platform === "vercel" ? "ورسلی" : platform === "deno" ? "دنویی" : "نتلیفایی"} با این پنل نساخته‌ای.</div>`;
     return `<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
       ${rows.map((r) => `
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--border);border-radius:9px;padding:8px 10px;border-inline-start:3px solid ${accent}">
@@ -10704,7 +10711,7 @@ export const config = { path: "/*" };`;
     if (!users.length && window.__lastUsers?.length) users = window.__lastUsers;
 
     // Platform selection: vercel or netlify ONLY
-    if (!NATNET.bridgePlatform || (NATNET.bridgePlatform !== "vercel" && NATNET.bridgePlatform !== "netlify")) {
+    if (!NATNET.bridgePlatform || (NATNET.bridgePlatform !== "vercel" && NATNET.bridgePlatform !== "netlify" && NATNET.bridgePlatform !== "deno")) {
       NATNET.bridgePlatform = "vercel";
     }
 
@@ -10718,6 +10725,7 @@ export const config = { path: "/*" };`;
     // Green endpoints — live-tested 2026-10-09 with a REAL Xray client (socks→204):
     // WS + TLS + CF clean IP carries traffic; every bridge-edge transport failed.
     let verifiedDirectEndpoints = [
+      ...(NATNET.denoEndpoints || []).map(x => ({ name: x.name, ip: x.ip, ping: "relay" })),
       { name: "دامنهٔ خود ورکر (مستقیم)", ip: publicHost, ping: "پایه" },
       ...NATNET_DATA.cf.cleanIps.map(ip => ({ name: `CF ${ip} (تست زنده ✅ Xray)`, ip, ping: "" }))
     ];
@@ -10753,6 +10761,7 @@ export const config = { path: "/*" };`;
       <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:14px">
         <span class="badge ok">▲ Vercel Edge Relay</span>
         <span class="badge ok">◈ Netlify Edge Relay</span>
+        <span class="badge ok">🦕 Deno Deploy WS Relay</span>
         <span class="badge info">⚡ روت مستقیم + آی‌پی تمیز — تست زنده با کلاینت واقعی Xray (۲۰۲۶-۱۰-۰۹)</span>
       </div>
     </div>
@@ -10780,9 +10789,28 @@ export const config = { path: "/*" };`;
     <button class="btn ${NATNET.bridgePlatform === "netlify" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-subtab" data-sub="netlify" style="flex:1;min-width:240px;padding:14px;font-weight:700;font-size:14px">
       ◈ ۲. رله ابری نتلیفای (Netlify Relay)
     </button>
+    <button class="btn ${NATNET.bridgePlatform === "deno" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-subtab" data-sub="deno" style="flex:1;min-width:240px;padding:14px;font-weight:700;font-size:14px">
+      🦕 . Deno Deploy — ترافیک واقعی (WS Relay)
+    </button>
   </div>
 
-  ${NATNET.bridgePlatform === "vercel" ? `
+  ${NATNET.bridgePlatform === "deno" ? `
+    <!-- ================= DENO PLATFORM ================= -->
+    <div class="card" style="margin-top:12px;border-inline-start:3px solid #10b981">
+      <div class="card-head">
+        <b style="color:#10b981;font-size:14px">🦕 Deno Deploy — رلهٔ واقعی WebSocket</b>
+        <div class="spacer"></div>
+      </div>
+      <p class="muted" style="font-size:12.5px;line-height:1.9;margin:6px 0 10px">
+        برخلاف ورسل و نتلیفای، لبهٔ Deno ارتقای WebSocket را می‌پذیرد؛ پس ترافیک کلاینت
+        (VLESS/WS/TLS) واقعاً از این رله رد می‌شود و به ورکر شما می‌رسد — پینگ v2rayNG
+        روی دامنهٔ آن واقعی است، نه پینگِ دست‌تکان‌دادن. بعد از ساخت پل، دکمهٔ
+        «📥 استفاده در کانفیگ‌ها» دامنهٔ رله را به روت‌های سبز و بالانسر اضافه می‌کند.
+      </p>
+      <div class="badge ok" style="margin-bottom:10px">✅ ترافیک کلاینت: رله WS — قابل تست واقعی</div>
+      ${autoCard}
+    </div>
+  ` : NATNET.bridgePlatform === "vercel" ? `
     <!-- ================= VERCEL PLATFORM ================= -->
     <div class="card" style="margin-top:12px;border-inline-start:3px solid var(--accent)">
       <div class="card-head">
@@ -11114,10 +11142,10 @@ export const config = { path: "/*" };`;
           let tokenInput = document.getElementById(`natnet-auto-token-${plat}`);
           let nameInput = document.getElementById(`natnet-auto-name-${plat}`);
           let targetInput = document.getElementById(`natnet-auto-target-${plat}`);
-          if (tokenInput) NATNET[plat === "vercel" ? "vercelAutoToken" : "netlifyAutoToken"] = tokenInput.value.trim();
+          if (tokenInput) NATNET[natnetTokKey(plat)] = tokenInput.value.trim();
           if (nameInput) NATNET.autoName = nameInput.value.trim();
           if (targetInput && targetInput.value.trim()) NATNET.autoTarget = targetInput.value.trim();
-          let token = NATNET[plat === "vercel" ? "vercelAutoToken" : "netlifyAutoToken"] || "";
+          let token = NATNET[natnetTokKey(plat)] || "";
           let target = NATNET.autoTarget || natnetBridgeCtx.target || (e.settings()?.public_host || window.location.hostname || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
           let out = document.getElementById(`natnet-auto-out-${plat}`);
           const paint = (html) => { if (out) out.innerHTML = html; };
@@ -11163,9 +11191,9 @@ export const config = { path: "/*" };`;
               return;
             }
             let dom = row.domain || "";
-            if (plat === "vercel") NATNET.vercelDomain = dom; else NATNET.bridgeDomain = dom;
-            NATNET[plat === "vercel" ? "vercelAutoToken" : "netlifyAutoToken"] = "";
-            let host = `${plat === "vercel" ? "ورسل" : "نتلیفای"}`;
+            if (plat === "vercel") NATNET.vercelDomain = dom; else if (plat === "deno") { NATNET.denoDomain = dom; NATNET.denoEndpoints = [{ name: `Deno relay ${dom} (ترافیک واقعی ✅)`, ip: dom }]; } else NATNET.bridgeDomain = dom;
+            NATNET[natnetTokKey(plat)] = "";
+            let host = natnetPlatFa(plat);
             paint(`<div class="badge ok">✅ پل ${host} زنده است · <b class="mono" dir="ltr">${a(dom)}</b></div>
               <div class="muted" style="font-size:12px;margin-top:6px">کانفیگ‌های پایین با همین دامنه از نو ساخته شدند. برای نصب، دکمهٔ 📲 کنار هر کانفیگ را بزن.</div>`);
             y(`پل ${host} ساخته شد: ${dom}`, "ok", 5200);
@@ -11184,7 +11212,7 @@ export const config = { path: "/*" };`;
           if (out) out.innerHTML = `<div class="skeleton" style="height:34px"></div>`;
           try {
             let r = await b.post("/api/bridge/verify", { platform: plat, token });
-            NATNET[plat === "vercel" ? "vercelAutoToken" : "netlifyAutoToken"] = token;
+            NATNET[natnetTokKey(plat)] = token;
             if (out) out.innerHTML = `<div class="badge ok">✅ توکن ${plat} معتبر است</div>
               <div class="muted" style="font-size:12px;margin-top:6px">حساب: <b>${a(r.account?.username || "")}</b>${r.account?.email ? ` · ${a(r.account.email)}` : ""}${r.account?.plan ? ` · پلن ${a(r.account.plan)}` : ""} — حالا «🚀 ساخت و دیپلوی خودکار» را بزن.</div>`;
           } catch (err) {
@@ -11194,7 +11222,7 @@ export const config = { path: "/*" };`;
           let plat = s.dataset.plat || NATNET.bridgePlatform || "vercel";
           let dom = s.dataset.domain || "";
           if (!dom) return;
-          if (plat === "vercel") NATNET.vercelDomain = dom; else NATNET.bridgeDomain = dom;
+          if (plat === "vercel") NATNET.vercelDomain = dom; else if (plat === "deno") { NATNET.denoDomain = dom; NATNET.denoEndpoints = [{ name: `Deno relay ${dom} (ترافیک واقعی ✅)`, ip: dom }]; } else NATNET.bridgeDomain = dom;
           y(`دامنهٔ ${dom} در همهٔ کانفیگ‌ها اعمال شد`, "ok");
           e.rerenderView(l.view);
         } else if (i === "omni-natnet-auto-refresh") {

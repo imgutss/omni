@@ -30,7 +30,7 @@ const BRIDGE_UA = 'Omni-NationalNet/2.0 (+https://github.com/Alisarani7021/omni)
 const bridgeSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function isBridgePlatform(p) {
-  return p === 'vercel' || p === 'netlify';
+  return p === 'vercel' || p === 'netlify' || p === 'deno';
 }
 
 /** Accept anything the user may paste and return a bare `https://host` origin. */
@@ -56,6 +56,7 @@ export function bridgeTokenShape(platform, token) {
   const t = String(token || '').trim();
   if (platform === 'vercel') return /^vercel_[A-Za-z0-9]{20,}|^cfut_[A-Za-z0-9_\-]{20,}|^[A-Za-z0-9_\-]{25,200}$/.test(t);
   if (platform === 'netlify') return /^[A-Za-z0-9_\-]{20,200}$/.test(t);
+  if (platform === 'deno') return /^[A-Za-z0-9_\-]{20,200}$/.test(t);
   return false;
 }
 
@@ -150,7 +151,8 @@ export async function verifyNetlifyToken(token) {
 export async function verifyBridgeToken(platform, token) {
   if (platform === 'vercel') return verifyVercelToken(token);
   if (platform === 'netlify') return verifyNetlifyToken(token);
-  throw new Error('پلتفرم ناشناخته؛ فقط vercel یا netlify.');
+  if (platform === 'deno') return verifyDenoToken(token);
+  throw new Error('پلتفرم ناشناخته؛ فقط vercel، netlify یا deno.');
 }
 
 /* ── generated bridge content ────────────────────────────────────────────── */
@@ -660,7 +662,8 @@ export async function deployNetlifyBridge({ token, name = '', target, tunnelPath
 export async function deployBridge(platform, opts) {
   if (platform === 'vercel') return deployVercelBridge(opts);
   if (platform === 'netlify') return deployNetlifyBridge(opts);
-  throw new Error('پلتفرم ناشناخته؛ فقط vercel یا netlify.');
+  if (platform === 'deno') return deployDenoBridge(opts);
+  throw new Error('پلتفرم ناشناخته؛ فقط vercel، netlify یا deno.');
 }
 
 /* ── D1 storage ──────────────────────────────────────────────────────────── */
@@ -760,7 +763,7 @@ export async function forgetBridgeToken(db, ref) {
  * Returns the row id immediately so HTTP callers can poll instead of timing out.
  */
 export async function startBridgeDeploy(db, ctx, { owner = 'panel', platform, token, name = '', target, tunnelPath = '/', saveToken = false, onProgress = null, waitMs }) {
-  if (!isBridgePlatform(platform)) throw new Error('پلتفرم باید vercel یا netlify باشد.');
+  if (!isBridgePlatform(platform)) throw new Error('پلتفرم باید vercel، netlify یا deno باشد.');
   const cleanTarget = normalizeTargetHost(target);
   if (!cleanTarget) throw new Error('آدرس ورکر مقصد را درست وارد کنید (مثل omni-xxx.workers.dev).');
   if (!bridgeTokenShape(platform, token)) {
@@ -797,4 +800,117 @@ export async function startBridgeDeploy(db, ctx, { owner = 'panel', platform, to
 
   if (ctx?.waitUntil) ctx.waitUntil(work.catch(() => {}));
   return { id, name: projectName, target: cleanTarget, promise: work };
+}
+
+/* ── Deno Deploy (REST v2) — real WebSocket relay, client traffic passes ── */
+const DENO_API = 'https://api.deno.com/v2';
+
+export function denoRelaySource(targetHost, tunnelPath) {
+  const target = 'wss://' + targetHost + tunnelPath;
+  return `// Omni - Deno Deploy WS relay: pipes the client WebSocket straight to the panel worker.
+const TARGET = ${JSON.stringify(target)};
+Deno.serve((req) => {
+  if ((req.headers.get("upgrade") || "").toLowerCase() === "websocket") {
+    const { socket, response } = Deno.upgradeWebSocket(req);
+    const remote = new WebSocket(TARGET);
+    remote.binaryType = "arraybuffer";
+    let opened = false;
+    const q = [];
+    remote.onopen = () => { opened = true; while (q.length) remote.send(q.shift()); };
+    remote.onmessage = (ev) => { if (socket.readyState === 1) socket.send(ev.data); };
+    remote.onclose = () => { try { socket.close(); } catch {} };
+    remote.onerror = () => { try { socket.close(); } catch {} };
+    socket.onmessage = (ev) => { if (opened && remote.readyState === 1) remote.send(ev.data); else q.push(ev.data); };
+    socket.onclose = () => { try { remote.close(); } catch {} };
+    socket.onerror = () => { try { remote.close(); } catch {} };
+    return response;
+  }
+  return new Response("Omni mirror - Deno relay alive", { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } });
+});
+`;
+}
+
+async function denoFetch(token, path, opts = {}) {
+  const r = await fetch(DENO_API + path, {
+    ...opts,
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json', ...(opts.headers || {}) },
+  });
+  const text = await r.text();
+  if (!r.ok) {
+    const e = new Error('Deno API ' + r.status + ': ' + String(text).slice(0, 200));
+    e.auth = r.status === 401 || r.status === 403;
+    throw e;
+  }
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; } catch { body = null; }
+  return body;
+}
+
+function denoList(body) {
+  if (Array.isArray(body)) return body;
+  if (body && Array.isArray(body.items)) return body.items;
+  if (body && Array.isArray(body.data)) return body.data;
+  if (body && Array.isArray(body.apps)) return body.apps;
+  return [];
+}
+
+export async function verifyDenoToken(token) {
+  const list = denoList(await denoFetch(token, '/apps'));
+  return { username: 'Deno · ' + list.length + ' apps', email: '' };
+}
+
+export async function deployDenoBridge({ token, name = '', target, tunnelPath = '/', onProgress = null, waitMs = 60000 }) {
+  const cleanTarget = normalizeTargetHost(target);
+  if (!cleanTarget) throw new Error('ورکر مقصد معتبر نیست.');
+  let tp = String(tunnelPath || '/').trim().split('?')[0];
+  if (!tp || tp === '/') tp = '/';
+  if (!tp.startsWith('/')) tp = '/' + tp;
+  const step = (m) => { if (onProgress) onProgress(m); };
+  let slug = String(name || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+  step('خواندن فهرست appهای Deno…');
+  const items = denoList(await denoFetch(token, '/apps'));
+  let app = slug ? items.find((x) => x && x.slug === slug) : null;
+  if (!slug) slug = 'omni-relay-' + Math.random().toString(36).slice(2, 8);
+  if (!app) {
+    step('ساخت app با نام ' + slug + '…');
+    try {
+      app = await denoFetch(token, '/apps', { method: 'POST', body: JSON.stringify({ slug }) });
+    } catch (e) {
+      if (!String(e && e.message).includes('409')) throw e;
+      app = items.find((x) => x && x.slug === slug);
+      if (!app) throw e;
+    }
+  }
+  const appSlug = (app && app.slug) || slug;
+  step('دیپلوی رله WS (main.ts)…');
+  const rev = await denoFetch(token, '/apps/' + encodeURIComponent(appSlug) + '/deploy', {
+    method: 'POST',
+    body: JSON.stringify({ assets: { 'main.ts': { kind: 'file', encoding: 'utf-8', content: denoRelaySource(cleanTarget, tp) } } }),
+  });
+  const revId = (rev && rev.id) || (rev && rev.revision && rev.revision.id) || null;
+  const domain = appSlug + '.deno.dev';
+  const started = Date.now();
+  let status = (rev && rev.status) || 'building';
+  let failInfo = '';
+  while (Date.now() - started < waitMs) {
+    if (status === 'succeeded') break;
+    if (status === 'failed' || status === 'cancelled' || status === 'skipped') {
+      throw new Error('دیپلوی Deno ناموفق: ' + (failInfo || status));
+    }
+    await bridgeSleep(2500);
+    const cur = revId ? await denoFetch(token, '/revisions/' + encodeURIComponent(revId)).catch(() => null) : null;
+    if (cur) {
+      status = cur.status || status;
+      failInfo = String((cur.failure_detail && cur.failure_detail.message) || cur.failure_reason || '').slice(0, 200);
+    }
+    step('وضعیت Deno: ' + status);
+  }
+  if (status !== 'succeeded') throw new Error('مهلت انتظار برای دیپلوی Deno تمام شد (وضعیت: ' + status + ')');
+  return {
+    domain,
+    url: 'https://' + domain,
+    dashboard: 'https://dash.deno.com/apps/' + appSlug,
+    revision: revId,
+    status: 'ready',
+  };
 }
