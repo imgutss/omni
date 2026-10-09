@@ -1,0 +1,40 @@
+{
+  "results": [
+    "✅ the automatic mode is the default for Vercel",
+    "✅ an invalid token is reported inline, not swallowed",
+    "✅ a valid token verifies and shows the account",
+    "✅ deploy sends the token, target and tunnel path to the worker",
+    "✅ the live domain replaces the placeholder in every config",
+    "✅ deployed bridges are listed and can be re-selected",
+    "✅ switching to Netlify shows the same automatic flow",
+    "✅ the manual zip method still works after the change",
+    "✅ no uncaught javascript errors"
+  ],
+  "errors": [],
+  "deployBodies": [
+    {
+      "platform": "vercel",
+      "token": "good-vercel-token-0123456789",
+      "name": "omni-bridge-test",
+      "target": "omni-panel.workers.dev",
+      "tunnel_path": "/VZLdh9Ft"
+    },
+    {
+      "platform": "netlify",
+      "token": "good-netlify-token-0123456789",
+      "name": "omni-bridge-test",
+      "target": "omni-panel.workers.dev",
+      "tunnel_path": "/VZLdh9Ft"
+    }
+  ],
+  "verifyBodies": [
+    {
+      "platform": "vercel",
+      "token": "bad-token-value"
+    },
+    {
+      "platform": "vercel",
+      "token": "good-vercel-token-0123456789"
+    }
+  ]
+}

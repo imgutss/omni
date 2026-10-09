@@ -1,0 +1,197 @@
+# Vercel / Netlify auto-bridge — changes of 2026-10-09
+
+## خلاصه (Persian summary)
+
+قسمت ورسل و نتلیفای در پنل و ربات از حالت «فایل ZIP را خودت آپلود کن» به حالت
+**خودکار** تبدیل شد: دقیقاً مثل کلاودفلیر، فقط توکن را می‌دهی و خود سیستم پروژه را
+می‌سازد، کانفیگ (ری‌لی/اج) را می‌نویسد، دیپلوی می‌کند و دامنهٔ زنده را برمی‌گرداند.
+
+- **پنل:** کارت «خودکار» برای ورسل و نتلیفای، حالت پیش‌فرض شد. توکن → «بررسی توکن»
+  → «ساخت و دیپلوی» → دامنهٔ زنده در همهٔ کانفیگ‌ها جای‌گذاری می‌شود. لیست پل‌های
+  ساخته‌شده با امکان انتخاب مجدد و دیپلوی دوباره. حالت‌های دستی (ZIP / رله) سر جایشان
+  کار می‌کنند.
+- **ربات:** دستور جدید `/natbridge` (معادل `/vercel` و `/netlify`). نام پروژه را
+  انتخاب می‌کنی، توکن را می‌فرستی، ربات پیام توکن را **فوراً پاک می‌کند**، پیشرفت را
+  روی همان پیام ویرایش می‌کند و در پایان لینک پل + راهنمای کانفیگ را می‌دهد.
+- **بک‌اند:** چهار مسیر جدید `/api/bridge`، `/api/bridge/{id}`، `/api/bridge/verify`
+  و `POST /api/bridge` با همان مدل نشست/اجازهٔ خود پنل.
+- توکن‌ها هرگز در ریپو یا لاگ نمی‌مانند؛ فقط شکل ماسک‌شده (`cfut_g••••a624`) نمایش
+  داده می‌شود و در صورت درخواست صریح، در D1 همان نصب ذخیره می‌شود.
+
+---
+
+## 1. What was broken
+
+The Vercel/Netlify sections of the panel only produced a **ZIP + a written manual**
+("upload this to Vercel yourself"). There was no token flow, no project creation, no
+deployment, and the bot had no equivalent of `/deploy` for those platforms. Every
+attempt to use them ended in a dead end, which is exactly what was reported.
+
+## 2. What is implemented now
+
+### 2.1 Bridge engine — `src/bridges.js` (new module, embedded in the worker)
+
+Platform-agnostic deploy engine. Nothing in it touches the repository or the logs with
+a raw token.
+
+| Piece | Behaviour |
+|---|---|
+| `bridgeTokenShape(platform, token)` | Rejects garbage before any network call (≥25 chars for vercel/netlify). |
+| `verifyBridgeToken(platform, token)` | Vercel `GET /v2/user` (+`/v2/teams`), Netlify `GET /api/v1/user`. Returns username/email/plan; marks `err.auth = true` when the provider rejects the token, so the UI can show "get a new token" instead of a generic failure. |
+| `vercelConfig(target, path)` / `netlifyConfig(target, path)` | Generates the actual site: `vercel.json` edge rewrites (or `netlify.toml` 200-status proxies) for the tunnel path **and** `/__bridge`, a decoy `index.html`, a streaming relay (`api/relay.js` for Node / `netlify/edge-functions/relay.js` for Deno) that keeps `Upgrade`/`Connection` and sets `host` for SNI, a `/__bridge` health probe, `package.json`, `README.md`. |
+| `deployVercelBridge` | verify → `GET /v9/projects/{name}` (404 → `POST /v11/projects`; 400/409 → retry with a random suffix) → upsert `BACKEND_URL` env → `POST /v13/deployments?forceNew=1` with inline `files[]`, `target:'production'` → poll `readyState === "READY"` (2.5 s interval, 55 s default) → domain from `alias[0] \|\| url`. |
+| `deployNetlifyBridge` | verify → `GET /api/v1/sites/{name}` or `POST /api/v1/sites` (`created_via:'omni-panel'`) → sha1 digest of the four files → `POST /sites/{id}/deploys` (`files`, `edge_functions:[{function:'relay',path:'/*'}]`, `env:{BACKEND_URL}`, `async:false`) → upload **only** `deploy.required[]` via `PUT /deploys/{id}/files/{path}` → poll for `state ∈ {ready,current,published}` (50 s default) → `{subdomain}.netlify.app`. |
+| `startBridgeDeploy(db, ctx, opts)` | Inserts a `bot_bridges` row (`status='deploying'`) and returns `{id, promise}`, so an HTTP caller answers **immediately** while the work continues under `ctx.waitUntil`. Success → `status='ready'` + `domain`/`url`; failure → `status='failed'` + the **upstream** error text. |
+| `buildBridgeSubscription` | The v2ray-ready card (address/SNI/host/path) shown after a successful deploy. |
+
+Internal sleep helper is named `bridgeSleep` — `sleep` already exists at the top level
+of the bundle and shadowing it broke the first build.
+
+### 2.2 Worker HTTP API (in `production/worker.js`)
+
+Inserted right after `const settings = await settingsCached(env);` in `handleApi`:
+
+- `GET /api/bridge` — any logged-in user. Returns the bridge rows plus `target`,
+  `path` (this panel's own tunnel path) and `can_deploy` (true for admins only).
+- `GET /api/bridge/{id}` — one row, for progress polling.
+- `POST /api/bridge/verify` — admin. `{platform, token}` →
+  `{ok, platform, account:{username,email,plan|team_slug}, token:"cfut_g••••a624"}`.
+- `POST /api/bridge` — admin. `{platform, token, name, target, tunnel_path, id?}` →
+  `{ok, id, name, platform, target, tunnel_path, status:"deploying"}`. Passing `id`
+  re-deploys that row.
+
+`bridgeTarget()` falls back `settings.public_host` → request hostname; `bridgePath()`
+reads `settings.path` and falls back to `/VZLdh9Ft`.
+
+### 2.3 Panel UI (in `production/panel.html`)
+
+- New `NATNET` state keys: `vercelAutoToken`, `netlifyAutoToken`, `autoName`,
+  `autoTarget`, `autoBusy`, `autoLog`.
+- Module-level helpers `natnetLoadBridges()`, `natnetTunnelPath(settings)`,
+  `natnetAutoCardHtml(platform)`, `natnetBridgeListHtml(...)`, plus
+  `natnetBridges` / `natnetBridgeCtx` caches.
+- Third mode button (`data-vmode="auto"` / `data-nmode="auto"`) and **auto is now the
+  default mode** for both platforms.
+- Action branches `omni-natnet-auto-deploy`, `-redeploy`, `-verify`, `-use`,
+  `-refresh`, and an `input` listener that keeps the token/name/target fields in state.
+- Element ids used by the browser test: `#natnet-auto-token-{vercel,netlify}`,
+  `#natnet-auto-name-{…}`, `#natnet-auto-target-{…}`, `#natnet-auto-out-{…}`,
+  `#natnet-bridge-domain`.
+- Manual ZIP / relay modes were left intact and are still tested.
+
+### 2.4 Bot flow
+
+- `/natbridge` (aliases `/vercel`, `/netlify`; callbacks `cmd:natbridge`,
+  `cmd:nb_vercel`, `cmd:nb_netlify`, `cmd:nb_list`, `nbname:<platform>:<name>`).
+- Offers generated project names (`omni-bridge-xxxx`, `omni-edge-xxxx`,
+  `omni-net-xxxx`, `omni-relay-xxxx`) plus ✏️ custom, shows the resolved target and
+  tunnel path, and refuses to guess when the chat has no panel yet (points at
+  `/deploy` or `/connect`).
+- `bridge_token` UI state validates the token shape, **deletes the user's token
+  message immediately**, sends one progress message and then *edits* it (no spam),
+  awaits the deploy, and reports either the live domain + subscription card or the
+  upstream failure plus the exact URL where a working token can be created.
+- `/natbridge list` lists the chat's bridges; `CREATOR_COMMANDS` gained `natbridge`
+  and `CREATOR_COMMANDS_VERSION` was bumped to `2026-10-09-natbridge` so existing bots
+  actually re-register their command menu.
+- The webhook route is unchanged: `POST /tg/{BOT_WEBHOOK_SECRET || "omni-hook"}`.
+
+## 3. Real bugs found by testing (not just features added)
+
+These were all caught by the new tests and are fixed in the committed worker:
+
+1. **`cmd:nb_vercel` / `cmd:nb_netlify` did nothing.** The menu buttons sent those
+   callback payloads, but the `/natbridge` condition only matched
+   `cmd:natbridge` and `cmd:nb_list`; the mapping to `"/natbridge vercel"` set `cmd`
+   to a two-word string that equals neither `/vercel` nor `/netlify`. Every platform
+   button answered "این عمل شناخته نشد" — i.e. the feature was reachable only by
+   typing the command by hand. Both callback payloads are now matched explicitly.
+2. **The bridge was built against the wrong tunnel path.** Every panel picks a random
+   `settings.path` at bootstrap, but the bot hard-coded `/VZLdh9Ft`. A deployed bridge
+   would have proxied to a path the target panel rejects. The bot now reads the real
+   path from the panel's own D1 through the Cloudflare API (`bridgePanelPath` →
+   `panelSetting(token, panel, "path")`) and only falls back to the default when the
+   panel is not management-connected.
+3. **The custom-name branch lost that path.** `bridge_name` UI state only carried the
+   platform, so a user-typed project name silently reverted to `/VZLdh9Ft`. The state
+   now carries `path`, and the handler re-resolves it if it is missing.
+4. `xhttpPath is not defined` — the auto card's deploy handler lives at module scope,
+   where `NationalNetView` locals do not exist. Replaced with the module-level
+   `natnetTunnelPath(e.settings?.())` helper.
+5. Two `await fn(...).catch(() => {})` precedence bugs (the `.catch` bound to the
+   awaited result, not the promise) and a missing `err.auth = true` on token-shape
+   rejection.
+
+## 4. Test evidence
+
+Everything below was run against the committed files; no credentials are required for
+any of it except `test:panel:bridge`, which uses a deliberately dead token so that no
+project can ever be created.
+
+| Command | What it proves | Result |
+|---|---|---|
+| `npm run test:bridges` | 15 offline unit tests for the engine (fake D1 + fake fetch): config generation, sha1 digest, token shape, verify/deploy state machine, retries, polling, failure text. | **15/15** |
+| `npm run test:bot` | 16 tests that load the **real** `production/worker.js` bundle in Node (only `cloudflare:sockets` stubbed) and drive `handleUpdate` with an in-memory Telegram + D1 + Cloudflare API. Covers the whole `/natbridge` conversation, token deletion, progress edits, failure reporting, path resolution, and that `/deploy` still works. | **16/16** |
+| `npm run test:panel:bridge` | Boots the real worker in Miniflare (`test/wrangler.smoke.toml`, local D1, never deployed) and exercises the HTTP API. `POST /api/bridge/verify` makes **real** calls to `api.vercel.com` and `api.netlify.com` and surfaces their verdicts (`Not authorized`, `Access Denied`). | **15/15** |
+| `npm run test:scanner` | Existing production scanner suite. | **18/18** |
+| `npm run test:scanner:browser` | Existing Playwright panel regression. | passed, `jsErrors: []` |
+| `node production/test/bridge.test.mjs` | New Playwright test for the auto card: auto is the default mode, inline error on a bad token, verify shows the account, deploy sends `{platform, token, target, tunnel_path}`, the live domain replaces the placeholder in every config, bridge list + re-select, Netlify parity, manual ZIP mode still works, no JS errors. | **9/9** (`production/bridge-results.json`) |
+| `npm run test:all-offline` | Runs the four offline suites in one go. | green |
+
+### Artifact identity
+
+```
+node production/build.mjs
+Production artifact SHA-256: 42751fc73873c67374a52c8b5f6bda9ec4daf7848ff877e0490621522d5e0523
+production/worker.js == deploy/omni-worker.bundle.js   1,155,199 bytes
+production/panel.html                                  552,672 bytes (+14,008 from this change)
+```
+
+## 5. How to deploy
+
+The repository never deploys itself; `node production/build.mjs` only regenerates the
+bundle. To ship:
+
+```bash
+node production/build.mjs          # already done; verifies syntax + refreshes the bundle
+npm run test:all-offline           # 15 + 16 + 18 + 9 checks
+npm run test:panel:bridge          # optional, needs network access to the providers
+wrangler deploy                    # or: npm run deploy:auto
+```
+
+After deploying, the bot picks up the new command menu on its next `/start`
+(`CREATOR_COMMANDS_VERSION` changed, so `setMyCommands` runs once per bot).
+
+## 6. Still blocked / not verified end-to-end
+
+This is the only part that could not be finished, and it is not a code problem:
+
+- The Vercel token supplied for testing (`cfut_g••••a624`) is **revoked**:
+  `api.vercel.com/v2/user` answers `Not authorized`. That is precisely what the new
+  verify endpoint now reports to the user, and the failure path is tested with it.
+- No Netlify token was supplied (`api.netlify.com` answers `Access Denied` for the
+  placeholder used in tests).
+- `*.alisarani7021.workers.dev` does not resolve from this environment, so a live
+  deployment of the panel itself could not be smoke-tested.
+
+With one valid token per platform, the remaining verification is a single
+`/natbridge` run in Telegram (or one click of "ساخت و دیپلوی" in the panel) — every
+step of it is already covered by the tests above against mocked and real provider
+responses.
+
+## 7. Files
+
+**Changed:** `production/worker.js`, `production/panel.html`,
+`deploy/omni-worker.bundle.js` (generated), `package.json` (new test scripts),
+`.gitignore` (Playwright screenshots).
+
+**Added:** `src/bridges.js`, `tools/patch8.py` … `tools/patch12.py` (the patch scripts
+that produced the worker/panel changes, kept so the edits are reproducible),
+`test/bridges.test.mjs`, `test/bot-bridge.test.mjs`, `test/local-smoke.sh`,
+`test/wrangler.smoke.toml` (local Miniflare only — never deploy it),
+`production/test/bridge.test.mjs`, `production/bridge-results.json`,
+`production/browser-results.json`, `docs/BRIDGE-CHANGES-2026-10-09.md`.
+
+**Not committed by design:** `.wrangler/`, `node_modules/`, Playwright screenshots,
+and any credential. No token — Vercel, Netlify, Telegram or GitHub — appears anywhere
+in this repository.

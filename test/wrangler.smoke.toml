@@ -1,0 +1,20 @@
+# Local smoke harness — never deployed. Used by test/local-smoke.sh
+name = "omni-local-smoke"
+main = "../production/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "omni-smoke"
+database_id = "00000000-0000-4000-8000-000000000001"
+
+
+[[kv_namespaces]]
+binding = "RELEASES"
+id = "00000000000000000000000000000001"
+
+[vars]
+PANEL_NAME = "Omni Smoke"
+BOT_USERNAME = "OmniAiGateBot"

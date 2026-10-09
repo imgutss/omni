@@ -10,3 +10,7 @@ dist/
 .DS_Store
 build/
 coverage/
+
+# playwright evidence screenshots (regenerable with `node production/test/*.test.mjs`)
+production/*.png
+!production/test/**/*.png

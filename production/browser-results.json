@@ -1,0 +1,26 @@
+[
+  {
+    "panel": "production",
+    "ok": true,
+    "mocked": true,
+    "tests": [
+      "classic scanner controls",
+      "actual browser fetch path invoked",
+      "TLS errors never succeed",
+      "progress",
+      "save merge",
+      "SIIT success/error",
+      "network sense success/error",
+      "pool rotation",
+      "direct ping",
+      "country list/scan/select",
+      "config names",
+      "async output rerender stable",
+      "ports 443+2053 honored",
+      "selected proxy retained",
+      "QoS IPv4 honored",
+      "IPv6 off honored"
+    ],
+    "jsErrors": []
+  }
+]
