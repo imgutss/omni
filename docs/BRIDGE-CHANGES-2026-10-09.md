@@ -6,6 +6,17 @@
 **خودکار** تبدیل شد: دقیقاً مثل کلاودفلیر، فقط توکن را می‌دهی و خود سیستم پروژه را
 می‌سازد، کانفیگ (ری‌لی/اج) را می‌نویسد، دیپلوی می‌کند و دامنهٔ زنده را برمی‌گرداند.
 
+**وضعیت فعلی: زنده و اثبات‌شده.** ورکر روی
+`https://omni.4lifm29.workers.dev` دیپلوی شده و با توکن‌های واقعی، دو پل واقعی
+ساخته و تست شد — هر دو، مسیر تونل پنل را بایت‌به‌بایت پروکسی می‌کنند:
+`omni-bridge-cu67-4lifm27-4000s-projects.vercel.app` و
+`omni-net-cu67.netlify.app` (جزئیات و خروجی‌ها در بخش ۷).
+
+علت اصلی اینکه «نتلیفای اصلا کار نمی‌کرد» هم پیدا شد: سایت‌های نتلیفای با
+`sso_login: true` ساخته می‌شوند، یعنی **هر** مسیری ۴۰۱ و صفحهٔ «Login Redirect»
+می‌دهد. پروژه‌های ورسل هم به‌طور پیش‌فرض `ssoProtection` دارند و ۳۰۲
+«Protected by Vercel Authentication» برمی‌گردانند. هر دو حالا خودکار خاموش می‌شوند.
+
 - **پنل:** کارت «خودکار» برای ورسل و نتلیفای، حالت پیش‌فرض شد. توکن → «بررسی توکن»
   → «ساخت و دیپلوی» → دامنهٔ زنده در همهٔ کانفیگ‌ها جای‌گذاری می‌شود. لیست پل‌های
   ساخته‌شده با امکان انتخاب مجدد و دیپلوی دوباره. حالت‌های دستی (ZIP / رله) سر جایشان
@@ -204,25 +215,95 @@ Two notes about the deployment itself:
   whatever the multipart `metadata` carries. Bindings must be sent with every upload
   or they are dropped; that is what the second upload above does.
 
-## 7. Still blocked / not verified end-to-end
+## 7. End-to-end proof on the real accounts — 2026-10-09 07:55 UTC
+
+Real Vercel and Netlify tokens were supplied, so the bridge was built for real.
+This immediately exposed three provider-side bugs that no mock could have caught;
+all three are fixed in `src/bridges.js` and re-embedded into the worker.
+
+| # | Symptom on the real API | Cause | Fix |
+|---|---|---|---|
+| 1 | `400 Invalid request: should NOT have additional property 'env'` | `POST /v11/projects` does not accept `env` | dropped — `vercelSetEnv` already writes `BACKEND_URL` via `POST /v9/projects/{id}/env` |
+| 2 | `400 Invalid request: should NOT have additional property 'projectId'` | `POST /v13/deployments` does not accept `projectId` in the body | dropped — the deployment binds to the project through `name` (+`?teamId=`) |
+| 3 | `500 {"error":"no implicit conversion of String into Integer"}` | `POST /sites/{id}/deploys` rejects an `edge_functions` key | dropped from the body; the relay ships as a `netlify.toml`-declared function, and the `netlify.toml` 200-status redirects do the proxying |
+| 4 | **Netlify:** every path answered `401` + a "Login Redirect" page | new sites are created with `sso_login: true` | `PATCH /sites/{id} {"sso_login": false}` after create *and* after reuse (`netlifyAllowPublicAccess`) |
+| 5 | **Vercel:** every path answered `302` "Protected by Vercel Authentication" | new projects default to `ssoProtection: {"deploymentType":"all_except_custom_domains"}` | `ssoProtection: null` on creation plus `PATCH /v9/projects/{id}` (`vercelAllowPublicAccess`) |
+
+Items 4 and 5 are almost certainly why "Netlify never worked" before: every
+earlier site on this account (`nimble-begonia-156bc8`, `unique-begonia-46df26`,
+`tranquil-dango-13d235`, `zippy-torrone-1623bc`, `cool-fox-8677bd`,
+`cute-bunny-e5cd67`, `omni-net-qj6m`) still has `sso_login: true`, so each of them
+answers 401 to every client. `omni-net-qj6m` was unprotected as part of this run;
+the rest were left alone because they are not Omni bridges.
+
+### Deployed from the patched engine, no manual intervention
+
+| | Vercel | Netlify |
+|---|---|---|
+| account | `4lifm27-4000` <4lifm27@gmail.com>, hobby | `guts S` <4lifm25@gmail.com> |
+| project / site | `omni-bridge-cu67` | `omni-net-cu67` |
+| domain | `omni-bridge-cu67-4lifm27-4000s-projects.vercel.app` | `omni-net-cu67.netlify.app` |
+| build time | 9.6 s (BUILDING → READY) | 4.6 s (processing → ready) |
+| target | `omni.4lifm29.workers.dev` | `omni.4lifm29.workers.dev` |
+| tunnel path | `/JOGpAVgq` (the panel's own `settings.path`, read from its D1) | `/JOGpAVgq` |
+
+Verification against the live domains:
+
+```
+panel direct  GET https://omni.4lifm29.workers.dev/JOGpAVgq   200  869 bytes
+vercel bridge GET https://omni-bridge-cu67-…vercel.app/JOGpAVgq 200  869 bytes  identical ✅
+netlify bridge GET https://omni-net-cu67.netlify.app/JOGpAVgq  200  869 bytes  identical ✅
+vercel bridge GET /__bridge  {"ok":true,"status":200,"ms":52,"relay":"omni-vercel"}
+decoy         GET /          both serve the decoy page, not the panel
+```
+
+So both bridges really proxy the panel byte-for-byte, and the Vercel health probe
+confirms the relay reaches the backend in ~52 ms.
+
+### Known limit: websocket upgrade
+
+Neither provider forwards a websocket upgrade for this path — a `Upgrade:
+websocket` request comes back as a plain `200` from the panel. Clients therefore
+need a stream/POST transport (the panel's XHTTP path), not `ws`. This is a
+provider property, not a bridge bug: Vercel's serverless relay does keep
+`Upgrade`/`Connection` headers, but the platform does not perform the 101
+handshake on `.vercel.app`, and Netlify's proxy redirect does not either.
+
+### Reproducing
+
+```bash
+OMNI_VERCEL_TOKEN=…  OMNI_NETLIFY_TOKEN=…  node test/live-bridge-deploy.mjs
+```
+
+The script reads tokens from the environment only, prints progress and the
+resulting domains, and writes nothing to disk.
+
+## 8. What is still open
 
 This is the only part that could not be finished, and it is not a code problem:
 
-- **No Vercel token exists yet.** The `cfut_…` token is a Cloudflare token; tested
-  against `api.vercel.com` (`/v2/user`, `/v2/teams`, `/v9/projects`) it answers
-  `403 {"invalidToken":true}`, which is exactly what the new verify endpoint reports
-  to the user. A real Vercel token is needed from `https://vercel.com/account/tokens`
-  (Scope = the account itself, not a team; Access = Full Access; no expiration).
-- **No Netlify token exists yet** — `https://app.netlify.com/user/applications#personal-access-tokens`.
-- Consequently no bridge has been deployed to a real Vercel/Netlify account yet. Every
-  step up to the provider's answer is covered by the suites above, including live
-  `403 Not authorized` / `Access Denied` responses from both providers.
+Nothing is blocked any more. Both providers have been exercised end to end with
+real tokens and real deployments (section 7). What is still open, in order of
+usefulness:
 
-With one valid token per platform, the remaining verification is a single
-`/natbridge` run in Telegram (or one click of "ساخت و دیپلوی" in the panel at
-https://omni.4lifm29.workers.dev).
+- **The cron trigger on the live worker.** `*/5 * * * *` is declared in
+  `wrangler.toml` but is not set on the deployed worker, and an API token cannot
+  set it (`PUT …/workers/scripts/omni/settings` → `10405 Method not allowed for
+  this authentication scheme`; `…/workers/triggers/schedules` → `7003 no route`).
+  Add it in the dashboard (Workers → omni → Settings → Triggers) or run
+  `wrangler deploy` once with an account-scoped token.
+- **A websocket-capable bridge domain.** If `ws` transport must work, the bridge
+  needs a custom domain on a platform that performs the 101 handshake, or a
+  stream-only client configuration.
+- **The old Netlify sites** listed in section 7 are still behind their login wall;
+  they are not Omni bridges, so they were left untouched.
 
-## 8. Files
+The token that was first handed over as a "Vercel" token is a **Cloudflare** token
+(`cfut_…`); it is `active` and was used to deploy the worker itself. Tested against
+`api.vercel.com` it answers `403 {"invalidToken":true}`, which is exactly what the
+verify endpoint reports to a user who pastes it into the Vercel field.
+
+## 9. Files
 
 **Changed:** `production/worker.js`, `production/panel.html`,
 `deploy/omni-worker.bundle.js` (generated), `package.json` (new test scripts),

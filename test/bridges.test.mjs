@@ -85,7 +85,11 @@ globalThis.fetch = async (url, init = {}) => {
     if (u.includes('/v2/user')) return OK({ user: { username: 'guts', email: 'g@example.com', uid: 'u_1', defaultTeamId: 'team_1' } });
     if (u.includes('/v2/teams')) return OK({ teams: [{ id: 'team_1', slug: 'guts' }] });
     if (/\/v9\/projects\/[^/]+$/.test(u.split('?')[0]) && method === 'GET') return OK({ error: { message: 'not found' } }, 404);
-    if (u.includes('/v11/projects') && method === 'POST') return OK({ id: 'prj_1', name: JSON.parse(init.body).name });
+    if (u.includes('/v11/projects') && method === 'POST') {
+      const body = JSON.parse(init.body);
+      assert.ok(!('env' in body), 'POST /v11/projects must not send `env` — the real API answers 400');
+      return OK({ id: 'prj_1', name: body.name });
+    }
     if (u.includes('/env') && method === 'GET') return OK({ envs: [] });
     if (u.includes('/env') && (method === 'POST' || method === 'PATCH')) return OK({ ok: true });
     if (u.includes('/v13/deployments') && method === 'POST') {
@@ -109,7 +113,8 @@ globalThis.fetch = async (url, init = {}) => {
       const body = JSON.parse(init.body);
       assert.ok(body.files && Object.keys(body.files).length >= 4, 'netlify digest missing');
       for (const [p, sha] of Object.entries(body.files)) assert.match(sha, /^[0-9a-f]{40}$/, `bad sha1 for ${p}`);
-      assert.ok(Array.isArray(body.edge_functions) && body.edge_functions[0].function === 'relay');
+      assert.ok(!('edge_functions' in body),
+        'the deploy body must not send edge_functions — the real API answers 500');
       return OK({ id: 'dep_1', state: 'uploading', required: Object.values(body.files).slice(0, 2), subdomain: 'site_1' });
     }
     if (u.includes('/deploys/dep_1/files/')) {
@@ -118,6 +123,11 @@ globalThis.fetch = async (url, init = {}) => {
       return OK({ ok: true });
     }
     if (u.includes('/deploys/dep_1')) return OK({ id: 'dep_1', state: netlifyState, subdomain: 'site_1', error_message: '' });
+    if (u.includes('/sites/site_1') && method === 'PATCH') {
+      const body = JSON.parse(init.body);
+      assert.equal(body.sso_login, false, 'new Netlify sites are behind a 401 login wall unless sso_login is turned off');
+      return OK({ id: 'site_1', name: 'site_1', subdomain: 'site_1', sso_login: false });
+    }
     if (u.includes('/sites/')) return OK({ id: 'site_1', name: 'site_1', subdomain: 'site_1' });
     return OK({});
   }
@@ -223,6 +233,8 @@ await t('deployNetlifyBridge digests, uploads required files, publishes', async 
   assert.equal(out.domain, 'site_1.netlify.app');
   assert.equal(calls.filter((c) => c.includes('/deploys/dep_1/files/')).length, 2, 'required files not uploaded');
   assert.ok(calls.some((c) => c.startsWith('POST /api/v1/sites')), 'site was not created');
+  assert.ok(calls.some((c) => c === 'PATCH /api/v1/sites/site_1'),
+    'the Netlify login wall (sso_login) was never lifted — every path would answer 401');
 });
 
 await t('startBridgeDeploy persists a row and updates it on success', async () => {
