@@ -7,7 +7,7 @@
 | چیز | آدرس |
 |---|---|
 | پنل | https://omni.4lifm29.workers.dev — مسیر تونل `/JOGpAVgq` |
-| ورکر | اکانت `9a3aabde4bdecbff1e298100985c7e7e`، اسکریپت `omni` |
+| ورکر | اکانت `9a3aabde4bdecbff1e298100985c7e7e`، اسکریپت `omni`، نسخهٔ `b4102152-8aee-4d8f-a3c0-7d1a8b5caa9c` |
 | ربات تلگرام | @OmniAiGateBot — وبهوک `POST https://omni.4lifm29.workers.dev/tg/omni-hook` |
 | پل ورسل | https://omni-bridge-cu67-4lifm27-4000s-projects.vercel.app |
 | پل نتلیفای | https://omni-net-cu67.netlify.app |
@@ -16,6 +16,26 @@
 هر دو پل، مسیر تونل پنل را بایت‌به‌بایت پروکسی می‌کنند (۸۶۹ بایت، کاملاً یکسان با
 پنل). صفحهٔ اول هر دو (`/`) یک صفحهٔ فریب است، نه پنل. سلامت پل ورسل:
 `GET /__bridge` → `{"ok":true,"status":200,"ms":52,"relay":"omni-vercel"}`.
+
+## چطور دوباره دیپلوی کنم (ساده‌ترین راه)
+
+```bash
+cd omni
+export CLOUDFLARE_API_TOKEN=…      # همان توکن cfut_…
+export CLOUDFLARE_ACCOUNT_ID=9a3aabde4bdecbff1e298100985c7e7e
+npx wrangler deploy --config wrangler.toml
+```
+
+همین یک دستور، کد + هر شش بایندینگ + کرون را با هم می‌فرستد و `BOT_TOKEN`
+(سکرت) هم سر جایش می‌ماند. بعدش اگر لازم بود:
+
+```bash
+npx wrangler secret put BOT_TOKEN --config wrangler.toml   # فقط اگر توکن ربات عوض شد
+```
+
+اعتبارنامه‌ها در `/home/user/cfpanel/.env` (خارج از ریپو، `chmod 600`) هم
+ذخیره شد تا `node deploy/deploy.mjs` هم کار کند — آن اسکریپت علاوه بر دیپلوی،
+وب‌هوک و منوی ربات را هم از نو ست می‌کند.
 
 ## فایل‌های دیپلوی
 
@@ -40,13 +60,39 @@ BOT_USERNAME           = OmniAiGateBot
 اگر دوباره دیپلوی کردی، حتماً همین شش بایندینگ را بفرست. آپلود بدون بایندینگ،
 اینها را پاک می‌کند.
 
-## تنها کار باقی‌مانده
+## کار باقی‌مانده: هیچ
 
-**کرون `*/5 * * * *` روی ورکر ست نشده.** با توکن API نمی‌شود
+**کرون `*/5 * * * *` ست شد** (۲۰۲۶-۱۰-۰۹ ۰۸:۰۱ UTC) با یک `wrangler deploy`
+کامل. با توکن API خالی نمی‌شود ستش کرد
 (`PUT …/workers/scripts/omni/settings` → `10405`؛ `…/workers/triggers/schedules` →
-`7003 no route`). یا در داشبورد اضافه کن
-(Workers → omni → Settings → Triggers) یا یک بار `wrangler deploy` بزن.
-کرون برای چک‌های دوره‌ای لازم است؛ نبودنش پنل و پل‌ها را خراب نمی‌کند.
+`7003 no route`)، ولی `wrangler deploy` هم کد را می‌فرستد و هم تریگرها را.
+
+تأیید شد از راه API:
+
+```json
+GET /accounts/{acc}/workers/scripts/omni/schedules
+{"result":{"schedules":[{"cron":"*/5 * * * *",
+  "created_on":"2026-10-08T20:08:41Z","modified_on":"2026-10-09T08:01:16Z"}]}}
+```
+
+کرون هر ۵ دقیقه این کارها را می‌کند: `drainUpdates` (صف پیام‌های ربات)،
+`syncCreatorCommands` (ثبت منوی دستورات)، `monitorCreatorPanels`،
+`notifyReleaseUpdate`، `remindBackups`، و گزارش شبانه ساعت ۵ UTC.
+
+## هفت بایندینگ زنده (بعد از دیپلوی دوباره چک شد)
+
+```
+secret_text   BOT_TOKEN              (سر جایش ماند)
+plain_text    BOT_USERNAME           = OmniAiGateBot
+plain_text    BOT_WEBHOOK_SECRET     = omni-hook
+plain_text    PANEL_NAME             = Omni
+plain_text    PUBLIC_HOST            = omni.4lifm29.workers.dev   ← جدید
+d1            DB                     = omni-db / 9660e603-a4e9-4b2c-8071-788e2539e618
+kv_namespace  RELEASES               = f7ac482df0f04daf96378b6b55224dc9
+```
+
+`PUBLIC_HOST` در `wrangler.toml` اضافه شد تا هندلر `scheduled` از همان اول
+آدرس درست پنل را داشته باشد (قبلاً به `omni.workers.dev` پیش‌فرض می‌رفت).
 
 ## نکتهٔ مهم دربارهٔ وب‌سوکت
 

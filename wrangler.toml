@@ -13,6 +13,7 @@ database_id = "9660e603-a4e9-4b2c-8071-788e2539e618"
 PANEL_NAME = "Omni"
 BOT_WEBHOOK_SECRET = "omni-hook"
 BOT_USERNAME = "OmniAiGateBot"
+PUBLIC_HOST = "omni.4lifm29.workers.dev"
 
 [triggers]
 crons = ["*/5 * * * *"]

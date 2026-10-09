@@ -286,12 +286,15 @@ Nothing is blocked any more. Both providers have been exercised end to end with
 real tokens and real deployments (section 7). What is still open, in order of
 usefulness:
 
-- **The cron trigger on the live worker.** `*/5 * * * *` is declared in
-  `wrangler.toml` but is not set on the deployed worker, and an API token cannot
-  set it (`PUT …/workers/scripts/omni/settings` → `10405 Method not allowed for
-  this authentication scheme`; `…/workers/triggers/schedules` → `7003 no route`).
-  Add it in the dashboard (Workers → omni → Settings → Triggers) or run
-  `wrangler deploy` once with an account-scoped token.
+- ~~The cron trigger on the live worker.~~ **Done** — `wrangler deploy` was run
+  with the account token at 2026-10-09 08:01 UTC and the schedule is now set:
+  `GET …/workers/scripts/omni/schedules` returns `{"cron":"*/5 * * * *",
+  "modified_on":"2026-10-09T08:01:16Z"}`. A bare API token really cannot set it
+  (`PUT …/scripts/omni/settings` → `10405`, `…/workers/triggers/schedules` →
+  `7003 no route`); `wrangler deploy` uploads the script *and* the triggers in
+  one call, and the `BOT_TOKEN` secret survived it. The same run added a
+  `PUBLIC_HOST = "omni.4lifm29.workers.dev"` var so the `scheduled` handler stops
+  defaulting to `omni.workers.dev`.
 - **A websocket-capable bridge domain.** If `ws` transport must work, the bridge
   needs a custom domain on a platform that performs the 101 handshake, or a
   stream-only client configuration.
