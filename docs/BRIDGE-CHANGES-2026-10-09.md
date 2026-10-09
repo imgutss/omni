@@ -538,3 +538,13 @@ Local proof (Deno 2.9.7 + Xray 26.3.27, socks→gstatic): **204 in 1.95 s with
 ed=2048 and 0.41 s without**. Deployed omni `b3ef3641`, nova `d20a75bf`.
 Existing D1 row patched to the real hostname; one «♻️ redeploy» from the panel
 installs relay v5 onto the user's Deno app.
+
+## 17. Deno edge rejects WS early-data (`?ed=2048`) — configs ship without it
+
+Live A/B (real Xray client → ali.alisarani7021.deno.net):
+`/VZLdh9Ft` → 204 in 0.72 s · `/VZLdh9Ft?ed=2048` → handshake dies (the ~2 KB
+base64 `sec-websocket-protocol` header never survives the Deno edge; locally,
+without the edge, the same bytes pass and the relay decodes them fine).
+Panel fix: relay rows (`relay: true`) now render URIs with SNI + WS Host = the
+relay's own domain, `alpn=http/1.1` (no WS upgrade over h2 on the Deno edge),
+no `?ed=`, no fragment. CF-direct rows unchanged.

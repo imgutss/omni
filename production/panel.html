@@ -10674,14 +10674,21 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
     // Green endpoints — live-tested 2026-10-09 with a REAL Xray client (socks→204):
     // WS + TLS + CF clean IP carries traffic; every bridge-edge transport failed.
     let verifiedDirectEndpoints = [
-      ...(NATNET.denoEndpoints || []).map(x => ({ name: x.name, ip: x.ip, ping: "relay" })),
+      ...(NATNET.denoEndpoints || []).map(x => ({ name: x.name, ip: x.ip, ping: "relay", relay: !!x.relay })),
       { name: "دامنهٔ خود ورکر (مستقیم)", ip: publicHost, ping: "پایه" },
       ...NATNET_DATA.cf.cleanIps.map(ip => ({ name: `CF ${ip} (تست زنده ✅ Xray)`, ip, ping: "" }))
     ];
 
-    let verifiedDirectUris = verifiedDirectEndpoints.map(item => 
-      `vless://${uuid}@${item.ip}:443?encryption=none&security=tls&sni=${publicHost}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=ws&host=${publicHost}&path=${encodeURIComponent(xhttpPath)}&fragment=100-200,10-20,tlshello&fp=chrome#${encodeURIComponent("🇮🇷 " + item.name)}`
-    );
+    // relay rows (Deno): TLS SNI and WS Host MUST be the relay's own domain
+    // (its cert covers *.deno.net), ALPN stays http/1.1 (the Deno edge does not
+    // expose WS upgrades over h2) and NO ?ed= early-data (the 2KB
+    // sec-websocket-protocol header dies at the Deno edge; plain WS = 0.7s).
+    let verifiedDirectUris = verifiedDirectEndpoints.map(item => {
+      const sni = item.relay ? item.ip : publicHost;
+      const alpn = item.relay ? "http/1.1" : "h2,http/1.1";
+      const frag = item.relay ? "" : "&fragment=100-200,10-20,tlshello";
+      return `vless://${uuid}@${item.ip}:443?encryption=none&security=tls&sni=${sni}&alpn=${alpn}&insecure=0&allowInsecure=0&type=ws&host=${sni}&path=${encodeURIComponent(xhttpPath)}${frag}&fp=chrome#${encodeURIComponent("🇮🇷 " + item.name)}`;
+    });
 
     // 2026-10-09, real Xray client tests: NO client transport survives the
     // Vercel/Netlify edge (WS upgrade refused → 200 not 101; the panel server
@@ -11168,7 +11175,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
               return;
             }
             let dom = row.domain || "";
-            if (plat === "vercel") NATNET.vercelDomain = dom; else if (plat === "deno") { NATNET.denoDomain = dom; NATNET.denoEndpoints = [{ name: `Deno relay ${dom} (ترافیک واقعی ✅)`, ip: dom }]; } else NATNET.bridgeDomain = dom;
+            if (plat === "vercel") NATNET.vercelDomain = dom; else if (plat === "deno") { NATNET.denoDomain = dom; NATNET.denoEndpoints = [{ name: `Deno relay ${dom} (ترافیک واقعی ✅)`, ip: dom, relay: true }]; } else NATNET.bridgeDomain = dom;
             NATNET[natnetTokKey(plat)] = "";
             let host = natnetPlatFa(plat);
             paint(`<div class="badge ok">✅ پل ${host} زنده است · <b class="mono" dir="ltr">${a(dom)}</b></div>
@@ -11199,7 +11206,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
           let plat = s.dataset.plat || NATNET.bridgePlatform || "vercel";
           let dom = s.dataset.domain || "";
           if (!dom) return;
-          if (plat === "vercel") NATNET.vercelDomain = dom; else if (plat === "deno") { NATNET.denoDomain = dom; NATNET.denoEndpoints = [{ name: `Deno relay ${dom} (ترافیک واقعی ✅)`, ip: dom }]; } else NATNET.bridgeDomain = dom;
+          if (plat === "vercel") NATNET.vercelDomain = dom; else if (plat === "deno") { NATNET.denoDomain = dom; NATNET.denoEndpoints = [{ name: `Deno relay ${dom} (ترافیک واقعی ✅)`, ip: dom, relay: true }]; } else NATNET.bridgeDomain = dom;
           y(`دامنهٔ ${dom} در همهٔ کانفیگ‌ها اعمال شد`, "ok");
           e.rerenderView(l.view);
         } else if (i === "omni-natnet-auto-refresh") {
