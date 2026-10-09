@@ -10119,7 +10119,7 @@ function xe(total) {
      ========================================================================= */
   var NATNET = {
     tab: "bridge", // "bridge" | "spoofer" | "relays"
-    bridgePlatform: "vercel", // "vercel" | "netlify" | "deno"
+    bridgePlatform: "deno", // deno only since 2026-10-09 (vercel/netlify removed)
     vercelMode: "auto", // "auto" | "rewrite" | "relay"
     netlifyMode: "auto", // "auto" | "edge" | "rewrite"
     user: "",
@@ -10546,6 +10546,11 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       natnetBridges = natnetBridges || [];
       natnetBridgeCtx.canDeploy = false;
     }
+    const dRow = (natnetBridges || []).find((x) => x && x.platform === "deno" && x.status === "ready" && x.domain);
+    if (dRow) {
+      NATNET.denoDomain = dRow.domain;
+      NATNET.denoEndpoints = [{ name: `Deno relay ${dRow.domain} (ترافیک واقعی ✅)`, ip: dRow.domain, relay: true }];
+    }
     return natnetBridges;
   }
 
@@ -10661,7 +10666,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
 
     // Platform selection: vercel or netlify ONLY
     if (!NATNET.bridgePlatform || (NATNET.bridgePlatform !== "vercel" && NATNET.bridgePlatform !== "netlify" && NATNET.bridgePlatform !== "deno")) {
-      NATNET.bridgePlatform = "vercel";
+      NATNET.bridgePlatform = "deno";
     }
 
     let netlifyDomain = (NATNET.bridgeDomain || "unique-begonia-46df26.netlify.app").replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
@@ -10737,14 +10742,8 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
     </div>
   </div>
 
-  <!-- PLATFORM SWITCHER TABS (VERCEL vs NETLIFY ONLY) -->
+  <!-- PLATFORM: DENO ONLY (vercel/netlify removed 2026-10-09: edge policy blocks client traffic) -->
   <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-    <button class="btn ${NATNET.bridgePlatform === "vercel" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-subtab" data-sub="vercel" style="flex:1;min-width:240px;padding:14px;font-weight:700;font-size:14px">
-      ▲ ۱. رله ابری ورسل (Vercel Relay)
-    </button>
-    <button class="btn ${NATNET.bridgePlatform === "netlify" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-subtab" data-sub="netlify" style="flex:1;min-width:240px;padding:14px;font-weight:700;font-size:14px">
-      ◈ ۲. رله ابری نتلیفای (Netlify Relay)
-    </button>
     <button class="btn ${NATNET.bridgePlatform === "deno" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-subtab" data-sub="deno" style="flex:1;min-width:240px;padding:14px;font-weight:700;font-size:14px">
       🦕 . Deno Deploy — ترافیک واقعی (WS Relay)
     </button>
@@ -10766,236 +10765,18 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       <div class="badge ok" style="margin-bottom:10px">✅ ترافیک کلاینت: رله WS — قابل تست واقعی</div>
       ${autoCard}
     </div>
-  ` : NATNET.bridgePlatform === "vercel" ? `
-    <!-- ================= VERCEL PLATFORM ================= -->
-    <div class="card" style="margin-top:12px;border-inline-start:3px solid var(--accent)">
-      <div class="card-head">
-        <b style="color:var(--accent);font-size:14px">▲ راهنمای استقرار و پکیج‌های آماده Vercel</b>
-        <div class="spacer"></div>
-        <span class="badge ok">Zero-Compute · Anti-Ban</span>
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:10px;margin:12px 0">
-        <div class="field">
-          <label for="natnet-bridge-domain">دامنه پروژه شما در ورسل (Vercel Domain):</label>
-          <input type="text" id="natnet-bridge-domain" class="input mono" dir="ltr" placeholder="مثال: my-project.vercel.app" value="${a(NATNET.vercelDomain || '')}">
-          <small class="muted">کانفیگ‌های زیر به صورت خودکار با این دامنه و مسیر دیتابیس (${a(xhttpPath)}) همگام می‌شوند.</small>
-        </div>
-      </div>
-
-      <!-- Vercel Mode Selector -->
-      <div style="display:flex;gap:6px;margin:10px 0;flex-wrap:wrap">
-        <button class="btn btn-sm ${NATNET.vercelMode === "auto" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-vercel-mode" data-vmode="auto">
-          🤖 متد ۰: خودکار با توکن (پیشنهادی)
-        </button>
-        <button class="btn btn-sm ${NATNET.vercelMode === "rewrite" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-vercel-mode" data-vmode="rewrite">
-          ⚡ متد ۱: بازنویسی لبه‌ای بدون کد (vercel.json)
-        </button>
-        <button class="btn btn-sm ${NATNET.vercelMode === "relay" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-vercel-mode" data-vmode="relay">
-          🌊 متد ۲: رله استریمینگ Node.js (api/relay.js)
-        </button>
-      </div>
-
-      <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
-        ${NATNET.vercelMode === "auto" ? autoCard : NATNET.vercelMode === "rewrite" ? `
-          <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
-            <b>متد بازنویسی خارجی (External Rewrite):</b> ترافیک در لبه ورسل مستقیماً بدون مصرف منابع یا محدودیت زمانی به سمت ورکر شما پروکسی می‌شود.
-          </p>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-vercel-zip">
-              📦 دانلود پکیج آماده ورسل (.zip)
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-vercel-code">
-              📄 دانلود فایل vercel.json
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vercelRewriteCode)}">
-              ${d("copy")} کپی متن vercel.json
-            </button>
-            <div class="badge warn" style="margin:4px 0">⛔ ترافیک کلاینت از لبهٔ ورسل رد نمی‌شود (نه WS، نه xhttp — تست زنده Xray). پل ورسل = آینهٔ HTTP برای مرورگر. کانفیگ‌های کاری: «endpointهای سبز» همین پایین.</div>
-          </div>
-          <details style="font-size:12px;margin-top:10px">
-            <summary style="cursor:pointer;font-weight:600;color:var(--accent)">👁️ مشاهده فایل vercel.json</summary>
-            <div class="codebox" style="margin-top:8px;max-height:140px;overflow:auto"><code dir="ltr">${a(vercelRewriteCode)}</code></div>
-          </details>
-        ` : `
-          <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
-            <b>رله استریمینگ مستقیم (Node.js Raw Stream):</b> با غیرفعال بودن پارسر خودکار (<code>bodyParser: false</code>) ترافیک خام TCP را بدون ایجاد بافر منتقل می‌کند.
-          </p>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-vercel-zip">
-              📦 دانلود پکیج استریمینگ (.zip)
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-vercel-code">
-              📄 دانلود فایل api/relay.js
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(vercelRelayCode)}">
-              ${d("copy")} کپی کد api/relay.js
-            </button>
-          </div>
-          <details style="font-size:12px;margin-top:10px">
-            <summary style="cursor:pointer;font-weight:600;color:var(--accent)">👁️ مشاهده کد api/relay.js</summary>
-            <div class="codebox" style="margin-top:8px;max-height:140px;overflow:auto"><code dir="ltr">${a(vercelRelayCode)}</code></div>
-          </details>
-        `}
-      </div>
-
-      <!-- VERCEL READY CONFIGS GRID -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0">⚡ کانفیگ‌های آماده Vercel</h3>
-        <span class="badge ok">فرگمنت tlshello 0/104/1 فعال</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:10px">
-        <div class="card" style="padding:12px;border-inline-start:3px solid var(--accent)">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-            <div>
-              <span class="badge warn">آینهٔ HTTP — فقط مرورگر</span>
-              <b style="font-size:12.5px">${a(vercelDomain)}</b>
-            </div>
-            <div style="display:flex;gap:5px">
-            </div>
-          </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Mirror: https://${a(vercelDomain)} — ورود به پنل از مرورگر وقتی دامنه فیلتر است</div>
-        </div>
-
-        <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-            <div>
-              <span class="badge danger">ترافیک کلاینت: ❌ تست زنده</span>
-              <b style="font-size:12.5px">76.76.21.21</b>
-            </div>
-            <div style="display:flex;gap:5px">
-            </div>
-          </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">WS upgrade در لبه ورسل رد می‌شود (۲۰۰ نه ۱۰۱) — کانفیگ کلاینت نسازید</div>
-        </div>
+  ` : ``}
+    <!-- ================= VERCEL / NETLIFY REMOVED 2026-10-09 ================= -->
+    <div class="card" style="margin-top:12px;border-inline-start:3px solid #ef4444">
+      <div class="card-head"><b style="color:#ef4444;font-size:14px">🗑 ورسل و نتلیفای حذف شدند — امکان فنی نداشتند</b></div>
+      <div style="padding:12px;font-size:12.5px;line-height:2">
+        تست زندهٔ لبه‌ها (۲۰۲۶-۱۰-۰۹):<br>
+        • ورسل: WS upgrade هرگز ۱۰۱ نمی‌شود (۲۰۰/۴۰۴)؛ SNI-front هم 404 DEPLOYMENT_NOT_FOUND.<br>
+        • نتلیفای: ترفند قدیمی SNI-front امروز از لبه 429 می‌گیرد (SNI=blog.helm.sh + Host=پل → 429، دسترسی عادی → 200)؛ WS upgrade هم ۲۰۰ نه ۱۰۱.<br>
+        این‌ها سیاست لبهٔ آن سکوهاست، نه باگ کد — از سمت ما قابل تعمیر نیست.<br>
+        تنها رلهٔ ابری زنده: <b>Deno Deploy</b> (همین تب 🦕) + روت‌های سبز CF پایین صفحه.
       </div>
     </div>
-  ` : `
-    <!-- ================= NETLIFY PLATFORM ================= -->
-    <div class="card" style="margin-top:12px;border-inline-start:3px solid #00c7b7">
-      <div class="card-head">
-        <b style="color:#00c7b7;font-size:14px">⚡ فرمت قدیمی (SNI-front + xhttp) — پینگ واقعی، دقیقاً مثل شش ماه پیش</b>
-        <div class="spacer"></div>
-      </div>
-      <p class="muted" style="font-size:12.5px;line-height:1.9;margin:6px 0 10px">
-        راز فرمت قدیمی: دامنه‌های <code dir="ltr">blog.helm.sh</code> و <code dir="ltr">kubernetes.io</code> روی لبهٔ
-        <b>نتلیفای</b> هستند و SNIشان در ایران سفید است. کلاینت با SNI آن‌ها وصل می‌شود، هدر Host
-        دامنهٔ پل نتلیفای توست وedge function رلهٔ v2 (xhttp stream-one ⇄ WS) ترافیک را رد می‌کند.
-        <b>شرط کار:</b> اول پل نتلیفای را با کد جدید «♻️ دیپلوی دوباره» بزن (توکن را در کادر بالا بچسبان).
-      </p>
-      ${(() => {
-        const nb = (natnetBridges || []).find((r) => r.platform === "netlify" && r.status === "ready" && r.domain);
-        if (!nb) return `<div class="badge warn">اول یک پل نتلیفای آماده بساز (تب بالا)</div>`;
-        const fronts = [["blog.helm.sh", "helm blog · SNI سفید"], ["kubernetes.io", "k8s docs · SNI سفید"]];
-        const mk = (addr, sni, name) =>
-          `vless://${uuid}@${addr}:443?encryption=none&security=tls&sni=${sni}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=xhttp&mode=stream-one&host=${nb.domain}&path=${encodeURIComponent(xhttpPath)}&fp=chrome#${encodeURIComponent("🇮🇷 " + name)}`;
-        const rows = [
-          ...fronts.map((f) => mk(f[0], f[0], "SNI-front " + f[0] + " (فرمت قدیمی)")),
-          mk(nb.domain, nb.domain, "Netlify مستقیم " + nb.domain),
-        ];
-        return `<div style="display:flex;flex-direction:column;gap:8px">
-          ${rows.map((u) => `<div class="codebox" style="font-size:11px;word-break:break-all" dir="ltr">${a(u)}</div>${te(u)}`).join("")}
-        </div>
-        <div class="muted" style="font-size:12px;margin-top:8px">mode=stream-one · host=${a(nb.domain)} · بعد از دیپلوی دوبارهٔ پل، «Test real delay» پینگ واقعی می‌دهد.</div>`;
-      })()}
-    </div>
-
-    <div class="card" style="margin-top:12px;border-inline-start:3px solid #00c7b7">
-      <div class="card-head">
-        <b style="color:#00c7b7;font-size:14px">◈ راهنمای استقرار و پکیج‌های آماده Netlify</b>
-        <div class="spacer"></div>
-        <span class="badge ok">Edge Functions v2</span>
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:10px;margin:12px 0">
-        <div class="field">
-          <label for="natnet-bridge-domain">دامنه اختصاصی پروژه شما در نتلیفای (Netlify Domain):</label>
-          <input type="text" id="natnet-bridge-domain" class="input mono" dir="ltr" placeholder="مثال: unique-begonia-46df26.netlify.app" value="${a(NATNET.bridgeDomain || 'unique-begonia-46df26.netlify.app')}">
-          <small class="muted">دامنه فعلی شما (${a(netlifyDomain)}) در کادر بالا قرار دارد.</small>
-        </div>
-      </div>
-
-      <!-- Netlify Mode Selector -->
-      <div style="display:flex;gap:6px;margin:10px 0;flex-wrap:wrap">
-        <button class="btn btn-sm ${NATNET.netlifyMode === "auto" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-netlify-mode" data-nmode="auto">
-          🤖 متد ۰: خودکار با توکن (پیشنهادی)
-        </button>
-        <button class="btn btn-sm ${NATNET.netlifyMode === "edge" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-netlify-mode" data-nmode="edge">
-          ⚡ متد ۱: اسکریپت لبه Netlify Edge Functions v2 (توصیه‌شده با استریمینگ)
-        </button>
-        <button class="btn btn-sm ${NATNET.netlifyMode === "rewrite" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-netlify-mode" data-nmode="rewrite">
-          📦 متد ۲: کشیدن و رها کردن Netlify Drop (_redirects)
-        </button>
-      </div>
-
-      <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px">
-        ${NATNET.netlifyMode === "auto" ? autoCard : NATNET.netlifyMode === "edge" ? `
-          <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
-            <b>اسکریپت لبه Netlify Edge Functions (پروژه cloudflare_netlify_bridge):</b> شامل فایل <code>relay.js</code> با موتور ران‌تایم Deno که ترافیک را به صورت استریم دوطرفه به ورکر انتقال داده و هدرهای DPI را فیلتر می‌کند. با استفاده از Netlify CLI (دستور <code>netlify deploy --prod</code>) یا اتصال به گیت‌هاب دیپلوی نمایید.
-          </p>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-netlify-zip">
-              📦 دانلود پکیج Netlify Edge (.zip)
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-natnet-dl-netlify-code">
-              📄 دانلود فایل relay.js
-            </button>
-            <button class="btn btn-sm" type="button" data-action="omni-copy" data-text="${a(netlifyEdgeCode)}">
-              ${d("copy")} کپی کد relay.js
-            </button>
-            <div class="badge warn" style="margin:4px 0">⛔ ترافیک کلاینت از لبهٔ نتلیفای رد نمی‌شود — پل نتلیفای = آینهٔ HTTP برای مرورگر (ورود به پنل وقتی دامنه فیلتر است). کانفیگ‌های کاری: «endpointهای سبز».</div>
-          </div>
-          <details style="font-size:12px;margin-top:10px">
-            <summary style="cursor:pointer;font-weight:600;color:#00c7b7">👁️ مشاهده کد relay.js</summary>
-            <div class="codebox" style="margin-top:8px;max-height:140px;overflow:auto"><code dir="ltr">${a(netlifyEdgeCode)}</code></div>
-          </details>
-        ` : `
-          <p class="muted" style="font-size:12.5px;margin:0 0 10px 0;line-height:1.8">
-            <b>ساده‌ترین روش بدون کد (Netlify Drop):</b> فایل زیپ زیر حاوی فایل‌های <code>_redirects</code> و <code>netlify.toml</code> است. آن را دانلود و در صفحه <b>app.netlify.com/drop</b> با ماوس بکشید و رها کنید.
-          </p>
-          <div style="display:flex;gap:7px;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-dl-netlify-zip">
-              📦 دانلود پکیج Netlify Drop (.zip)
-            </button>
-            <a class="btn btn-sm" href="https://app.netlify.com/drop" target="_blank" rel="noopener">
-              🌐 باز کردن صفحه Netlify Drop
-            </a>
-          </div>
-        `}
-      </div>
-
-      <!-- NETLIFY READY CONFIGS GRID -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-        <h3 style="margin:0">⚡ کانفیگ‌های Netlify (بر اساس دامنه شما: ${a(netlifyDomain)})</h3>
-        <span class="badge ok">فرگمنت tlshello 0/104/1 فعال</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:10px">
-        <div class="card" style="padding:12px;border-inline-start:3px solid #00c7b7">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-            <div>
-              <span class="badge warn">آینهٔ HTTP — فقط مرورگر</span>
-              <b style="font-size:12.5px">${a(netlifyDomain)}</b>
-            </div>
-            <div style="display:flex;gap:5px">
-            </div>
-          </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">Mirror: https://${a(netlifyDomain)} — ورود به پنل از مرورگر وقتی دامنه فیلتر است</div>
-        </div>
-
-        <div class="card" style="padding:12px;border-inline-start:3px solid #22c55e">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-            <div>
-              <span class="badge danger">ترافیک کلاینت: ❌ تست زنده</span>
-              <b style="font-size:12.5px">104.198.14.52</b>
-            </div>
-            <div style="display:flex;gap:5px">
-            </div>
-          </div>
-          <div class="muted mono" style="font-size:11px;margin-top:4px">WS upgrade در لبه نتلیفای رد می‌شود (۲۰۰ نه ۱۰۱) — کانفیگ کلاینت نسازید</div>
-        </div>
-      </div>
-    </div>
-  `}
 
   <!-- ================= 4 VERIFIED GREEN BENCHMARK ENDPOINTS ================= -->
   <div class="card" style="margin-top:16px;border-inline-start:4px solid #22c55e">
@@ -11059,7 +10840,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       let i = s.dataset.action;
       try {
         if (i === "omni-natnet-subtab") {
-          NATNET.bridgePlatform = s.dataset.sub || "vercel";
+          NATNET.bridgePlatform = s.dataset.sub || "deno";
           e.rerenderView(l.view.startsWith("national_net") ? l.view : "national_net_bridge");
         } else if (i === "omni-natnet-vercel-mode") {
           NATNET.vercelMode = s.dataset.vmode || "rewrite";
@@ -11121,7 +10902,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
           } catch (err) { if (sp) sp.innerHTML = `<span class="badge danger">❌ ${a(String(err.message || err).slice(0, 60))}</span>`; }
           return;
         } else if (i === "omni-natnet-auto-deploy" || i === "omni-natnet-auto-redeploy") {
-          let plat = s.dataset.plat || NATNET.bridgePlatform || "vercel";
+          let plat = s.dataset.plat || NATNET.bridgePlatform || "deno";
           let bridgeId = Number(s.dataset.id || 0);
           let tokenInput = document.getElementById(`natnet-auto-token-${plat}`);
           let nameInput = document.getElementById(`natnet-auto-name-${plat}`);
@@ -11188,7 +10969,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
             A(err);
           }
         } else if (i === "omni-natnet-auto-verify") {
-          let plat = s.dataset.plat || NATNET.bridgePlatform || "vercel";
+          let plat = s.dataset.plat || NATNET.bridgePlatform || "deno";
           let tokenInput = document.getElementById(`natnet-auto-token-${plat}`);
           let token = (tokenInput?.value || "").trim();
           let out = document.getElementById(`natnet-auto-out-${plat}`);
@@ -11203,7 +10984,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
             if (out) out.innerHTML = `<div class="toast err">${a(err?.message || String(err))}</div>`;
           }
         } else if (i === "omni-natnet-auto-use") {
-          let plat = s.dataset.plat || NATNET.bridgePlatform || "vercel";
+          let plat = s.dataset.plat || NATNET.bridgePlatform || "deno";
           let dom = s.dataset.domain || "";
           if (!dom) return;
           if (plat === "vercel") NATNET.vercelDomain = dom; else if (plat === "deno") { NATNET.denoDomain = dom; NATNET.denoEndpoints = [{ name: `Deno relay ${dom} (ترافیک واقعی ✅)`, ip: dom, relay: true }]; } else NATNET.bridgeDomain = dom;

@@ -548,3 +548,17 @@ without the edge, the same bytes pass and the relay decodes them fine).
 Panel fix: relay rows (`relay: true`) now render URIs with SNI + WS Host = the
 relay's own domain, `alpn=http/1.1` (no WS upgrade over h2 on the Deno edge),
 no `?ed=`, no fragment. CF-direct rows unchanged.
+
+## 18. Vercel + Netlify removed from the panel (edge-policy verdict, 2026-10-09)
+
+Live edge probes today:
+- Vercel: SNI-front → 404 DEPLOYMENT_NOT_FOUND; WS upgrade never 101; xhttp dead.
+- Netlify: the 6-month-old SNI-front trick (SNI=blog.helm.sh/kubernetes.io +
+  Host=own site) now answers **429** from the edge (same request with
+  SNI=Host=blog.helm.sh → 200). WS upgrade still 200-not-101.
+Both are platform edge policies, not code bugs ⇒ unfixable from our side.
+Panel: platform switcher reduced to 🦕 Deno only; vercel/netlify cards, zips and
+the old-format SNI-front card removed; a permanent verdict notice explains why.
+Ready Deno rows now auto-populate the green relay configs on page load
+(no extra «use» click). Bridge engine backend kept (HTTP mirrors still work
+for browser access); client configs = Deno relay + CF clean IPs only.
