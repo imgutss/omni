@@ -497,3 +497,26 @@ deno row injects the relay domain into the green routes + balancer
 Tests: `production/test/deno.test.mjs` 5/5 (mocked v2 API), Playwright UI check
 (3 subtabs, deno card/row/input, no page errors). Suites still green
 (15+16+15+18+9+browser).
+
+## 15. Netlify relay v2 — old Parsashonam format resurrected (xhttp stream-one + SNI front)
+
+Root cause of «6 months ago it pinged»: `blog.helm.sh` and `kubernetes.io` are
+hosted on **Netlify**; their SNI is not filtered in IR. The old client connected
+with SNI=whitelisted domain, `Host:` = the user's Netlify site, transport xhttp;
+the site's edge function spoke xhttp and relayed. Nothing to do with Vercel —
+Vercel's edge has no whitelisted-SNI zone, so TLS dies on cert mismatch there.
+
+v2 edge function (`netlifyEdgeFunction()` in src/bridges.js + panel display
+copy): POST to the tunnel path = xhttp **stream-one** — request body is the
+client byte-stream, response body the downstream; both piped over one
+WebSocket to the panel worker (which stays WS-only). Plain GET/POST mirror
+behaviour unchanged.
+
+Proof (sandbox, real traffic): local Deno 2.9.7 running the identical relay
+code + Xray 26.3.27 client `type=xhttp&mode=stream-one` → socks →
+`gstatic 204` in 1.65 s.
+
+Panel: Netlify subtab now has card «⚡ فرمت قدیمی (SNI-front + xhttp)» emitting
+3 ready configs (blog.helm.sh front, kubernetes.io front, bridge-direct) once a
+netlify bridge is ready. **Requires one «♻️ دیپلوی دوباره» of the bridge with the
+new code** (token paste) before the fronts carry traffic.

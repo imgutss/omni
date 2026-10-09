@@ -10372,89 +10372,38 @@ export default function handler(req, res) {
 
 function natnetNetlifyEdgeFunction(host) {
     let clean = (host || "").trim().replace(/^https?:\/\//, "").replace(/\/+$/, "");
-    return `// netlify/edge-functions/relay.js
-// Netlify Edge Functions v2 (Deno runtime - Synthesized from avaco_cloud & Netlify Bridge v1.3.7)
-const TARGET_BASE = (Netlify.env.get("TARGET_DOMAIN") || "https://${clean}:443").replace(/\/$/, "");
-
-const STRIP_HEADERS = new Set([
-  "host",
-  "connection",
-  "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
-  "transfer-encoding",
-  "upgrade",
-  "forwarded",
-  "x-forwarded-host",
-  "x-forwarded-proto",
-  "x-forwarded-port",
-]);
-
-export default async function handler(request) {
+    let tp = natnetTunnelPath();
+    return `// netlify/edge-functions/relay.js — Omni Netlify Edge relay v2 (Deno)
+// xhttp stream-one (فرمت قدیمی: SNI-front + xhttp) ⇄ WebSocket pipe + HTTP mirror
+const TARGET_BASE = (Netlify.env.get("BACKEND_URL") || "https://${clean}").replace(/\\/$/, "");
+const TUNNEL = ${JSON.stringify(tp)};
+const WS_TARGET = TARGET_BASE.replace("https://", "wss://") + TUNNEL + "?ed=2048";
+export default async function handler(request, context) {
   const url = new URL(request.url);
-
-  // Serve camouflage static pages to prevent automated scanner detection
-  if (url.pathname === "/" || url.pathname.endsWith(".html") || url.pathname.endsWith(".css") || url.pathname.endsWith(".ico") || url.pathname.endsWith(".png")) {
-    return;
-  }
-
-  if (!TARGET_BASE) {
-    return new Response("Misconfigured: TARGET_DOMAIN is not set", { status: 500 });
-  }
-
-  try {
-    const targetUrl = TARGET_BASE + url.pathname + url.search;
-    const headers = new Headers();
-    let clientIp = null;
-
-    for (const [key, value] of request.headers) {
-      const k = key.toLowerCase();
-      if (STRIP_HEADERS.has(k)) continue;
-      if (k.startsWith("x-nf-") || k.startsWith("x-netlify-")) continue;
-      if (k === "x-real-ip") {
-        clientIp = value;
-        continue;
-      }
-      if (k === "x-forwarded-for") {
-        if (!clientIp) clientIp = value;
-        continue;
-      }
-      headers.set(k, value);
-    }
-
-    if (clientIp) headers.set("x-forwarded-for", clientIp);
-    headers.set("x-relay-layer", "netlify-proxy");
-
-    const method = request.method;
-    const hasBody = method !== "GET" && method !== "HEAD";
-    const fetchOptions = {
-      method,
-      headers,
-      redirect: "manual",
+  if (url.pathname === "/" || url.pathname === "/__bridge") return context.next();
+  if (request.method === "POST" && url.pathname.indexOf(TUNNEL) === 0 && request.body) {
+    const ws = new WebSocket(WS_TARGET);
+    ws.binaryType = "arraybuffer";
+    const ts = new TransformStream();
+    const writer = ts.writable.getWriter();
+    const opened = new Promise((res) => { ws.onopen = () => res(true); ws.onerror = () => res(false); ws.onclose = () => res(false); });
+    ws.onmessage = (ev) => { writer.write(new Uint8Array(ev.data)).catch(() => {}); };
+    ws.onclose = () => writer.close().catch(() => {});
+    ws.onerror = () => writer.close().catch(() => {});
+    const pump = async () => {
+      const ok = await opened;
+      if (!ok) { try { writer.close(); } catch (e) {} return; }
+      const reader = request.body.getReader();
+      for (;;) { const c = await reader.read(); if (c.done) break; if (ws.readyState === 1) ws.send(c.value); }
     };
-
-    if (hasBody) fetchOptions.body = request.body;
-
-    const upstream = await fetch(targetUrl, fetchOptions);
-    const responseHeaders = new Headers();
-    for (const [key, value] of upstream.headers) {
-      if (key.toLowerCase() === "transfer-encoding") continue;
-      responseHeaders.set(key, value);
-    }
-
-    return new Response(upstream.body, {
-      status: upstream.status,
-      headers: responseHeaders,
-    });
-  } catch (error) {
-    return new Response("Bad Gateway: Relay Failed", { status: 502 });
+    pump().catch(() => {});
+    return new Response(ts.readable, { status: 200, headers: { "content-type": "application/octet-stream", "x-omni-relay": "xhttp-stream-one" } });
   }
-};
-
-export const config = { path: "/*" };`;
-  }
+  return new Response("Omni mirror - Netlify relay v2 alive", { status: 200 });
+}
+export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon.ico"] };
+`;
+}
 
   function natnetSpooferJson(host) {
     let connectIp = NATNET.spooferIp || "104.18.183.237";
@@ -10916,6 +10865,34 @@ export const config = { path: "/*" };`;
     </div>
   ` : `
     <!-- ================= NETLIFY PLATFORM ================= -->
+    <div class="card" style="margin-top:12px;border-inline-start:3px solid #00c7b7">
+      <div class="card-head">
+        <b style="color:#00c7b7;font-size:14px">⚡ فرمت قدیمی (SNI-front + xhttp) — پینگ واقعی، دقیقاً مثل شش ماه پیش</b>
+        <div class="spacer"></div>
+      </div>
+      <p class="muted" style="font-size:12.5px;line-height:1.9;margin:6px 0 10px">
+        راز فرمت قدیمی: دامنه‌های <code dir="ltr">blog.helm.sh</code> و <code dir="ltr">kubernetes.io</code> روی لبهٔ
+        <b>نتلیفای</b> هستند و SNIشان در ایران سفید است. کلاینت با SNI آن‌ها وصل می‌شود، هدر Host
+        دامنهٔ پل نتلیفای توست وedge function رلهٔ v2 (xhttp stream-one ⇄ WS) ترافیک را رد می‌کند.
+        <b>شرط کار:</b> اول پل نتلیفای را با کد جدید «♻️ دیپلوی دوباره» بزن (توکن را در کادر بالا بچسبان).
+      </p>
+      ${(() => {
+        const nb = (natnetBridges || []).find((r) => r.platform === "netlify" && r.status === "ready" && r.domain);
+        if (!nb) return `<div class="badge warn">اول یک پل نتلیفای آماده بساز (تب بالا)</div>`;
+        const fronts = [["blog.helm.sh", "helm blog · SNI سفید"], ["kubernetes.io", "k8s docs · SNI سفید"]];
+        const mk = (addr, sni, name) =>
+          `vless://${uuid}@${addr}:443?encryption=none&security=tls&sni=${sni}&alpn=h2,http/1.1&insecure=0&allowInsecure=0&type=xhttp&mode=stream-one&host=${nb.domain}&path=${encodeURIComponent(xhttpPath)}&fp=chrome#${encodeURIComponent("🇮🇷 " + name)}`;
+        const rows = [
+          ...fronts.map((f) => mk(f[0], f[0], "SNI-front " + f[0] + " (فرمت قدیمی)")),
+          mk(nb.domain, nb.domain, "Netlify مستقیم " + nb.domain),
+        ];
+        return `<div style="display:flex;flex-direction:column;gap:8px">
+          ${rows.map((u) => `<div class="codebox" style="font-size:11px;word-break:break-all" dir="ltr">${a(u)}</div>${te(u)}`).join("")}
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:8px">mode=stream-one · host=${a(nb.domain)} · بعد از دیپلوی دوبارهٔ پل، «Test real delay» پینگ واقعی می‌دهد.</div>`;
+      })()}
+    </div>
+
     <div class="card" style="margin-top:12px;border-inline-start:3px solid #00c7b7">
       <div class="card-head">
         <b style="color:#00c7b7;font-size:14px">◈ راهنمای استقرار و پکیج‌های آماده Netlify</b>
