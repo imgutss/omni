@@ -280,11 +280,9 @@ resulting domains, and writes nothing to disk.
 
 ## 8. What is still open
 
-This is the only part that could not be finished, and it is not a code problem:
-
 Nothing is blocked any more. Both providers have been exercised end to end with
-real tokens and real deployments (section 7). What is still open, in order of
-usefulness:
+real tokens and real deployments (section 7), and the cron trigger is set (below).
+What remains is optional:
 
 - ~~The cron trigger on the live worker.~~ **Done** — `wrangler deploy` was run
   with the account token at 2026-10-09 08:01 UTC and the schedule is now set:
@@ -300,6 +298,9 @@ usefulness:
   stream-only client configuration.
 - **The old Netlify sites** listed in section 7 are still behind their login wall;
   they are not Omni bridges, so they were left untouched.
+- **The `PUBLIC_HOST` var** is now in `wrangler.toml`; if the worker is ever moved
+  to another `*.workers.dev` host, that var and `settings.public_host` in D1 must
+  be updated together.
 
 The token that was first handed over as a "Vercel" token is a **Cloudflare** token
 (`cfut_…`); it is `active` and was used to deploy the worker itself. Tested against
@@ -312,12 +313,20 @@ verify endpoint reports to a user who pastes it into the Vercel field.
 `deploy/omni-worker.bundle.js` (generated), `package.json` (new test scripts),
 `.gitignore` (Playwright screenshots).
 
-**Added:** `src/bridges.js`, `tools/patch8.py` … `tools/patch12.py` (the patch scripts
-that produced the worker/panel changes, kept so the edits are reproducible),
-`test/bridges.test.mjs`, `test/bot-bridge.test.mjs`, `test/local-smoke.sh`,
-`test/wrangler.smoke.toml` (local Miniflare only — never deploy it),
-`production/test/bridge.test.mjs`, `production/bridge-results.json`,
-`production/browser-results.json`, `docs/BRIDGE-CHANGES-2026-10-09.md`.
+**Added:** `src/bridges.js`, `tools/patch8.py` … `tools/patch15.py` (the patch scripts
+that produced the worker/panel changes, kept so the edits are reproducible —
+`patch8.py` inserts the module and is *not* idempotent, so use
+`tools/sync_bridges.py` to re-embed after editing `src/bridges.js`),
+`tools/sync_bridges.py`, `test/bridges.test.mjs`, `test/bot-bridge.test.mjs`,
+`test/live-bridge-deploy.mjs` (real end-to-end deploy; tokens from the environment
+only), `test/local-smoke.sh`, `test/wrangler.smoke.toml` (local Miniflare only —
+never deploy it), `production/test/bridge.test.mjs`, `production/bridge-results.json`,
+`production/browser-results.json`, `docs/LIVE-NOW.md`,
+`docs/BRIDGE-CHANGES-2026-10-09.md`.
+
+**Deploy config:** `wrangler.toml` — the cron `*/5 * * * *` and the new
+`PUBLIC_HOST` var live there. `wrangler deploy` is the only supported way to set
+the schedule with an API token.
 
 **Not committed by design:** `.wrangler/`, `node_modules/`, Playwright screenshots,
 and any credential. No token — Vercel, Netlify, Telegram or GitHub — appears anywhere
