@@ -11,7 +11,7 @@
 | ربات تلگرام | @OmniAiGateBot — وبهوک `POST https://omni.4lifm29.workers.dev/tg/omni-hook` |
 | پل ورسل | https://omni-bridge-cu67-4lifm27-4000s-projects.vercel.app |
 | پل نتلیفای | https://omni-net-cu67.netlify.app |
-| ریپو | https://github.com/Alisarani7021/omni — شاخهٔ `main`، کامیت `23cb5bb` |
+| ریپو | https://github.com/Alisarani7021/omni — شاخهٔ `main` (کامیت‌ها: `29f8cc4` و قبل‌ترها — همیشه آخرین `main` معتبر است) |
 
 هر دو پل، مسیر تونل پنل را بایت‌به‌بایت پروکسی می‌کنند (۸۶۹ بایت، کاملاً یکسان با
 پنل). صفحهٔ اول هر دو (`/`) یک صفحهٔ فریب است، نه پنل. سلامت پل ورسل:
@@ -26,7 +26,7 @@ export CLOUDFLARE_ACCOUNT_ID=9a3aabde4bdecbff1e298100985c7e7e
 npx wrangler deploy --config wrangler.toml
 ```
 
-همین یک دستور، کد + هر شش بایندینگ + کرون را با هم می‌فرستد و `BOT_TOKEN`
+همین یک دستور، کد + هر هفت بایندینگ + کرون را با هم می‌فرستد و `BOT_TOKEN`
 (سکرت) هم سر جایش می‌ماند. بعدش اگر لازم بود:
 
 ```bash
