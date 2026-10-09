@@ -115,6 +115,11 @@ function parsePaste() {
 }
 
 function buildNodes(host, path, uuid) {
+  // cloud relays (Deno/Render): the relay domain IS the address AND the SNI —
+  // CF clean IPs cannot reach them, so emit exactly one relay node.
+  if (/\.(deno\.net|deno\.dev|onrender\.com)$/i.test(host)) {
+    return [{ name: "Cloud-Relay " + host, address: host, sni: host, host: host, path: String(path).split("?")[0], uuid: uuid }];
+  }
   const nodes = [{ name: "CF-direct", address: host, sni: host, host: host, path: path, uuid: uuid }];
   DATA.cf.cleanIps.forEach(ip => nodes.push({ name: "CF-IP-" + ip, address: ip, sni: host, host: host, path: path, uuid: uuid }));
   return nodes;

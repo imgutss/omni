@@ -593,3 +593,12 @@ user's «اوکی».
 - Keepalive: worker cron (`*/5`, both workers) GETs every ready render row so
   the free instance never hits the 15-minute idle sleep.
 - Tests: test/render.test.mjs 3/3 (mocked GitHub+Render), suite green.
+
+## 21. Relay configs flow into the subscription + generator (v8.9)
+
+- `/s/<token>` subscription now appends one URI per ready deno/render bridge
+  (SNI=host=relay domain, alpn=http/1.1, no ed, no fragment) — v2rayNG picks
+  them up on the next sub update, zero clicks.
+- tools/sanction-generator.html v8.9: pasting a relay link emits exactly one
+  relay node (CF clean IPs cannot reach relay domains).
+- sanction-links file gained the proven Deno relay line.

@@ -5448,8 +5448,9 @@ function buildClash(user, settings, addrs, ports = [443, 2053, 8080, 80]) {
     ]
   };
 }
-function subscriptionBody(user, settings, cleanIps, type = "") {
+function subscriptionBody(user, settings, cleanIps, type = "", extraUris = []) {
   const cfg = buildConfigs(user, settings, cleanIps);
+  if (extraUris && extraUris.length) cfg.uris = (cfg.uris || []).concat(extraUris);
   const t = String(type || "").toLowerCase();
   if (t === "clash" || t === "clash-meta" || t === "yaml") {
     return { body: toYaml(cfg.clash), contentType: "text/yaml; charset=utf-8" };
@@ -9278,7 +9279,19 @@ async function handleApi(request, env, ctx, url) {
     const ips = await cleanIpsList(env, settings2);
     const ua = (request.headers.get("user-agent") || "").toLowerCase();
     const byUa = ua.includes("clash") || ua.includes("mihomo") || ua.includes("stash") ? "clash" : ua.includes("sing-box") || ua.includes("singbox") || ua.includes("happ") || ua.includes("streisand") || ua.includes("karing") || ua.includes("v2box") ? "singbox" : "";
-    const { body, contentType } = subscriptionBody(view, settings2, ips, url.searchParams.get("type") || byUa);
+    let relayUris = [];
+    try {
+      const rr = await env.DB.prepare(`SELECT platform, domain, tunnel_path FROM bot_bridges WHERE status='ready' AND platform IN ('deno','render')`).all();
+      const seen = new Set();
+      for (const r of rr.results || []) {
+        if (!r.domain || seen.has(r.domain)) continue;
+        seen.add(r.domain);
+        const tp = String(r.tunnel_path || settings2.path || "/VZLdh9Ft").trim().split("?")[0] || "/VZLdh9Ft";
+        const icon = r.platform === "deno" ? "\u{1F995}" : "\u{1F319}";
+        relayUris.push(`vless://${view.uuid}@${r.domain}:443?encryption=none&security=tls&sni=${r.domain}&alpn=http/1.1&insecure=0&allowInsecure=0&type=ws&host=${r.domain}&path=${encodeURIComponent(tp)}&fp=chrome#${encodeURIComponent(icon + " relay " + r.domain + " (ترافیک واقعی)")}`);
+      }
+    } catch (e) { /* fresh install: no table yet */ }
+    const { body, contentType } = subscriptionBody(view, settings2, ips, url.searchParams.get("type") || byUa, relayUris);
     const expire = u.expires_at ? Math.floor((/* @__PURE__ */ new Date(String(u.expires_at).replace(" ", "T") + "Z")).getTime() / 1e3) : 0;
     return new Response(body, {
       headers: {
