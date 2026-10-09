@@ -176,8 +176,9 @@ await t('/natbridge explains the token flow and offers both platforms', async ()
   const text = strip(lastText());
   assert.ok(text.includes('پل ابری نت ملی'), 'menu text missing: ' + text.slice(0, 120));
   const kb = tg.at(-1).payload.reply_markup.inline_keyboard.flat();
-  assert.ok(kb.some((b) => b.callback_data === 'cmd:nb_vercel'));
-  assert.ok(kb.some((b) => b.callback_data === 'cmd:nb_netlify'));
+  // live relays only (vercel/netlify are edge-blocked since 2026-10-09): deno + render
+  assert.ok(kb.some((b) => b.callback_data === 'cmd:nb_deno'));
+  assert.ok(kb.some((b) => b.callback_data === 'cmd:nb_render'));
 });
 
 await t('without a panel the bot refuses to guess a target', async () => {
@@ -334,7 +335,7 @@ await t('the new bot command is registered with Telegram', async () => {
     .flatMap((c) => c.payload.commands || []).map((c) => c.command);
   assert.ok(names.includes('natbridge'), 'natbridge missing from ' + JSON.stringify(names));
   assert.ok(names.includes('deploy'), 'the Cloudflare deploy command disappeared');
-  assert.equal(db._T.settings.tg_commands_version, '2026-10-09-natbridge',
+  assert.equal(db._T.settings.tg_commands_version, '2026-10-09-render1',
     'the command version was not bumped, so existing bots would never learn /natbridge');
 });
 

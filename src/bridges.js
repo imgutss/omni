@@ -30,7 +30,7 @@ const BRIDGE_UA = 'Omni-NationalNet/2.0 (+https://github.com/Alisarani7021/omni)
 const bridgeSleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function isBridgePlatform(p) {
-  return p === 'vercel' || p === 'netlify' || p === 'deno';
+  return p === 'vercel' || p === 'netlify' || p === 'deno' || p === 'render';
 }
 
 /** Accept anything the user may paste and return a bare `https://host` origin. */
@@ -57,6 +57,7 @@ export function bridgeTokenShape(platform, token) {
   if (platform === 'vercel') return /^vercel_[A-Za-z0-9]{20,}|^cfut_[A-Za-z0-9_\-]{20,}|^[A-Za-z0-9_\-]{25,200}$/.test(t);
   if (platform === 'netlify') return /^[A-Za-z0-9_\-]{20,200}$/.test(t);
   if (platform === 'deno') return /^[A-Za-z0-9_\-]{20,200}$/.test(t);
+  if (platform === 'render') return /^rnd_[A-Za-z0-9_\-]{20,}$/.test(t);
   return false;
 }
 
@@ -152,7 +153,25 @@ export async function verifyBridgeToken(platform, token) {
   if (platform === 'vercel') return verifyVercelToken(token);
   if (platform === 'netlify') return verifyNetlifyToken(token);
   if (platform === 'deno') return verifyDenoToken(token);
-  throw new Error('پلتفرم ناشناخته؛ فقط vercel، netlify یا deno.');
+  if (platform === 'render') return verifyRenderToken(token);
+  throw new Error('پلتفرم ناشناخته؛ فقط vercel، netlify، deno یا render.');
+}
+
+/** Render API key check: GET /v1/owners also yields the workspace ownerID we deploy into. */
+export async function verifyRenderToken(token) {
+  const r = await fetch('https://api.render.com/v1/owners', {
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+  });
+  const j = await r.json().catch(() => null);
+  if (r.status === 401 || r.status === 403) {
+    const e = new Error('Render توکن را قبول نکرد (۴۰۱/۴۰۳). کلید تازه از dashboard.render.com/u/settings بساز.');
+    e.auth = true;
+    throw e;
+  }
+  if (!r.ok) throw new Error('Render: HTTP ' + r.status + ' ' + JSON.stringify(j || {}).slice(0, 140));
+  const owners = Array.isArray(j) ? j.map((o) => o && o.owner).filter(Boolean) : [];
+  if (!owners.length) throw new Error('Render هیچ workspace‌ای برای این توکن برنگرداند.');
+  return { username: owners[0].name || owners[0].id, email: owners[0].email || '', plan: 'free', ownerId: owners[0].id, owners };
 }
 
 /* ── generated bridge content ────────────────────────────────────────────── */
@@ -702,7 +721,8 @@ export async function deployBridge(platform, opts) {
   if (platform === 'vercel') return deployVercelBridge(opts);
   if (platform === 'netlify') return deployNetlifyBridge(opts);
   if (platform === 'deno') return deployDenoBridge(opts);
-  throw new Error('پلتفرم ناشناخته؛ فقط vercel، netlify یا deno.');
+  if (platform === 'render') return deployRenderBridge(opts);
+  throw new Error('پلتفرم ناشناخته؛ فقط vercel، netlify، deno یا render.');
 }
 
 /* ── D1 storage ──────────────────────────────────────────────────────────── */
@@ -802,7 +822,7 @@ export async function forgetBridgeToken(db, ref) {
  * Returns the row id immediately so HTTP callers can poll instead of timing out.
  */
 export async function startBridgeDeploy(db, ctx, { owner = 'panel', platform, token, name = '', target, tunnelPath = '/', saveToken = false, onProgress = null, waitMs }) {
-  if (!isBridgePlatform(platform)) throw new Error('پلتفرم باید vercel، netlify یا deno باشد.');
+  if (!isBridgePlatform(platform)) throw new Error('پلتفرم باید vercel، netlify، deno یا render باشد.');
   const cleanTarget = normalizeTargetHost(target);
   if (!cleanTarget) throw new Error('آدرس ورکر مقصد را درست وارد کنید (مثل omni-xxx.workers.dev).');
   if (!bridgeTokenShape(platform, token)) {
@@ -982,85 +1002,112 @@ server.listen(Number(process.env.PORT) || 10000);
 `;
 }
 
-export async function deployRenderBridge(opts) {
-  const { token, ghToken, target, tunnelPath, name } = opts;
-  if (!token) throw new Error('توکن Render خالی است');
-  if (!ghToken) throw new Error('توکن گیت‌هاب برای ساخت repo لازم است');
-  const gh = async (path, o = {}) => {
-    const r = await fetch('https://api.github.com' + path, {
-      ...o,
-      headers: {
-        authorization: 'Bearer ' + ghToken,
-        accept: 'application/vnd.github+json',
-        'user-agent': 'omni-panel',
-        ...(o.body ? { 'content-type': 'application/json' } : {}),
-      },
-    });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok && r.status !== 422) throw new Error('گیت‌هاب: ' + r.status + ' ' + String(j.message || '').slice(0, 120));
-    return j;
-  };
-  const me = await gh('/user');
-  const owner = me.login;
-  const repoName = (name || 'omni-render-relay').toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 40) || 'omni-render-relay';
-  await gh('/user/repos', { method: 'POST', body: JSON.stringify({ name: repoName, private: true, auto_init: true }) });
-  const put = async (file, content) => {
-    const cur = await gh('/repos/' + owner + '/' + repoName + '/contents/' + file).catch(() => null);
-    const b64 = (str) => { const bin = new TextEncoder().encode(str); let out = ''; for (let i = 0; i < bin.length; i++) out += String.fromCharCode(bin[i]); return btoa(out); };
-    const body = { message: 'omni relay ' + file, content: b64(content), branch: 'main' };
-    if (cur && cur.sha) body.sha = cur.sha;
-    const r = await gh('/repos/' + owner + '/' + repoName + '/contents/' + file, { method: 'PUT', body: JSON.stringify(body) });
-    return r;
-  };
-  const pkg = JSON.stringify({ name: repoName, private: true, version: '1.0.0', dependencies: { ws: '^8.18.0' }, scripts: { start: 'node server.js' } }, null, 2);
-  await put('package.json', pkg);
-  await put('server.js', renderRelaySource(target, tunnelPath));
+export const RENDER_RELAY_REPO = 'https://github.com/Alisarani7021/omni-render-relay';
 
+/**
+ * Render one-token flow (like Deno): NO GitHub token needed. The relay code is
+ * env-driven (OMNI_TARGET) and lives in a canonical PUBLIC repo, so Render can
+ * build it for any account. Schema verified live against api.render.com on
+ * 2026-10-09: type=web_service, ownerId required, repo is a URL *string*,
+ * build/start commands live in serviceDetails.envSpecificDetails, and a brand
+ * new workspace without a card on file returns HTTP 402 (payment gate) even
+ * for plan=free — surfaced verbatim to the user.
+ */
+export async function deployRenderBridge(opts) {
+  const { token, target, tunnelPath = '/', name = '', onProgress = null } = opts;
+  const report = typeof onProgress === 'function' ? (s) => Promise.resolve(onProgress(s)).catch(() => {}) : () => {};
+  if (!token) throw new Error('توکن Render خالی است');
+  const started = Date.now();
   const rd = async (path, o = {}) => {
     const r = await fetch('https://api.render.com/v1' + path, {
       ...o,
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json', ...(o.headers || {}) },
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error('Render: ' + r.status + ' ' + String(j.message || j.error || '').slice(0, 140));
+    if (!r.ok) {
+      const msg = String((j && (j.message || j.error)) || '').slice(0, 200);
+      const e = new Error('Render: ' + r.status + (msg ? ' ' + msg : ''));
+      e.status = r.status;
+      if (r.status === 401 || r.status === 403) e.auth = true;
+      if (r.status === 402) {
+        e.payment = true;
+        e.message = 'Render برای این حساب ثبت کارت می\u200Cخواهد (۴۰۲) — حتی برای پلن رایگان. از dashboard.render.com/billing کارت اضافه کن؛ هزینه\u200Cای روی پلن Free نمی\u200Cآید.';
+      }
+      throw e;
+    }
     return j;
   };
-  const svcName = repoName;
-  const created = await rd('/services', {
-    method: 'POST',
-    body: JSON.stringify({
-      type: 'web', name: svcName, plan: 'free', region: 'frankfurt', runtime: 'node',
-      repo: { ownerLogin: owner, repo: repoName }, branch: 'main',
-      buildCommand: 'npm install', startCommand: 'node server.js',
-      envVars: [{ key: 'OMNI_TARGET', value: 'wss://' + target + tunnelPath }],
-      autoDeploy: 'yes',
-    }),
+  await report('رندر: بررسی توکن و workspace…');
+  const who = await verifyRenderToken(token);
+  const ownerId = who.ownerId;
+
+  const cleanTarget = String(target || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const tp = String(tunnelPath || '/').startsWith('/') ? String(tunnelPath || '/') : '/' + tunnelPath;
+  const baseName = String(name || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'omni-relay';
+  let svcName = (baseName + '-' + Math.random().toString(36).slice(2, 6)).slice(0, 40);
+
+  const createBody = (n) => ({
+    type: 'web_service',
+    name: n,
+    ownerId,
+    repo: RENDER_RELAY_REPO,
+    branch: 'main',
+    autoDeployTrigger: 'commit',
+    envVars: [{ key: 'OMNI_TARGET', value: 'wss://' + cleanTarget + tp }],
+    serviceDetails: {
+      runtime: 'node',
+      plan: 'free',
+      region: 'frankfurt',
+      envSpecificDetails: { buildCommand: 'npm install', startCommand: 'node server.js' },
+    },
   });
-  const svc = (created && created.service) || created;
-  const svcId = svc && svc.id;
+
+  await report('رندر: ساخت سرویس رایگان از repo عمومی رله…');
+  let created;
+  try {
+    created = await rd('/services', { method: 'POST', body: JSON.stringify(createBody(svcName)) });
+  } catch (e) {
+    // name must be unique inside the workspace — one retry with a fresh suffix
+    if (e && e.status === 400 && /name|exist|duplicate/i.test(String(e.message))) {
+      svcName = (baseName + '-' + Math.random().toString(36).slice(2, 8)).slice(0, 40);
+      created = await rd('/services', { method: 'POST', body: JSON.stringify(createBody(svcName)) });
+    } else throw e;
+  }
+  const svc = (created && created.service) || created || {};
+  const svcId = svc.id;
   if (!svcId) throw new Error('Render سرویس نساخت: پاسخ نامشخص');
-  // real *.onrender.com hostname comes from the API, never guessed
-  let domain = '';
+
+  let domain = String((svc.serviceDetails && svc.serviceDetails.url) || svc.subdomain || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
   let status = 'building';
-  for (let i = 0; i < 60; i++) {
+  let lastReport = 0;
+  for (let i = 0; i < 120; i++) {
     await bridgeSleep(3000);
+    if (Date.now() - lastReport > 20000) { lastReport = Date.now(); await report('رندر: بیلد در جریان است… (' + Math.round((Date.now() - started) / 1000) + 's)'); }
     const one = await rd('/services/' + svcId).catch(() => null);
     const sv = (one && one.service) || one || {};
-    domain = sv.subdomain || (sv.serviceDetails && sv.serviceDetails.subdomain) || domain;
+    domain = String((sv.serviceDetails && sv.serviceDetails.url) || sv.subdomain || domain || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
     const deps = await rd('/services/' + svcId + '/deploys?limit=1').catch(() => null);
     const dep = Array.isArray(deps) ? deps[0] && deps[0].deploy : deps && deps.deploy;
     const st = dep && dep.status;
-    if (st === 'failed' || st === 'canceled') { status = 'failed'; break; }
-    if (domain && (st === 'live' || st === 'active' || st === 'succeeded')) { status = 'ready'; break; }
+    if (st === 'build_failed' || st === 'update_failed' || st === 'error' || st === 'canceled') { status = 'failed'; break; }
+    if (domain && st === 'live') { status = 'ready'; break; }
   }
   if (!domain) throw new Error('Render دامنه را برنگرداند — داشبورد را چک کنید');
   if (status !== 'ready') throw new Error('مهلت انتظار برای دیپلوی Render تمام شد (وضعیت: ' + status + ')');
   return {
+    platform: 'render',
+    ok: true,
+    state: 'ready',
+    name: svcName,
+    projectId: svcId,
+    serviceId: svcId,
     domain,
     url: 'https://' + domain,
-    dashboard_url: 'https://dashboard.render.com/services/' + svcId,
-    service_id: svcId,
-    status: 'ready',
+    dashboard: 'https://dashboard.render.com/web/' + svcId,
+    target: cleanTarget,
+    tunnelPath: tp,
+    account: { username: who.username, email: who.email, ownerId },
+    ms: Date.now() - started,
   };
 }
 

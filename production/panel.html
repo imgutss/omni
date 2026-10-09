@@ -10135,7 +10135,6 @@ function xe(total) {
     relayIp: "138.201.54.122",
     vercelAutoToken: "",
     renderAutoToken: "",
-    ghAutoToken: "",
     netlifyAutoToken: "",
     autoName: "",
     autoTarget: "",
@@ -10580,7 +10579,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       : platform === "deno"
         ? "https://dash.deno.com/account/access-tokens"
         : platform === "render"
-          ? "https://dashboard.render.com/account/api-keys"
+          ? "https://dashboard.render.com/u/settings?add-api-key"
           : "https://app.netlify.com/user/applications#personal-access-tokens";
     const tokenHint = platform === "vercel"
       ? "Create Token → Scope = Full Account → Expiration = No Expiration"
@@ -10628,11 +10627,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
         </div>
         ${platform === "render" ? `
         <div class="field" style="margin-top:10px">
-          <label for="natnet-auto-gh-render">توکن گیت‌هاب (ساخت repo رله)</label>
-          <input type="password" id="natnet-auto-gh-render" class="input mono" dir="ltr"
-                 autocomplete="off" spellcheck="false" placeholder="ghp_…"
-                 value="${a(NATNET.ghAutoToken || "")}">
-          <small class="muted"><a href="https://github.com/settings/tokens" target="_blank" rel="noopener">github.com/settings/tokens</a> · scope: repo — پنل یک repo خصوصی می‌سازد، رلهٔ WS را داخلش می‌گذارد و Render را از همان repo دیپلوی می‌کند.</small>
+          <small class="muted">🌙 مثل دنو فقط <b>یک توکن</b> لازم است: رله از repo عمومی <code dir="ltr">omni-render-relay</code> ساخته می‌شود و توکن گیت‌هاب نمی‌خواهد. حساب‌های جدید Render ممکن است ثبت کارت بخواهند (۴۰۲) — پلن Free رایگان می‌ماند.</small>
         </div>` : ""}
         <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">
           <button class="btn btn-primary btn-sm" type="button" data-action="omni-natnet-auto-deploy" data-plat="${platform}" ${busy ? "disabled" : ""}>
@@ -10652,7 +10647,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
 
   function natnetBridgeListHtml(platform, rows, accent) {
     if (!rows || !rows.length)
-      return `<div class="muted" style="font-size:12px;margin-top:12px">هنوز پل ${platform === "vercel" ? "ورسلی" : platform === "deno" ? "دنویی" : "نتلیفایی"} با این پنل نساخته‌ای.</div>`;
+      return `<div class="muted" style="font-size:12px;margin-top:12px">هنوز پل ${platform === "vercel" ? "ورسلی" : platform === "deno" ? "دنویی" : platform === "render" ? "رندری" : "نتلیفایی"} با این پنل نساخته‌ای.</div>`;
     return `<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">
       ${rows.map((r) => `
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--border);border-radius:9px;padding:8px 10px;border-inline-start:3px solid ${accent}">
@@ -10663,7 +10658,6 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
           ${r.domain ? `<button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-auto-use" data-plat="${platform}" data-domain="${a(r.domain)}">📥 استفاده در کانفیگ‌ها</button>` : ""}
           ${r.url ? `<a class="btn btn-xs" href="${a(r.url)}" target="_blank" rel="noopener">🌐 باز کردن</a>` : ""}
           ${r.dashboard_url ? `<a class="btn btn-xs" href="${a(r.dashboard_url)}" target="_blank" rel="noopener">🎛 داشبورد</a>` : ""}
-          <button class="btn btn-xs" type="button" data-action="omni-bridge-ping" data-row="${Number(r.id)}" data-domain="${a(r.domain || "")}" data-path="${a(r.tunnel_path || "")}">🩺 تست زنده</button><span id="bp-${Number(r.id)}" style="font-size:11px"></span>
           <button class="btn btn-xs" type="button" data-action="omni-bridge-ping" data-row="${Number(r.id)}" data-domain="${a(r.domain || "")}" data-path="${a(r.tunnel_path || "")}">🩺 تست زنده</button><span id="bp-${Number(r.id)}" style="font-size:11px"></span>
           <button class="btn btn-xs" type="button" data-action="omni-natnet-auto-redeploy" data-id="${Number(r.id)}" data-plat="${platform}">♻️ دیپلوی دوباره</button>
           ${r.error ? `<div style="flex-basis:100%" class="muted" dir="ltr"><code style="font-size:11px">${a(String(r.error).slice(0, 180))}</code></div>` : ""}
@@ -10768,7 +10762,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       🦕 ۱. Deno Deploy — ترافیک واقعی (WS Relay)
     </button>
     <button class="btn ${NATNET.bridgePlatform === "render" ? "btn-primary" : ""}" type="button" data-action="omni-natnet-subtab" data-sub="render" style="flex:1;min-width:240px;padding:14px;font-weight:700;font-size:14px">
-      🌙 ۲. Render — رایگان بدون کارت (مرحلهٔ ۱ نقشهٔ راه)
+      🌙 ۲. Render — رلهٔ WS فقط با یک توکن (مثل دنو)
     </button>
   </div>
 
@@ -10788,6 +10782,22 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       <div class="badge ok" style="margin-bottom:10px">✅ ترافیک کلاینت: رله WS — قابل تست واقعی</div>
       ${autoCard}
     </div>
+  ` : NATNET.bridgePlatform === "render" ? `
+    <!-- ================= RENDER PLATFORM ================= -->
+    <div class="card" style="margin-top:12px;border-inline-start:3px solid #46e3b7">
+      <div class="card-head">
+        <b style="color:#46e3b7;font-size:14px">🌙 Render — رلهٔ واقعی WebSocket (مثل دنو: فقط یک توکن)</b>
+        <div class="spacer"></div>
+      </div>
+      <p class="muted" style="font-size:12.5px;line-height:1.9;margin:6px 0 10px">
+        فقط توکن API خودِ Render را بده — پنل خودش سرویس رایگان را از repo عمومی رله
+        (<code dir="ltr">omni-render-relay</code>) می‌سازد، دیپلوی می‌کند و دامنهٔ
+        <code dir="ltr">*.onrender.com</code> را برمی‌گرداند. توکن گیت‌هاب لازم نیست.
+        خواب ۱۵ دقیقه‌ای پلن رایگان با keepalive کروْن ورکر خنثی می‌شود.
+      </p>
+      <div class="badge warn" style="margin-bottom:10px">⚠️ تست زندهٔ API (۲۰۲۶-۱۰-۰۹): اکانت <b>جدید</b> Render حتی برای پلن Free ثبت کارت می‌خواهد (خطای ۴۰۲). اگر ساخت با ۴۰۲ رد شد، از <code dir="ltr">dashboard.render.com/billing</code> کارت اضافه کن — روی پلن Free هزینه‌ای نمی‌آید.</div>
+      ${autoCard}
+    </div>
   ` : ``}
     <!-- ================= VERCEL / NETLIFY REMOVED 2026-10-09 ================= -->
     <div class="card" style="margin-top:12px;border-inline-start:3px solid #ef4444">
@@ -10805,7 +10815,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
     <div class="card" style="margin-top:12px;border-inline-start:3px solid #6366f1">
       <div class="card-head"><b style="color:#818cf8;font-size:14px">🚧 نقشهٔ راه رله‌های ابری — به ترتیب اولویت</b></div>
       <div style="padding:12px;font-size:12.5px;line-height:2.1">
-        <b>۱) 🌙 Render</b> — مرحلهٔ ۱، <span class="badge warn">منتظر اوکی تو</span>: رایگان دائم بدون کارت، از ایران باز (FRA)، WS کامل؛ خواب ۱۵ دقیقه‌ای‌اش با keepalive کروْن ورکر خنثی می‌شود.<br>
+        <b>۱) 🌙 Render</b> — <span class="badge ok">موتور آماده ✅</span> مثل دنو فقط یک توکن (<code dir="ltr">rnd_…</code>)؛ WS کامل، FRA، خواب ۱۵ دقیقه‌ای با keepalive کروْن خنثی می‌شود. <span class="badge warn">تست زندهٔ ۲۰۲۶-۱۰-۰۹</span>: اکانت <b>جدید</b> Render حتی برای پلن Free ثبت کارت می‌خواهد (۴۰۲) — با کارت یا اکانت قدیمی، همان یک توکن کافی است.<br>
         <b>۲) 🪽 Fly.io</b> — مرحلهٔ ۲، <span class="badge warn">منتظر اکانت/کارت</span>: بهترین پینگ (fra/ams) + UDP یعنی Reality/Hysteria2؛ ترک رایگان ندارد (ترایل ۲ ساعت) ≈ ۵ دلار/ماه.<br>
         <b>۳) ❌ Koyeb</b> — از فوریهٔ ۲۰۲۶ کارت می‌خواهد (هولد ۲۹ دلار) و بعد از ۱ ساعت بی‌ترافیک scale-to-zero می‌شود → به‌درد نخور.<br>
         <b>۴)  Railway</b> — فقط ترایل پولی ۳۰ روزه.<br>
@@ -10947,12 +10957,6 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
           if (nameInput) NATNET.autoName = nameInput.value.trim();
           if (targetInput && targetInput.value.trim()) NATNET.autoTarget = targetInput.value.trim();
           let token = NATNET[natnetTokKey(plat)] || "";
-          let ghTok = "";
-          if (plat === "render") {
-            const ghInput = document.getElementById("natnet-auto-gh-render");
-            if (ghInput) NATNET.ghAutoToken = ghInput.value.trim();
-            ghTok = NATNET.ghAutoToken || "";
-          }
           let target = NATNET.autoTarget || natnetBridgeCtx.target || (e.settings()?.public_host || window.location.hostname || "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
           let out = document.getElementById(`natnet-auto-out-${plat}`);
           const paint = (html) => { if (out) out.innerHTML = html; };
@@ -10969,11 +10973,11 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
           NATNET.autoBusy = true;
           spin(`در حال ساخت پل ${plat} روی ${target} …`);
           try {
-            let r = await b.post("/api/bridge", { platform: plat, token, gh_token: ghTok || undefined, name: NATNET.autoName || "", target, tunnel_path: natnetTunnelPath(e.settings?.()), id: bridgeId || undefined });
+            let r = await b.post("/api/bridge", { platform: plat, token, name: NATNET.autoName || "", target, tunnel_path: natnetTunnelPath(e.settings?.()), id: bridgeId || undefined });
             let id = r.id || bridgeId;
             let row = null;
             let lastStatus = "";
-            for (let k = 0; k < 60; k++) {
+            for (let k = 0; k < (plat === "render" ? 180 : 60); k++) {
               await new Promise((res) => setTimeout(res, 2000));
               try {
                 row = (await b.get(`/api/bridge/${id}`)).bridge;
@@ -11731,9 +11735,8 @@ echo "اجرای اسپوفر محلی روی پورت 40443..."
       if (s.id === "natnet-auto-token-vercel") NATNET.vercelAutoToken = s.value.trim();
       else if (s.id === "natnet-auto-token-netlify") NATNET.netlifyAutoToken = s.value.trim();
       else if (s.id === "natnet-auto-token-render") NATNET.renderAutoToken = s.value.trim();
-      else if (s.id === "natnet-auto-gh-render") NATNET.ghAutoToken = s.value.trim();
-      else if (s.id === "natnet-auto-name-vercel" || s.id === "natnet-auto-name-netlify") NATNET.autoName = s.value.trim();
-      else if (s.id === "natnet-auto-target-vercel" || s.id === "natnet-auto-target-netlify") NATNET.autoTarget = s.value.trim();
+      else if (s.id.startsWith("natnet-auto-name-")) NATNET.autoName = s.value.trim();
+      else if (s.id.startsWith("natnet-auto-target-")) NATNET.autoTarget = s.value.trim();
     });
     document.addEventListener("change", (t) => {
       let s = t.target;

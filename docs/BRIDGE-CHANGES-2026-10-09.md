@@ -602,3 +602,65 @@ user's «اوکی».
 - tools/sanction-generator.html v8.9: pasting a relay link emits exactly one
   relay node (CF clean IPs cannot reach relay domains).
 - sanction-links file gained the proven Deno relay line.
+
+## 22. Render one-token flow + live 402 card-gate discovery (v9.0, 2026-10-09)
+
+User directive: «مثل همون دنو باشه — هرکس خواست توکنشو بده و بسازه» + a real `rnd_…` key.
+
+**Bugs found (all v8.8, all fixed):**
+1. `deployBridge`/`isBridgePlatform`/`bridgeTokenShape`/`/api/bridge` had NO render
+   case — the engine sat in the worker but nothing dispatched to it; panel pastes
+   always failed `bad_platform`.
+2. Panel rendered `${autoCard}` only inside the deno branch — the Render subtab
+   showed a button with no build card.
+3. Bot `/natbridge` still offered dead Vercel/Netlify, not Deno/Render.
+4. `natnetBridgeListHtml` had a duplicated «تست زنده» button (id collision).
+
+**New architecture — ONE token, exactly like Deno:**
+- Canonical PUBLIC repo `Alisarani7021/omni-render-relay` (package.json +
+  server.js + README). The relay reads `OMNI_TARGET` from env → the same repo
+  serves every user; no GitHub token anywhere.
+- `deployRenderBridge({token,target,tunnelPath,name})`: GET `/v1/owners`
+  (validates key, yields `ownerId`) → POST `/v1/services` → poll
+  `/services/{id}` + `/deploys?limit=1` until `live` → real `*.onrender.com`
+  from `serviceDetails.url`, never guessed.
+- `verifyRenderToken` wired into `verifyBridgeToken`; panel «فقط تست توکن» works.
+- Panel: GH field removed, render card + honest 402 note added, poll extended
+  to 6 min for render builds, roadmap card corrected.
+- Bot: menu = 🦕 Deno + 🌙 Render (legacy vercel/netlify callbacks still work),
+  `/deno` `/render` `nb_deno` `nb_render`, labels/brands/hints updated,
+  commands version `2026-10-09-render1`.
+- HTTP 402 → `e.payment` → panel/bot show: «ثبت کارت از
+  dashboard.render.com/billing — پلن Free هزینه ندارد».
+
+**Live API schema (verified with real calls 2026-10-09 — earlier guesses were wrong):**
+- `type:"web_service"` (not `web`); `ownerId` REQUIRED (team `tea-…`; user id rejected).
+- `repo` is a plain URL **string** (an object causes "invalid JSON").
+- `runtime` inside `serviceDetails`; build/start inside
+  `serviceDetails.envSpecificDetails`; `autoDeployTrigger:"commit"`.
+- deploy success status = `live`; failures = build_failed|update_failed|error|canceled.
+
+**The 402 discovery (honest verdict):** this NEW Render account ("My Workspace"
+team, ali.sarani7021@gmail.com) gets HTTP 402 «Payment information is required»
+for ANY service creation — even `static_site`, even `plan:free`. New workspaces
+are card-gated regardless of marketing. The old roadmap claim «رایگان بدون کارت»
+was wrong for new accounts — corrected everywhere (panel, roadmap, docs).
+
+**Live end-to-end proof:** full bot flow driven through `/tg/omni-hook`
+(menu → nb_render → name → real rnd_ key): row created in omni D1
+(`bot:5982315292`, render, target nova, /VZLdh9Ft), engine reached the Render
+API with a VALID body, row recorded `failed` with the exact Persian payment
+message. 402 comes only after full schema validation → request shape proven.
+
+**Tests:** render v2 4/4 (schema assertions, zero-GitHub calls, 402 flag, 401
+auth) · bot-bridge 16/16 · bridge 9/9 · bridges 15/15 · deno 5/5 · scanner 18 ·
+browser ok jsErrors [] · smoke 15/15. Bundle SHA `13a91131…`.
+
+**Deploys:** omni `c82ebf2a-6b2b-42b3-bd9f-e3e98c4deda4` · nova
+`eb6a020c-2c9a-4511-a983-197c50580daa` (identical bundle, sha verified post-build).
+Subscription regression-checked: 15 CF URIs + Deno relay at the end.
+
+**Remaining (user side, ONE step):** add a card at dashboard.render.com/billing
+(Free plan is not charged) — then the same `rnd_` key pasted in panel 🌙 or bot
+/natbridge builds the relay and it auto-appears in the subscription + green
+routes. An older (non-gated) Render account works with just the token, today.
