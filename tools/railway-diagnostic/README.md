@@ -1,5 +1,7 @@
 # Railway diagnostic — not a proxy
 
+> RETIRED after the user reported direct Railway unreachable without VPN. The diagnostic deployment was removed. Do not recreate it; this was not the requested domestic-CDN Spider architecture. See docs/SPIDER-REQUESTED-PATH-2026-10-10.md.
+
 An HTTP page and a small, bounded WebSocket echo server, deployed to the user's own Railway trial workspace. It contains **no VLESS, SOCKS, arbitrary forwarding, or anonymization service**.
 
 - `index.html`: Persian mobile test UI. Requires the visitor to manually confirm VPN is off; cannot detect that automatically.

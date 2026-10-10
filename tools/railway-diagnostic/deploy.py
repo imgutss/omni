@@ -27,6 +27,8 @@ def latest():
     d=gql('query DiagDeployment($env:String!,$service:String!){serviceInstance(environmentId:$env,serviceId:$service){latestDeployment{id status} sleepApplication}}',{'env':state['environment_id'],'service':state['service_id']})
     return d['serviceInstance']
 def main():
+    if state.get('retired'):
+        raise RuntimeError('Direct diagnostic retired after user-line failure. Do not recreate it; the requested next path is owned Iranian CDN -> original SpiderPanel origin.')
     contexts=gql('query DiagScope {apiToken{workspaces{id name}}}')['apiToken']['workspaces']
     if len(contexts)!=1 and not state.get('workspace_id'):raise RuntimeError('Choose a workspace explicitly; no guessing')
     workspace_id=state.get('workspace_id') or contexts[0]['id']
