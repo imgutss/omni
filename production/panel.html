@@ -10699,7 +10699,6 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
       ...(NATNET.renderEndpoints || []).map(x => ({ name: x.name, ip: x.ip, ping: "relay", relay: !!x.relay })),
       { name: "دامنهٔ خود ورکر (مستقیم)", ip: publicHost, ping: "پایه" },
       ...NATNET_DATA.expDomains.map(d => ({ name: "🧪 آدرس دامنه‌ای — " + d, ip: d, ping: "آزمایشی" })),
-      ...NATNET_DATA.cf.cleanIps.map(ip => ({ name: "⚡ آی‌پی سفید — " + ip, ip, ping: "لبه ۱۰۱" }))
     ];
 
     // relay rows (Deno): TLS SNI and WS Host MUST be the relay's own domain
@@ -10781,9 +10780,9 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
   <div class="card" style="margin-top:16px;border-inline-start:4px solid #22c55e">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
       <div>
-        <b style="font-size:14px;color:#22c55e">⚡ روت‌های سبز — پایه + رله + 🧪 + ۱۰۰ آی‌پی سفیدِ لبه‌زنده (اسکن ۲۰۲۶-۱۰-۱۰)</b>
+        <b style="font-size:14px;color:#22c55e">⚡ روت‌های سبزِ خط تو — پایه + ۵۰ آدرس دامنه‌ای (پینگ سبز ۱۱۰-۱۱۹ms)</b>
         <p class="muted" style="margin:4px 0 0 0;font-size:12px;line-height:1.7">
-          روت‌های آی‌پی تمیز CF حذف شدند: لبهٔ CF سالم است ولی اپراتور ایرانی SNI روی workers.dev را فیلتر می‌کند و پینگ نمی‌دهد — از سمت ما قابل تعمیر نیست. ردیف‌های 🧪 ۵۰ آدرس دامنه‌ایِ لبه‌زنده از لیست تو و ردیف‌های ⚡ آی‌پی‌های سفیدِ ناشناخته‌اند (اسکن لبه: ۱۰۱ با ALPN http/1.1، میانه ۹۰ms) — روی خط خودت پینگ بگیر؛ هرکدوم سبز شد بگو تا دائمی و داخل اشتراکشان کنم.
+          روت‌های آی‌پی تمیز CF حذف شدند: لبهٔ CF سالم است ولی اپراتور ایرانی SNI روی workers.dev را فیلتر می‌کند و پینگ نمی‌دهد — از سمت ما قابل تعمیر نیست. ردیف‌های 🧪 همان ۵۰ آدرس دامنه‌ای لیست تو هستند که روی خط تو پینگ سبز دادن (۱۱۰-۱۱۹ms) و الان داخل اشتراک هم هستند. آی‌پی‌های خام CF از کارت‌ها و اشتراک حذف شدند (اپراتورت IP-literal را می‌بُرد)؛ استخر ۱۰۰ آی‌پی فقط در بخش اسکنر ماند.
         </p>
       </div>
       <button class="btn btn-sm btn-primary" type="button" data-action="omni-copy" data-text="${a(verifiedDirectUris.join('\n'))}">
