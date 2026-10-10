@@ -10668,6 +10668,76 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
     </div>`;
   }
 
+  function vpsUriOf(n, p) {
+    const uu = p.uuid || "";
+    if (p.kind === "reality" && p.pbk) return "vless://" + uu + "@" + n.ip + ":" + (p.port || 443) + "?encryption=none&security=reality&type=tcp&headerType=none&flow=xtls-rprx-vision&sni=" + encodeURIComponent(p.sni || "snapp.ir") + "&pbk=" + encodeURIComponent(p.pbk) + "&sid=" + encodeURIComponent(p.sid || "") + "&fp=chrome#" + encodeURIComponent("💎 نت‌ملی‌پرو — " + (n.ip || ""));
+    if (p.kind === "ws" && p.domain) return "vless://" + uu + "@" + p.domain + ":443?encryption=none&security=tls&type=ws&sni=" + encodeURIComponent(p.domain) + "&host=" + encodeURIComponent(p.domain) + "&path=" + encodeURIComponent(p.path || "/vzn") + "&alpn=http/1.1&fp=chrome#" + encodeURIComponent("💎 نت‌ملی‌پرو — " + p.domain);
+    return "";
+  }
+  function VpsProView() {
+    return `
+  <section class="card mesh-hero" style="border-inline-start:4px solid var(--accent)">
+    <div class="mesh-kicker" style="color:var(--accent)">OMNI / PAID NATIONAL RELAY · VPS + دامنه</div>
+    <h2 class="mesh-title">💎 نت ملی پرو — VPS ایرانی + دامنه (سرویس پولی)</h2>
+    <p class="muted" style="max-width:820px;line-height:1.8">
+      یک VPS (هر کشوری، حتی ایران) و در صورت نیاز یک دامنه بخر؛ بقیه‌اش با پنل است:
+      ۱) «ساخت نود» را بزن ۲) دستور نصب را روت روی VPS اجرا کن — نود خودکار ثبت می‌شود
+      ۳) با یک کلیک رله REALITY یا WS+TLS نصب می‌شود و کانفیگ 💎 خودکار وارد اشتراک می‌شود.
+      این بخش از سرویس‌های رایگان جدا است و به پلتفرم خارجی وابسته نیست.
+    </p>
+  </section>
+  <section class="card" style="margin-top:12px">
+    <h3>۱) ثبت نود جدید</h3>
+    <button class="btn btn-primary" type="button" data-action="omni-vps-create">➕ ساخت نود و دریافت دستور نصب</button>
+    <div id="vps-install" class="codebox" style="margin-top:10px;display:none"></div>
+  </section>
+  <section class="card" style="margin-top:12px">
+    <h3>۲) نودها</h3>
+    <div id="vps-nodes"><p class="muted">در حال بارگذاری…</p></div>
+    <button class="btn btn-sm" type="button" data-action="omni-vps-refresh" style="margin-top:8px">🔄 رفرش</button>
+  </section>`;
+  }
+  async function vpsRefreshList() {
+    const box = document.getElementById("vps-nodes");
+    if (!box) return;
+    try {
+      const d = await x("GET", "/api/vps", void 0, { retry: 0 });
+      const nodes = (d && d.nodes) || [];
+      if (!nodes.length) {
+        box.innerHTML = '<p class="muted">هنوز نودی ثبت نشده — بالا «ساخت نود» را بزن و دستور نصب را روت روی VPS اجرا کن.</p>';
+        return;
+      }
+      box.innerHTML = nodes.map((n) => {
+        let profs = [];
+        try { profs = JSON.parse(n.profiles || "[]"); } catch (e2) {}
+        const pHtml = profs.map((p2) => {
+          const uri = vpsUriOf(n, p2);
+          if (!uri) return "";
+          return `<div style="margin-top:8px"><span class="badge ok">${p2.kind === "reality" ? "⚡ REALITY" : "🌐 WS+TLS"}</span>
+            <div class="codebox" style="margin-top:4px"><code dir="ltr" style="font-size:10px;word-break:break-all">${a(uri)}</code></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+              <button class="btn btn-xs" type="button" data-action="omni-copy" data-text="${a(uri)}">📋 کپی</button>
+              <button class="btn btn-xs btn-primary" type="button" data-action="omni-natnet-v2rayng" data-uri="${a(uri)}">📲 نصب</button>
+              <button class="btn btn-xs" type="button" data-action="omni-natnet-qr" data-uri="${a(uri)}">🔳 QR</button>
+            </div></div>`;
+        }).join("");
+        const st = n.status === "online" ? '<span class="badge ok">✅ آنلاین</span>' : '<span class="badge warn">⏳ ' + a(n.status || "pending") + "</span>";
+        return `<div class="card" style="margin-top:10px">
+          <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center">
+            <b>🖥 ${a(n.label || "VPS")}</b> ${st}
+            <span class="muted" dir="ltr" style="font-size:11px">${a(n.ip || "—")} · آخرین سیگنال: ${a(n.last_seen || "—")} UTC</span>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+            <button class="btn btn-xs btn-primary" type="button" data-action="omni-vps-task" data-kind="reality" data-node="${n.id}">⚡ نصب رله REALITY</button>
+            <button class="btn btn-xs" type="button" data-action="omni-vps-task" data-kind="ws" data-node="${n.id}">🌐 WS + دامنه (certbot)</button>
+            <button class="btn btn-xs" type="button" data-action="omni-vps-task" data-kind="restart" data-node="${n.id}">♻️ ریستارت رله</button>
+            <button class="btn btn-xs btn-danger" type="button" data-action="omni-vps-task" data-kind="remove" data-node="${n.id}">🗑 حذف نود</button>
+          </div>${pHtml}</div>`;
+      }).join("");
+    } catch (e3) {
+      box.innerHTML = '<p class="muted">خطا در دریافت نودها.</p>';
+    }
+  }
   function NationalNetView(e) {
     let activeUser = natnetActiveUser(e);
     let uuid = activeUser.uuid || "6e937e50-6b03-4584-b0a7-b8d34bb21d4c";
@@ -10731,8 +10801,8 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
   <!-- HERO BANNER -->
   <section class="card mesh-hero" style="border-inline-start:4px solid var(--accent)">
     <div style="position:relative;z-index:1;max-width:960px">
-      <div class="mesh-kicker" style="color:var(--accent)">OMNI / NATIONAL INTERNET SUITE · نت ملی (رلهٔ زندهٔ Deno)</div>
-      <h2 class="mesh-title">سامانه عبور از فیلترینگ نت ملی (رلهٔ WebSocket واقعی روی Deno Deploy)</h2>
+      <div class="mesh-kicker" style="color:var(--accent)">OMNI / CLOUD RELAY SUITE · رله ابری (Deno و دامنه‌ها)</div>
+      <h2 class="mesh-title">رله ابری — WebSocket واقعی روی Deno Deploy و دامنه‌های فعال (برای مسیر VPS+دامنه، بخش 💎 نت ملی پرو را ببین)</h2>
       <p class="muted" style="margin:0;max-width:820px;line-height:1.8">
         در شرایط اختلال و قطعی نت بین‌الملل، ترافیک پروکسی از رلهٔ زنده Deno Deploy (ارتقای واقعی WebSocket) و روت مستقیم روی آی‌پی‌های تمیز کلودفلر به سمت ورکر شما می‌رسد تا فیلترینگ دامنه دور زده شود.
       </p>
@@ -10871,7 +10941,7 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
         } else if (i === "omni-natnet-qr") {
           let uri = s.dataset.uri || "";
           Le({
-            title: "کد QR کانفیگ نت ملی",
+            title: "کد QR کانفیگ رله",
             body: `<div style="text-align:center;padding:12px">
               ${de(uri, 220)}
               <div class="codebox" style="margin-top:14px;max-height:120px;overflow:auto">
@@ -10880,6 +10950,39 @@ export const config = { path: "/*", excludedPath: ["/", "/index.html", "/favicon
             </div>`,
             footer: `<button class="btn btn-primary" data-action="close-modal">بستن</button>`,
           });
+        } else if (i === "omni-vps-create") {
+          const d = await x("POST", "/api/vps/create", {}, { retry: 0 });
+          if (d && d.ok) {
+            const cmd = d.install || ("curl -fsSL \"" + location.origin + "/vps-agent.sh?join=" + d.join_token + "\" | bash");
+            const box = document.getElementById("vps-install");
+            if (box) {
+              box.style.display = "block";
+              box.innerHTML = '<div style="margin-bottom:6px">🔧 دستور نصب (روت روی VPS — فقط یک بار):</div><code dir="ltr" style="font-size:11px;word-break:break-all">' + a(cmd) + '</code><br><button class="btn btn-xs" type="button" data-action="omni-copy" data-text="' + a(cmd) + '" style="margin-top:6px">📋 کپی دستور</button>';
+            }
+            y("نود ثبت شد — دستور نصب را روت روی VPS اجرا کن؛ تا ۱ دقیقه دیگر خودکار آنلاین می‌شود.", "ok", 6000);
+            await vpsRefreshList();
+          } else y((d && d.error) || "خطا در ساخت نود", "err");
+        } else if (i === "omni-vps-refresh") {
+          await vpsRefreshList();
+        } else if (i === "omni-vps-task") {
+          const kind = s.dataset.kind, node = s.dataset.node;
+          if (kind === "remove") {
+            const d = await x("POST", "/api/vps/remove", { node_id: Number(node) }, { retry: 0 });
+            y(d && d.ok ? "نود حذف شد." : "حذف ناموفق بود.", d && d.ok ? "ok" : "err");
+            await vpsRefreshList();
+          } else {
+            const payload = { kind };
+            if (kind === "ws") {
+              const dom = prompt("دامنه‌ای که A رکوردش به آی‌پی این VPS می‌رسد:");
+              if (!dom) return;
+              payload.domain = dom.trim();
+            }
+            const d = await x("POST", "/api/vps/task", { node_id: Number(node), payload }, { retry: 0 });
+            if (d && d.ok) {
+              y("دستور به نود ارسال شد — تا ~۱ دقیقه دیگر «رفرش» بزن.", "ok", 6000);
+              setTimeout(() => vpsRefreshList(), 30000);
+            } else y((d && d.error) || "خطا در ارسال دستور", "err");
+          }
         } else if (i === "omni-natnet-v2rayng") {
           let uri = s.dataset.uri || "";
           location.href = "v2rayng://install-config?url=" + encodeURIComponent(uri);
@@ -12031,7 +12134,8 @@ Connection: close\r
     { id: "dashboard", icon: "dash", label: () => n("nav.dashboard") },
     { id: "users", icon: "users", label: () => n("nav.users") },
     { id: "configs", icon: "qr", label: () => n("nav.configs") },
-    { id: "national_net", icon: "shield", label: () => "🇮🇷 نت ملی (بای‌پس)" },
+    { id: "national_net", icon: "shield", label: () => "🦕 رله ابری Deno" },
+    { id: "vps_pro", icon: "shield", label: () => "💎 نت ملی پرو (پولی)" },
     { id: "mesh", icon: "activity", label: () => "Causal Mesh" },
     { id: "scanner", icon: "search", label: () => n("nav.scanner") },
     { id: "dns", icon: "globe", label: () => n("nav.dns") },
@@ -12092,10 +12196,11 @@ Connection: close\r
         scanner: n("nav.scanner"),
         dns: n("nav.dns"),
         configs: n("nav.configs"),
-        national_net: "🇮🇷 نت ملی (بای‌پس جامع)",
-        national_net_bridge: "🚀 ۱. نت ملی: رلهٔ ابری Deno (WS واقعی)",
-        national_net_spoofer: "🛡️ ۲. نت ملی: اسپوفر محلی و لوپ‌بک",
-        national_net_relays: "📡 ۳. نت ملی: رله سفید، خورشید و DNSTT",
+        national_net: "🦕 رله ابری — Deno و دامنه‌ها (رایگان)",
+        national_net_bridge: "🚀 ۱. رله ابری: Deno (WS واقعی)",
+        national_net_spoofer: "🛡️ ۲. اسپوفر محلی و لوپ‌بک",
+        national_net_relays: "📡 ۳. رله سفید، خورشید و DNSTT",
+        vps_pro: "💎 نت ملی پرو — VPS ایرانی + دامنه (پولی)",
         mesh: "Causal Mesh",
       }[e] || n("app.name")
     );
@@ -12135,6 +12240,10 @@ Connection: close\r
         break;
       case "mesh":
         e.innerHTML = MeshView(l);
+        break;
+      case "vps_pro":
+        e.innerHTML = VpsProView();
+        await vpsRefreshList();
         break;
       case "national_net":
       case "national_net_bridge":

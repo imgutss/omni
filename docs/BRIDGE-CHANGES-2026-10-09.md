@@ -676,3 +676,14 @@ Resilience shipped (v9.8, bundle ae6f8318…):
 4. scheduled() fully guarded — cron can no longer die half-way.
 5. RELEASES KV binding restored in deploy-nova/wrangler.toml; `tools/sync-release-kv.sh` re-points both accounts' archives after every deploy (run it after each wrangler deploy!).
 6. Stale D1 clean_ips (overwritten by the ancient bundle's cron while it ran) restored to the 100 white IPs in both D1s.
+
+## §25 — v10: 💎 نت ملی پرو (VPS + دامنه، سرویس پولی) — 2026-10-10
+- درخواست کاربر: بهترین گزینه نت ملی = VPS ایرانی + دامنه، کاملاً خودکار از داخل پنل، در یک بخش پولی جدا از بخش‌های رایگان؛ و تغییر نام بخش Deno که اشتباهاً «نت ملی» داشت.
+- Worker: جداول D1 `vps_nodes` (owner,label,join_token,node_token,ip,port,status,last_seen,info,profiles) و `vps_tasks` (node_id,payload,state,result).
+- روت‌های بدون احراز: `GET /vps-agent.sh?join=` (قالب bash با جایگذاری __API__/__JOIN__)، `POST /api/vps/join|poll|report`.
+- روت‌های پنل (session): `GET /api/vps`، `POST /api/vps/create|task|remove`.
+- ایجنت روی VPS: ثبت نود، نصب Xray (GitHub release)، systemd `omni-xray`، حلقه poll هر ۴۵ ثانیه؛ تسک‌ها: reality (x25519 + dest/sni پیش‌فرض snapp.ir + shortId + flow vision)، ws (certbot standalone + VLESS WS TLS)، restart، uninstall. نتیجه در `profiles.json` → report → ذخیره در DB.
+- اشتراک: نودهای online با profiles → URIهای 💎 (reality: tcp/vision؛ ws: دامنه+cert) انتهای لیست اضافه می‌شوند.
+- پنل: نمای جدید `#/vps_pro` (ساخت نود + دستور نصب یک‌خطی، کارت نودها با وضعیت/آخرین سیگنال، دکمه‌های نصب رله/WS/ریستارت/حذف، کپی+نصب+QR هر کانفیگ)؛ تست `production/test/vpspro.test.mjs` (PASS، jsErrors خالی).
+- تغییر نام‌ها: سایدبار و عناوین Deno از «نت ملی» به «رله ابری Deno»؛ hero جدید با ارجاع به بخش پولی؛ عنوان QR اصلاح شد.
+- دیپلوی: omni ver `7b84a4cc`، nova ver `fd10f454`، bundle sha `b1ffd9c2e5061ceb84ffcdf208df5effc0d4bb3595be62bbf01961adf3fd530b`؛ RELEASES KV هر دو اکانت همگام؛ verify زنده: agent.sh هر دو هاست OK، join جعلی 404، /api/vps بدون لاگین 401، ساب ۶۶ کانفیگ (بدون نود فعال).

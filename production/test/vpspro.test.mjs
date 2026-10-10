@@ -1,0 +1,48 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {chromium} from 'playwright';
+const root=new URL('../',import.meta.url);
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const context=await browser.newContext({viewport:{width:393,height:852},isMobile:true,hasTouch:true});
+const page=await context.newPage();const errors=[];
+page.on('pageerror',e=>errors.push(e.message));
+const settings={panel_name:'Omni',public_host:'omni-test.invalid',clean_ips:[],ip_pool:'',ipv6_pool:[],address_domains:[],selected_country:'DE',proxy_ips:[],path:'/ws',proto:'both',port:'443',ipv6_enabled:'1',fragment_preset:'none'};
+const node={id:7,label:'VPS-TEHRAN',ip:'185.143.233.10',port:443,status:'online',last_seen:'2026-10-10 08:00:00',info:'{}',profiles:JSON.stringify([{kind:'reality',pbk:'PUBKEY123',sid:'abcd1234',sni:'snapp.ir',dest:'snapp.ir',port:443,uuid:'6e937e50-6b03-4584-b0a7-b8d34bb21d4c'}]),join_token:'join_x'};
+let taskCalls=[];
+await page.route('**/*',async route=>{
+  const u=new URL(route.request().url()),p=u.pathname;
+  if(u.hostname!=='omni-test.invalid')return route.abort('failed');
+  if(p==='/')return route.fulfill({status:200,contentType:'text/html',body:fs.readFileSync(new URL('panel.html',root),'utf8')});
+  if(p==='/healthz')return route.fulfill({status:200,body:'ok'});
+  let body={ok:true};const m=route.request().method();
+  if(p==='/api/whoami')body={ok:true,installed:true,username:'review',role:'admin',panelName:'Omni'};
+  else if(p==='/api/settings')body={ok:true,settings};
+  else if(p==='/api/users')body={ok:true,users:[],total:0};
+  else if(p==='/api/fragments')body={ok:true,presets:[],fingerprints:[]};
+  else if(p==='/api/overview')body={ok:true,total:0,users:{total:0,active:0},series:[]};
+  else if(p==='/api/vps'&&m==='GET')body={ok:true,nodes:[node]};
+  else if(p==='/api/vps/create')body={ok:true,id:8,join_token:'join_test123',install:'curl -fsSL "https://omni-test.invalid/vps-agent.sh?join=join_test123" | bash'};
+  else if(p==='/api/vps/task'){taskCalls.push(route.request().postDataJSON());body={ok:true};}
+  return route.fulfill({status:200,contentType:'application/json',headers:{'x-omni':'1'},body:JSON.stringify(body)});
+});
+await page.goto('https://omni-test.invalid/#/vps_pro');
+await page.locator('#vps-nodes').waitFor();
+await page.waitForFunction(()=>document.querySelector('#vps-nodes')?.textContent.includes('VPS-TEHRAN'));
+assert((await page.locator('#vps-nodes').textContent()).includes('REALITY'),'reality profile shown');
+assert((await page.locator('h2.mesh-title').textContent()).includes('نت ملی پرو'),'hero title');
+await page.locator('[data-action="omni-vps-create"]').click();
+await page.waitForFunction(()=>document.querySelector('#vps-install')?.textContent.includes('vps-agent.sh'));
+assert((await page.locator('#vps-install').textContent()).includes('join_test123'));
+await page.locator('[data-action="omni-vps-task"][data-kind="reality"]').click();
+await page.waitForTimeout(400);
+assert.equal(taskCalls.length,1);
+assert.equal(taskCalls[0].payload.kind,'reality');
+assert.equal(taskCalls[0].node_id,7);
+await page.screenshot({path:new URL('vpspro-view.png',root).pathname,fullPage:true,animations:'disabled'});
+// Deno view rename check
+await page.goto('https://omni-test.invalid/#/national_net');
+await page.waitForFunction(()=>document.body.innerText.includes('رله ابری'));
+assert(!(await page.locator('.mesh-hero').textContent()).includes('NATIONAL INTERNET SUITE'),'deno hero renamed');
+assert.deepEqual(errors,[],'jsErrors');
+console.log('VPS-PRO TEST PASSED');
+await browser.close();
