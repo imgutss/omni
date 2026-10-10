@@ -2441,6 +2441,51 @@ async function rollOutWorkerBundle(token, panel, bundle, message, { databaseIdOv
   return { panel: resolved, health, deployment: newDeployments[0] || null, versionId: staged.id, priorVersion };
 }
 
+async function fetchOwnDeployedBundle(token, accountId, workerName) {
+  // v9.8: download THIS worker's live bundle from the Cloudflare API — the
+  // only trustworthy "current version" when the RELEASES archive is stale.
+  const rr = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${encodeURIComponent(workerName)}/contents`, { headers: { authorization: `Bearer ${token}` } });
+  if (!rr.ok) throw new Error(`\u062F\u0631\u06CC\u0627\u0641\u062A \u0646\u0633\u062E\u0647\u0654 \u0632\u0646\u062F\u0647: HTTP ${rr.status}`);
+  const text = await rr.text();
+  const head = text.indexOf("\r\n\r\n");
+  const tail = text.lastIndexOf("\r\n--");
+  const body = head >= 0 && tail > head ? text.slice(head + 4, tail) : text;
+  if (!body || body.length < 1e5 || !body.includes("cloudflare:sockets"))
+    throw new Error("\u0646\u0633\u062E\u0647\u0654 \u0632\u0646\u062F\u0647 \u0627\u0632 API \u062E\u0648\u0627\u0646\u062F\u0647 \u0646\u0634\u062F.");
+  return body;
+}
+async function resolveRolloutBundle(env, token, resolved) {
+  // v9.8 feature: update/repair buttons roll out the FRESH archive when it
+  // matches the running build, otherwise the LIVE running bundle itself —
+  // never an ancient archived version (the daily Error-1101 loop).
+  try {
+    return await getReleaseBundle(env, "current");
+  } catch (e) {
+    return await fetchOwnDeployedBundle(token, resolved.account_id, resolved.worker_name);
+  }
+}
+async function resolveReleasesKvId(token, accountId) {
+  const list = await cfApi(token, `/accounts/${accountId}/storage/kv/namespaces?per_page=50`);
+  const ns = (list?.result || []).find((k) => k.title === "RELEASES" || k.title === "omni-releases");
+  return ns ? ns.id : null;
+}
+var LAST_KV_SYNC = 0;
+async function syncReleaseKvFromLive(env, token, accountId, workerName) {
+  // v9.8: cron mirrors the RELEASES archive onto the live healthy build so
+  // every future button-press deploys exactly what is running.
+  if (Date.now() - LAST_KV_SYNC < 3600e3) return false;
+  LAST_KV_SYNC = Date.now();
+  const nsId = await resolveReleasesKvId(token, accountId);
+  if (!nsId) return false;
+  const own = await fetchOwnDeployedBundle(token, accountId, workerName);
+  const curResp = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${nsId}/values/releases%2Fcurrent`, { headers: { authorization: `Bearer ${token}` } }).catch(() => null);
+  const cur = curResp && curResp.ok ? await curResp.text() : null;
+  if (cur && cur.length === own.length) return false;
+  await cfApi(token, `/accounts/${accountId}/storage/kv/namespaces/${nsId}/values/releases%2Fcurrent`, {
+    method: "PUT", headers: { "content-type": "application/octet-stream" }, body: own
+  });
+  return true;
+}
 async function autoHealPanel(env, token, panel) {
   const resolved = await resolvePanelForToken(token, panel);
   try {
@@ -2454,7 +2499,7 @@ async function autoHealPanel(env, token, panel) {
     }
   } catch {}
 
-  const bundle = await getReleaseBundle(env, "current");
+  const bundle = await resolveRolloutBundle(env, token, resolved);
   const staged = await uploadWorkerBundle(token, resolved, bundle, "Omni auto-heal deployment", {
     databaseIdOverride: resolved.database_id
   });
@@ -2968,6 +3013,11 @@ async function getReleaseBundle(env, release = "current") {
   const bundle = await env.RELEASES.get(`releases/${release}`, "text");
   if (!bundle || bundle.length < 1e5 || !bundle.includes("cloudflare:sockets"))
     throw new Error("\u0641\u0627\u06CC\u0644 \u0627\u0646\u062A\u0634\u0627\u0631 Omni \u0646\u0627\u0642\u0635 \u06CC\u0627 \u062F\u0631 \u062F\u0633\u062A\u0631\u0633 \u0646\u06CC\u0633\u062A.");
+  // v9.8 staleness guard: the archived bundle MUST embed the SAME panel this
+  // worker is running; otherwise a repair button would roll out ancient code
+  // (the 2026-10-10 daily-1101 incident) — refuse loudly instead.
+  if (release === "current" && (!bundle.includes(panel_default.slice(0, 300)) || !bundle.includes(panel_default.slice(-300))))
+    throw new Error("\u0628\u0627\u06CC\u06AF\u0627\u0646\u06CC RELEASES \u0642\u062F\u06CC\u0645\u06CC \u0627\u0633\u062A \u0648 \u0628\u0627 \u0646\u0633\u062E\u0647\u0654 \u062F\u0631 \u062D\u0627\u0644 \u0627\u062C\u0631\u0627 \u0646\u0645\u06CC\u062E\u0648\u0627\u0646\u062F \u2014 \u0627\u0628\u062A\u062F\u0627 \u0628\u0627 tools/sync-release-kv.sh \u0647\u0645\u06AF\u0627\u0645 \u06A9\u0646\u06CC\u062F; rollout \u0631\u062F \u0634\u062F.");
   return bundle;
 }
 var CF_API2, panelSchema, sleep, cfErrorText;
@@ -3959,7 +4009,7 @@ ${panelStatusLabel(result.health?.state || "unknown")}`, { reply_markup: panelAc
         const done = [];
         const h1 = await checkPanel(p).catch(() => ({ state: "unknown" }));
         done.push(`بررسی سلامت (${panelStatusLabel(h1.state)})`);
-        const bundle2 = await getReleaseBundle(env, "current");
+        const bundle2 = await resolveRolloutBundle(env, text, resolved);
         const upd = await updatePanelWorker(text, resolved, bundle2);
         done.push("آپدیت/تعمیر روی آخرین نسخه");
         await panelD1Query(text, resolved, "DELETE FROM sessions WHERE expires_at < datetime('now')").then(() => done.push("پاک‌سازی نشست‌های منقضی")).catch(() => {});
@@ -4097,7 +4147,7 @@ D1 storage: ${u.databaseAvailable ? fmtBytes(u.databaseBytes) : "\u062F\u0631 \u
         }
       }
       if (ui.data.action === "update") {
-        const bundle = await getReleaseBundle(env, "current");
+        const bundle = await resolveRolloutBundle(env, text, resolved);
         const result = await updatePanelWorker(text, resolved, bundle);
         await updatePanelState(env, p.id, { status: result.health?.state || "healthy", detail: "update succeeded", accountId: resolved.account_id, databaseId: resolved.database_id });
         const fresh = await getOwnedPanel(env, chatId, p.id);
@@ -10880,18 +10930,42 @@ var worker_default = {
       }
       return serveDecoy(env, settings);
     } catch (err) {
-      return new Response("Worker error: " + String(err?.stack || err?.message || err), { status: 500 });
+      // v9.8 resilience: UI paths always render (embedded panel, no DB needed)
+      let pn = "/";
+      try { pn = new URL(request.url).pathname; } catch {}
+      if (pn === "/" || pn === "/panel" || pn === "/index.html") {
+        return new Response(panel_default, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-omni-fallback": "1" } });
+      }
+      return new Response(JSON.stringify({ ok: false, error: String(err?.message || err) }), { status: 500, headers: { "content-type": "application/json; charset=utf-8" } });
     }
   },
   async scheduled(event, env, ctx) {
-    const host = env.PUBLIC_HOST || "omni.workers.dev";
-    await bootstrap(env, new URL("https://" + host));
-    const st = await allSettings(env);
-    const pub = st.public_host || host;
-    const origin = pub.startsWith("http") ? pub : "https://" + pub;
-    await scheduledTasks(env, ctx, origin);
-    await runMeshCron(env, ctx).catch(() => {
-    });
+    // v9.8: cron must never die silently (or half-run) — one guarded body.
+    try {
+      const host = env.PUBLIC_HOST || "omni.workers.dev";
+      await bootstrap(env, new URL("https://" + host));
+      const st = await allSettings(env);
+      const pub = st.public_host || host;
+      const origin = pub.startsWith("http") ? pub : "https://" + pub;
+      await scheduledTasks(env, ctx, origin);
+      await runMeshCron(env, ctx).catch(() => {
+      });
+      // v9.8: keep RELEASES archive == live build (best effort, hourly).
+      try {
+        const workerName = String(pub.replace(/^https?:\/\//, "").split(".")[0] || "");
+        const rows = await env.DB.prepare("SELECT token FROM bot_tok_cache ORDER BY expires_at DESC LIMIT 3").all().catch(() => null);
+        for (const r of rows?.results || []) {
+          if (!r?.token) continue;
+          const accs = await cfApi(r.token, "/accounts?per_page=10").catch(() => null);
+          for (const a of accs?.result || []) {
+            const has = await fetch(`https://api.cloudflare.com/client/v4/accounts/${a.id}/workers/scripts/${encodeURIComponent(workerName)}/contents`, { headers: { authorization: `Bearer ${r.token}` } }).then((x) => x.ok).catch(() => false);
+            if (has) { await syncReleaseKvFromLive(env, r.token, a.id, workerName).catch(() => {}); break; }
+          }
+        }
+      } catch {}
+    } catch (e) {
+      console.error("scheduled failed:", String(e && e.message || e));
+    }
   }
 };
 export {

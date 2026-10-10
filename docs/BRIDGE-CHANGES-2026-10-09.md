@@ -664,3 +664,15 @@ Subscription regression-checked: 15 CF URIs + Deno relay at the end.
 (Free plan is not charged) — then the same `rnd_` key pasted in panel 🌙 or bot
 /natbridge builds the relay and it auto-appears in the subscription + green
 routes. An older (non-gated) Render account works with just the token, today.
+
+## §24 — Incident 2026-10-10: daily Error 1101 on nova (root causes + resilience v9.8)
+Symptoms: nova panel/sub threw CF 1101 every morning; bot repair said "fixed" or rolled back; user's BPB panel never behaved like this.
+Root cause A: the bot's repair/auto-heal/self-update flows deploy the bundle archived in each account's RELEASES KV (`releases/current`). That archive was ancient (classic-restore era); every button-press re-deployed code incompatible with today's D1/settings → 1101 on all paths. My wrangler deploys also removed the RELEASES binding from nova's toml, so repairs then errored or re-archived stale code. Loop = "breaks every day".
+Root cause B (found via canary bisect): after KV sync the service STILL 1101'd — a 2-line canary on omni-nova-f61e also 1101'd while the same canary on a fresh service returned 200 → the service itself was corrupted at the edge. Fixed by DELETE + recreate of the service with the same name (same workers.dev hostname, same D1/KV/vars via toml). Verified: / 200, /s/ 200 (base+100 whites+relay), WS /VZLdh9Ft 101, secrets empty (nova must not hold BOT_TOKEN).
+Resilience shipped (v9.8, bundle ae6f8318…):
+1. `resolveRolloutBundle`: update/repair/auto-heal roll out the KV archive ONLY if it embeds the same panel as the running worker; otherwise they download the LIVE bundle via CF API and roll that out — buttons can never deploy an ancient version again.
+2. Cron self-sync (hourly): mirror the live healthy bundle into RELEASES KV so the archive never drifts.
+3. fetch fallback: UI paths serve the embedded panel (no DB) instead of a raw 500; API paths return JSON errors.
+4. scheduled() fully guarded — cron can no longer die half-way.
+5. RELEASES KV binding restored in deploy-nova/wrangler.toml; `tools/sync-release-kv.sh` re-points both accounts' archives after every deploy (run it after each wrangler deploy!).
+6. Stale D1 clean_ips (overwritten by the ancient bundle's cron while it ran) restored to the 100 white IPs in both D1s.
