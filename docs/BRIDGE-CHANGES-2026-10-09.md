@@ -678,6 +678,8 @@ Resilience shipped (v9.8, bundle ae6f8318…):
 6. Stale D1 clean_ips (overwritten by the ancient bundle's cron while it ran) restored to the 100 white IPs in both D1s.
 
 ## §25 — v10: 💎 نت ملی پرو (VPS + دامنه، سرویس پولی) — 2026-10-10
+
+> اصلاح v10.1: ادعای «کل زنجیره روی VPS واقعی کار می‌کند» معتبر نبود؛ تست قبلی فقط گزارش مصنوعی/API بود. VPS + SNI اسنپ به‌تنهایی مسیر CDN ایرانی نیست. وضعیت دقیق و بخش‌های باقی‌مانده در §26 و `VPS-CDN-STATUS-2026-10-10.md` است.
 - درخواست کاربر: بهترین گزینه نت ملی = VPS ایرانی + دامنه، کاملاً خودکار از داخل پنل، در یک بخش پولی جدا از بخش‌های رایگان؛ و تغییر نام بخش Deno که اشتباهاً «نت ملی» داشت.
 - Worker: جداول D1 `vps_nodes` (owner,label,join_token,node_token,ip,port,status,last_seen,info,profiles) و `vps_tasks` (node_id,payload,state,result).
 - روت‌های بدون احراز: `GET /vps-agent.sh?join=` (قالب bash با جایگذاری __API__/__JOIN__)، `POST /api/vps/join|poll|report`.
@@ -694,3 +696,16 @@ Resilience shipped (v9.8, bundle ae6f8318…):
 نسخهٔ VPS مستقیم v10 روش مشابه اسپایدر نبود. جزئیات اصلاح، تست‌ها و موارد باقی‌مانده در `docs/VPS-CDN-v10.1.md` ثبت شد. کانفیگ آزمایش‌نشده وارد اشتراک نمی‌شود؛ CDN/NS/DNS هنوز خودکار نشده‌اند و نود واقعی نداریم.
 
 SHA: `482fa6d024b0557b370b3550850aaf8ed6b2128a6bb1a1d4cc59a9a425e1c04a`؛ نسخهٔ مشاهده‌شده omni `cd701632-1b38-4a20-9f33-41b105893175` و nova `622b3a85-0fe1-4119-863f-d2d94b7e9f86`؛ هر دو RELEASES KV با همین artifact برابرند.
+
+
+## §26 — v10.1: مسیر CDN و Spoof، با مرز روشن بین ساخت لینک و اتصال واقعی
+- کد SpiderPanel دوباره خوانده شد: Address جدا از Host/SNI واقعی، و `snispoofing` دارای fakeSni/spoofIp برای کلاینت سازگار. تغییر SNI واقعی به اسنپ معادل این روش نیست.
+- بخش پولی به «VPS + CDN ایرانی» اصلاح شد؛ نصب مبدا WS+TLS، فرم دامنه/Address/کاربر، خروجی مستقل Spoof و اشتراک `?type=v2box` اضافه شد. REALITY مستقیم جداست.
+- فقط تأیید دستی خود کاربر روی URI دقیق، کانفیگ را به اشتراک می‌فرستد؛ وضعیت ایجنت هیچ‌وقت اثبات اتصال خط نیست. UUID نصب‌نشده برای سایر کاربران تولید نمی‌شود.
+- ایجنت systemd، checksum دانلود، خطای قطعی certbot/Xray، validation قبل از اجرا، rollback و نتیجهٔ تسک؛ قالب جدید کلید Xray 26.3.27 پشتیبانی شد.
+- دو ایراد زنده پیدا/رفع شد: Cloudflare 1010 برای Python-urllib (UA ایجنت مشخص شد)، و جاافتادن migration جداول VPS به‌دلیل bootstrap قدیمی (guard مستقل).
+- آزمایش‌های نرم‌افزاری پاس: ۸ تست Python، URI/validation/اسکریپت، runtime محلی Miniflare+D1 با migration نسخهٔ قدیمی، مرورگر mock بدون JS error؛ تبادل واقعی WS+TLS/VLESS با Xray فقط روی loopback؛ smoke ۱۵/۱۵ و scanner ۱۸.
+- **هیچ VPS یا CDN واقعی ثبت/وصل نشده؛ شمارش نودهای هر دو DB = صفر.** API اتوماسیون ارائه‌دهندهٔ CDN و تغییر NS/DNS هنوز پیاده‌سازی نشده و این بخش از درخواست خودکارسازی باقی است. آزمایش از خط ایران/نت ملی انجام نشده.
+- این بار هیچ نود یا گزارش جعلی وارد DB تولید نشد. اشتراک واقعی nova همان ۶۶ URI باقی ماند.
+- استقرار نهایی: omni `cd701632-1b38-4a20-9f33-41b105893175`، nova `622b3a85-0fe1-4119-863f-d2d94b7e9f86`؛ SHA `482fa6d024b0557b370b3550850aaf8ed6b2128a6bb1a1d4cc59a9a425e1c04a`؛ RELEASES KV هر دو همگام شد.
+- شرح منابع، تست‌ها و محدودیت‌ها: `docs/VPS-CDN-STATUS-2026-10-10.md`.
