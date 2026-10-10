@@ -14,3 +14,7 @@ coverage/
 # playwright evidence screenshots (regenerable with `node production/test/*.test.mjs`)
 production/*.png
 !production/test/**/*.png
+
+# Python agent test caches
+__pycache__/
+*.pyc

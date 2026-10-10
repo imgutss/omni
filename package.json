@@ -21,7 +21,8 @@
     "predeploy": "npm run build:production",
     "predeploy:auto": "npm run build:production",
     "test:scanner": "npm --prefix production test",
-    "test:scanner:browser": "npm --prefix production run test:browser"
+    "test:scanner:browser": "npm --prefix production run test:browser",
+    "test:vps": "node production/test/vps-profile.test.mjs && python3 production/test/vps-agent.test.py && node test/vps-api.test.mjs && node production/test/vpspro.test.mjs"
   },
   "devDependencies": {
     "acorn": "^8.19.0",

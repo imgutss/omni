@@ -1,48 +1,82 @@
+// MOCKED browser flow only. Never a real VPS, CDN or Iranian-line test.
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 const root=new URL('../',import.meta.url);
 const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
-const context=await browser.newContext({viewport:{width:393,height:852},isMobile:true,hasTouch:true});
-const page=await context.newPage();const errors=[];
-page.on('pageerror',e=>errors.push(e.message));
-const settings={panel_name:'Omni',public_host:'omni-test.invalid',clean_ips:[],ip_pool:'',ipv6_pool:[],address_domains:[],selected_country:'DE',proxy_ips:[],path:'/ws',proto:'both',port:'443',ipv6_enabled:'1',fragment_preset:'none'};
-const node={id:7,label:'VPS-TEHRAN',ip:'185.143.233.10',port:443,status:'online',last_seen:'2026-10-10 08:00:00',info:'{}',profiles:JSON.stringify([{kind:'reality',pbk:'PUBKEY123',sid:'abcd1234',sni:'snapp.ir',dest:'snapp.ir',port:443,uuid:'6e937e50-6b03-4584-b0a7-b8d34bb21d4c'}]),join_token:'join_x'};
-let taskCalls=[];
-await page.route('**/*',async route=>{
-  const u=new URL(route.request().url()),p=u.pathname;
+try {
+ const context=await browser.newContext({viewport:{width:393,height:852},isMobile:true,hasTouch:true,reducedMotion:'reduce'});
+ const page=await context.newPage(),errors=[],taskCalls=[],lineChecks=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ const settings={panel_name:'Omni',public_host:'omni-test.invalid',clean_ips:[],ip_pool:'',ipv6_pool:[],address_domains:[],selected_country:'DE',proxy_ips:[],path:'/ws',proto:'both',port:'443',ipv6_enabled:'1',fragment_preset:'none'};
+ const user={uuid:'11111111-1111-4111-8111-111111111111',username:'test-user',is_active:1};
+ const profile={kind:'ws',uuid:user.uuid,domain:'relay.example.com',address:'snapp.ir',via_cdn:true,path:'/vzn',fake_sni:'snapp.ir',spoof_ip:'1.1.1.1'};
+ const node={id:7,label:'MOCK-ORIGIN',ip:'1.1.1.1',status:'online',last_seen:new Date().toISOString(),info:JSON.stringify({agent_version:'10.1',xray_active:true}),profiles:JSON.stringify([profile]),checks:[],tasks:[]};
+ await page.route('**/*',async route=>{
+  const u=new URL(route.request().url()),p=u.pathname,m=route.request().method();
   if(u.hostname!=='omni-test.invalid')return route.abort('failed');
   if(p==='/')return route.fulfill({status:200,contentType:'text/html',body:fs.readFileSync(new URL('panel.html',root),'utf8')});
   if(p==='/healthz')return route.fulfill({status:200,body:'ok'});
-  let body={ok:true};const m=route.request().method();
+  let body={ok:true};
   if(p==='/api/whoami')body={ok:true,installed:true,username:'review',role:'admin',panelName:'Omni'};
   else if(p==='/api/settings')body={ok:true,settings};
-  else if(p==='/api/users')body={ok:true,users:[],total:0};
+  else if(p==='/api/users')body={ok:true,users:[user],total:1};
   else if(p==='/api/fragments')body={ok:true,presets:[],fingerprints:[]};
-  else if(p==='/api/overview')body={ok:true,total:0,users:{total:0,active:0},series:[]};
+  else if(p==='/api/overview')body={ok:true,total:1,users:{total:1,active:1},series:[]};
   else if(p==='/api/vps'&&m==='GET')body={ok:true,nodes:[node]};
-  else if(p==='/api/vps/create')body={ok:true,id:8,join_token:'join_test123',install:'curl -fsSL "https://omni-test.invalid/vps-agent.sh?join=join_test123" | bash'};
-  else if(p==='/api/vps/task'){taskCalls.push(route.request().postDataJSON());body={ok:true};}
+  else if(p==='/api/vps/create')body={ok:true,id:8,install:"curl -fsSL 'https://omni-test.invalid/vps-agent.sh?join=join_0123456789abcdef0123456789abcdef' -o /root/omni-vps-install.sh && bash /root/omni-vps-install.sh"};
+  else if(p==='/api/vps/task'){taskCalls.push(route.request().postDataJSON());body={ok:true,task_id:1};}
+  else if(p==='/api/vps/line-check'){
+   const b=route.request().postDataJSON();lineChecks.push(b);
+   node.checks=b.confirmed?[{profile_key:b.profile_key}]:[];
+  }
   return route.fulfill({status:200,contentType:'application/json',headers:{'x-omni':'1'},body:JSON.stringify(body)});
-});
-await page.goto('https://omni-test.invalid/#/vps_pro');
-await page.locator('#vps-nodes').waitFor();
-await page.waitForFunction(()=>document.querySelector('#vps-nodes')?.textContent.includes('VPS-TEHRAN'));
-assert((await page.locator('#vps-nodes').textContent()).includes('REALITY'),'reality profile shown');
-assert((await page.locator('h2.mesh-title').textContent()).includes('نت ملی پرو'),'hero title');
-await page.locator('[data-action="omni-vps-create"]').click();
-await page.waitForFunction(()=>document.querySelector('#vps-install')?.textContent.includes('vps-agent.sh'));
-assert((await page.locator('#vps-install').textContent()).includes('join_test123'));
-await page.locator('[data-action="omni-vps-task"][data-kind="reality"]').click();
-await page.waitForTimeout(400);
-assert.equal(taskCalls.length,1);
-assert.equal(taskCalls[0].payload.kind,'reality');
-assert.equal(taskCalls[0].node_id,7);
-await page.screenshot({path:new URL('vpspro-view.png',root).pathname,fullPage:true,animations:'disabled'});
-// Deno view rename check
-await page.goto('https://omni-test.invalid/#/national_net');
-await page.waitForFunction(()=>document.body.innerText.includes('رله ابری'));
-assert(!(await page.locator('.mesh-hero').textContent()).includes('NATIONAL INTERNET SUITE'),'deno hero renamed');
-assert.deepEqual(errors,[],'jsErrors');
-console.log('VPS-PRO TEST PASSED');
-await browser.close();
+ });
+ await page.goto('https://omni-test.invalid/#/vps_pro');
+ await page.waitForFunction(()=>document.querySelector('#vps-nodes')?.textContent.includes('MOCK-ORIGIN'));
+ assert((await page.locator('h2.mesh-title').textContent()).includes('CDN ایرانی'));
+ assert((await page.locator('#view').textContent()).includes('خودکار نمی‌سازد'));
+ assert.equal(await page.locator('#vps-nodes .badge.ok').count(),0,'agent health is not a line-test green badge');
+ const configs=await page.locator('#vps-nodes [data-action="omni-copy"]').evaluateAll(ns=>ns.map(n=>n.dataset.text));
+ assert.equal(configs.length,2);
+ const normal=new URL(configs[0]),spoof=new URL(configs[1]);
+ assert.equal(normal.hostname,'snapp.ir');
+ assert.equal(normal.searchParams.get('sni'),'relay.example.com');
+ assert.equal(spoof.searchParams.get('sni'),'relay.example.com');
+ assert.equal(JSON.parse(spoof.searchParams.get('snispoofing')).fakeSni,'snapp.ir');
+ assert.equal(await page.locator('#vps-nodes [data-action="omni-natnet-v2rayng"]').count(),1,'spoof variant is not sent to stock v2rayNG');
+ await page.locator('[data-action="omni-vps-create"]').click();
+ await page.waitForFunction(()=>document.querySelector('#vps-install')?.textContent.includes('vps-agent.sh'));
+ await page.locator('[data-action="omni-vps-cdn"]').click();
+ await page.locator('#vps-cdn-domain').fill('relay.example.com');
+ await page.locator('#vps-cdn-address').fill('snapp.ir');
+ await page.locator('#vps-cdn-form summary').click();
+ await page.locator('#vps-cdn-fake').fill('snapp.ir');
+ await page.locator('#vps-cdn-spoofip').fill('1.1.1.1');
+ await page.locator('#vps-cdn-ready').check();
+ await page.locator('[data-action="omni-vps-save-cdn"]').click();
+ await page.waitForFunction(()=>!document.querySelector('#vps-cdn-form'));
+ assert.equal(taskCalls.length,1);
+ assert.equal(taskCalls[0].node_id,7);
+ assert.equal(taskCalls[0].payload.kind,'ws');
+ assert.equal(taskCalls[0].payload.via_cdn,true);
+ assert.equal(taskCalls[0].payload.domain,'relay.example.com');
+ assert.equal(taskCalls[0].payload.fake_sni,'snapp.ir');
+ assert.equal(lineChecks.length,0,'queueing a task does not approve any route');
+ await page.locator('[data-action="omni-vps-line-check"]').first().click();
+ await page.locator('[data-confirm="yes"]').waitFor();
+ assert.equal(lineChecks.length,0,'approval requires a separate human confirmation');
+ await page.locator('[data-confirm="yes"]').click();
+ await page.waitForFunction(()=>document.querySelector('#vps-nodes .badge.ok'));
+ assert.equal(lineChecks.length,1);
+ assert.equal(lineChecks[0].confirmed,true);
+ assert(!lineChecks[0].profile_key.includes('snispoofing'));
+ const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
+ assert.equal(overflow,false,'mobile viewport should not overflow');
+ await page.screenshot({path:new URL('vpspro-view.png',root).pathname,fullPage:true,animations:'disabled'});
+ await page.goto('https://omni-test.invalid/#/national_net');
+ await page.waitForFunction(()=>document.body.innerText.includes('رله ابری'));
+ assert(!(await page.locator('.mesh-hero').textContent()).includes('NATIONAL INTERNET SUITE'));
+ assert.deepEqual(errors,[]);
+ console.log('VPS/CDN browser MOCK tests PASS; jsErrors=[]; NO live carrier proof');
+} finally {await browser.close();}

@@ -1,70 +1,103 @@
 #!/usr/bin/env bash
-set -u
-API="__API__"; JOIN="__JOIN__"
+# Omni 10.1 — prepares a user-owned origin. Does NOT provision a CDN account.
+set -euo pipefail
+umask 077
+API="__API__"
+JOIN="__JOIN__"
+[ "$(id -u)" = 0 ] || { echo 'Run as root on your own Debian/Ubuntu VPS.' >&2; exit 1; }
+command -v systemctl >/dev/null || { echo 'systemd is required.' >&2; exit 1; }
+command -v apt-get >/dev/null || { echo 'This installer supports Debian/Ubuntu only.' >&2; exit 1; }
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y -qq ca-certificates curl python3 certbot
 mkdir -p /etc/omni-vps
-TOKF=/etc/omni-vps/token
-cat > /etc/omni-vps/handler.py <<'OMNI_HANDLER_EOF'
-import json,os,subprocess as sp,urllib.request,sys
-api,tok=sys.argv[1],sys.argv[2]
-data=json.load(sys.stdin)
-PROF='/etc/omni-vps/profiles.json'; CFG='/etc/omni-vps/config.json'
-def load():
-    try: return json.load(open(PROF))
-    except Exception: return []
-def save(p): json.dump(p,open(PROF,'w'))
-def post(path,obj):
-    req=urllib.request.Request(api+path,data=json.dumps(obj).encode(),headers={'content-type':'application/json'})
-    try: urllib.request.urlopen(req,timeout=25).read()
-    except Exception as e: print('post err',e)
-def restart(): sp.run(['systemctl','restart','omni-xray'])
-done={}
-for t in data.get('tasks',[]):
-    pl=t.get('payload',{}); k=pl.get('kind'); tid=t['id']
-    try:
-        if k=='reality':
-            out=sp.check_output(['/usr/local/bin/xray','x25519']).decode()
-            priv=[l for l in out.splitlines() if 'Private' in l][0].split(':',1)[1].strip()
-            pub=[l for l in out.splitlines() if 'Public' in l][0].split(':',1)[1].strip()
-            sid=os.urandom(8).hex()
-            prof=[p for p in load() if p.get('kind')!='reality']
-            prof.append({'kind':'reality','pbk':pub,'sid':sid,'sni':pl.get('sni','snapp.ir'),'dest':pl.get('dest','snapp.ir'),'port':pl.get('port',443),'uuid':pl.get('uuid')})
-            save(prof)
-            cfg={'log':{'loglevel':'warning'},'inbounds':[{'port':pl.get('port',443),'protocol':'vless','settings':{'clients':[{'id':pl.get('uuid'),'flow':'xtls-rprx-vision'}],'decryption':'none'},'streamSettings':{'network':'tcp','security':'reality','realitySettings':{'show':False,'dest':pl.get('dest','snapp.ir')+':443','serverNames':[pl.get('sni','snapp.ir')],'privateKey':priv,'shortIds':[sid]}}}], 'outbounds':[{'protocol':'freedom','tag':'direct'}]}
-            json.dump(cfg,open(CFG,'w')); restart(); done[tid]='reality ok'
-        elif k=='ws':
-            dom=pl.get('domain')
-            sp.run('command -v certbot || apt-get install -y certbot',shell=True)
-            r=sp.run(['certbot','certonly','--standalone','-d',dom,'--non-interactive','--agree-tos','--register-unsafely-without-email'],capture_output=True)
-            prof=[p for p in load() if p.get('kind')!='ws']
-            prof.append({'kind':'ws','domain':dom,'path':pl.get('path','/vzn'),'uuid':pl.get('uuid')})
-            save(prof)
-            cfg={'log':{'loglevel':'warning'},'inbounds':[{'port':443,'protocol':'vless','settings':{'clients':[{'id':pl.get('uuid')}],'decryption':'none'},'streamSettings':{'network':'ws','security':'tls','tlsSettings':{'certificates':[{'certificateFile':'/etc/letsencrypt/live/'+dom+'/fullchain.pem','keyFile':'/etc/letsencrypt/live/'+dom+'/privkey.pem'}]},'wsSettings':{'path':pl.get('path','/vzn')}}}], 'outbounds':[{'protocol':'freedom','tag':'direct'}]}
-            json.dump(cfg,open(CFG,'w')); restart(); done[tid]='ws rc='+str(r.returncode)
-        elif k=='restart':
-            restart(); done[tid]='restarted'
-        elif k=='uninstall':
-            sp.run(['systemctl','disable','--now','omni-xray']); save([]); done[tid]='uninstalled'
-    except Exception as e:
-        done[tid]='err '+str(e)
-post('/api/vps/report',{'token':tok,'status':'online','info':{'host':os.uname().nodename},'profiles':load(),'done':list(done.keys()),'results':done})
-OMNI_HANDLER_EOF
-if [ ! -f $TOKF ]; then
-  IP=$(curl -fsS --max-time 8 https://api.cloudflare.com/cdn-cgi/trace 2>/dev/null | sed -n 's/^ip=//p' | head -1)
-  TOK=$(curl -fsS -X POST "$API/api/vps/join" -H 'content-type: application/json' -d "{\"join\":\"$JOIN\",\"ip\":\"$IP\"}" | python3 -c 'import sys,json;print(json.load(sys.stdin)["token"])')
-  echo "$TOK" > $TOKF; chmod 600 $TOKF
+chmod 700 /etc/omni-vps
+cat > /etc/omni-vps/agent.py <<'OMNI_AGENT_PY_EOF'
+__AGENT_PY__
+OMNI_AGENT_PY_EOF
+if [ ! -x /usr/local/bin/omni-xray ]; then
+  case "$(uname -m)" in
+    x86_64) ASSET=Xray-linux-64.zip ;;
+    aarch64|arm64) ASSET=Xray-linux-arm64-v8a.zip ;;
+    *) echo 'Unsupported CPU architecture.' >&2; exit 1 ;;
+  esac
+  TMP=$(mktemp -d)
+  trap 'rm -rf "$TMP"' EXIT
+  VER=$(curl --fail --silent --show-error --max-time 30 https://api.github.com/repos/XTLS/Xray-core/releases/latest | python3 -c 'import sys,json;print(json.load(sys.stdin)["tag_name"])')
+  BASE="https://github.com/XTLS/Xray-core/releases/download/$VER/$ASSET"
+  curl --fail --location --retry 2 --max-time 180 "$BASE" -o "$TMP/xray.zip"
+  curl --fail --location --retry 2 --max-time 30 "$BASE.dgst" -o "$TMP/xray.dgst"
+  python3 - "$TMP" <<'OMNI_XRAY_UNZIP_EOF'
+import hashlib,pathlib,re,sys,zipfile
+root=pathlib.Path(sys.argv[1])
+data=(root/'xray.zip').read_bytes()
+digests=re.findall(r'(?i)\b[0-9a-f]{64}\b',(root/'xray.dgst').read_text())
+if hashlib.sha256(data).hexdigest().lower() not in [x.lower() for x in digests]:
+    raise SystemExit('Xray checksum mismatch; not installing')
+with zipfile.ZipFile(root/'xray.zip') as z:
+    pathlib.Path('/usr/local/bin/omni-xray').write_bytes(z.read('xray'))
+OMNI_XRAY_UNZIP_EOF
+  chmod 755 /usr/local/bin/omni-xray
 fi
-TOK=$(cat $TOKF)
-if [ ! -x /usr/local/bin/xray ]; then
-  VER=$(curl -fsS https://api.github.com/repos/XTLS/Xray-core/releases/latest | python3 -c 'import sys,json;print(json.load(sys.stdin)["tag_name"])')
-  curl -fL -o /tmp/xray.zip "https://github.com/XTLS/Xray-core/releases/download/$VER/Xray-linux-64.zip"
-  python3 -c 'import zipfile;zipfile.ZipFile("/tmp/xray.zip").extractall("/usr/local/bin")'
-  chmod +x /usr/local/bin/xray
-fi
-if [ ! -f /etc/systemd/system/omni-xray.service ]; then
-  printf '[Unit]\nDescription=Omni VPS relay\nAfter=network.target\n[Service]\nExecStart=/usr/local/bin/xray run -c /etc/omni-vps/config.json\nRestart=always\nRestartSec=3\n[Install]\nWantedBy=multi-user.target\n' > /etc/systemd/system/omni-xray.service
-  systemctl daemon-reload; systemctl enable omni-xray 2>/dev/null || true
-fi
-if ! pgrep -f omni-vps-poll_loop >/dev/null; then
-  nohup bash -c 'POLL_MARK=omni-vps-poll_loop; while :; do TASKS=$(curl -fsS -X POST "'"$API"'/api/vps/poll" -H "content-type: application/json" -d "{\"token\":\"$(cat /etc/omni-vps/token)\"}" 2>/dev/null || echo "{\"tasks\":[]}"); echo "$TASKS" | python3 /etc/omni-vps/handler.py "'"$API"'" "$(cat /etc/omni-vps/token)" 2>>/var/log/omni-vps.err || true; sleep 45; done' >/dev/null 2>&1 &
-fi
-echo "✅ Omni VPS agent installed — node joined the panel."
+# Join after dependencies are installed, so download errors cannot pretend readiness.
+python3 - "$API" "$JOIN" <<'OMNI_JOIN_EOF'
+import json,os,pathlib,sys,urllib.request
+api,join=sys.argv[1:]
+root=pathlib.Path('/etc/omni-vps')
+conf=root/'agent.json'
+if conf.exists():
+    old=json.loads(conf.read_text())
+    if old.get('api')!=api:
+        raise SystemExit('Already joined another panel; remove agent.json intentionally before rejoining')
+    token=old['token']
+else:
+    # A v10 node can be upgraded without consuming its single-use join token again.
+    old=root/'token'
+    token=old.read_text().strip() if old.exists() else ''
+    if not token:
+        req=urllib.request.Request(api+'/api/vps/join',data=json.dumps({'join':join}).encode(),headers={'content-type':'application/json','User-Agent':'Omni-VPS-Agent/10.1'})
+        with urllib.request.urlopen(req,timeout=30) as r: result=json.load(r)
+        token=result['token']
+    conf.write_text(json.dumps({'api':api,'token':token}))
+    conf.chmod(0o600)
+OMNI_JOIN_EOF
+cat > /etc/systemd/system/omni-xray.service <<'OMNI_XRAY_UNIT_EOF'
+[Unit]
+Description=Omni owned VPS origin
+After=network-online.target
+Wants=network-online.target
+[Service]
+ExecStart=/usr/local/bin/omni-xray run -c /etc/omni-vps/config.json
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target
+OMNI_XRAY_UNIT_EOF
+cat > /etc/systemd/system/omni-vps-agent.service <<'OMNI_AGENT_UNIT_EOF'
+[Unit]
+Description=Omni VPS management agent
+After=network-online.target
+Wants=network-online.target
+[Service]
+ExecStart=/usr/bin/python3 /etc/omni-vps/agent.py
+Restart=always
+RestartSec=10
+UMask=0077
+[Install]
+WantedBy=multi-user.target
+OMNI_AGENT_UNIT_EOF
+mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+printf '#!/usr/bin/env bash\nsystemctl try-restart omni-xray.service\n' > /etc/letsencrypt/renewal-hooks/deploy/omni-xray
+chmod 700 /etc/letsencrypt/renewal-hooks/deploy/omni-xray
+# Replace v10's non-persistent background loop, if present.
+pkill -f '[P]OLL_MARK=omni-vps-poll_loop' 2>/dev/null || true
+systemctl daemon-reload
+systemctl enable --now certbot.timer
+systemctl enable omni-vps-agent
+systemctl restart omni-vps-agent
+systemctl is-active --quiet omni-vps-agent
+echo 'Omni agent joined. Configure the owned domain/CDN in the panel next.'
+echo 'Agent online is NOT proof of connectivity during an Iranian Internet shutdown.'
