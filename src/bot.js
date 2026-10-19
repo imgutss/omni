@@ -273,6 +273,7 @@ export async function handleUpdate(env, ctx, origin, update) {
         token: text,
         requestedAccountId: session.account_id || '',
         workerName: session.worker_name,
+        origin,
       });
       await auditDeploy(env, chatId, session.worker_name, true, result.panelUrl || 'deployed');
       const open = { inline_keyboard: [[{

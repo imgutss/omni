@@ -1868,6 +1868,7 @@ async function deployOmniToAccount({ token, requestedAccountId = "", workerName,
     const metadata = {
       main_module: "worker.js",
       compatibility_date: "2024-09-23",
+      compatibility_flags: ["nodejs_compat"],
       bindings: [
         { type: "d1", name: "DB", id: databaseId },
         { type: "plain_text", name: "PANEL_NAME", text: "Omni" },
@@ -3375,6 +3376,7 @@ async function cfPutAuxWorker(token, accountId, name, bundle, d1Id, mirrorOf) {
   const metadata = {
     main_module: "worker.js",
     compatibility_date: "2024-09-23",
+    compatibility_flags: ["nodejs_compat"],
     bindings: [
       { type: "d1", name: "DB", id: d1Id },
       { type: "plain_text", name: "PANEL_NAME", text: "Omni Mirror" },

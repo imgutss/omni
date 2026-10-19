@@ -18,6 +18,16 @@ export default {
         return Response.redirect(CF_TOKEN_URL, 302);
       }
 
+      /* ── باندل برای نصب خودکار (حل ارور 1101 - URL قدیمی GitHub خصوصی) ── */
+      if (url.pathname === '/bundle' || url.pathname === '/deploy/omni-worker.bundle.js') {
+        try {
+          const gh = 'https://raw.githubusercontent.com/imgutss/omni/main/deploy/omni-worker.bundle.js';
+          const r = await fetch(gh, { cf: { cacheTtl: 30 } });
+          if (r.ok) { const b = await r.arrayBuffer(); if (b.byteLength > 1e5) return new Response(b, { headers: { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'public, max-age=60', 'access-control-allow-origin': '*' } }); }
+        } catch {}
+        return new Response('bundle temporarily unavailable', { status: 502, headers: { 'access-control-allow-origin': '*' } });
+      }
+
       /* ── پینگ واقعی لبه برای اسکنر و صفحه وضعیت (بدون کش و بدون درگیر کردن D1) ── */
       if (url.pathname === '/healthz') {
         return new Response('ok', {

@@ -1,6 +1,10 @@
 /* Omni self-service installer — Cloudflare API token is used in-memory only. */
 const CF_API = 'https://api.cloudflare.com/client/v4';
-const BUNDLE_URL = 'https://raw.githubusercontent.com/Alisarani7021/omni/main/deploy/omni-worker.bundle.js';
+const BUNDLE_URL = 'https://raw.githubusercontent.com/imgutss/omni/main/deploy/omni-worker.bundle.js';
+const BUNDLE_URLS = [
+  'https://raw.githubusercontent.com/imgutss/omni/main/deploy/omni-worker.bundle.js',
+  'https://cdn.jsdelivr.net/gh/imgutss/omni@main/deploy/omni-worker.bundle.js',
+];
 
 const cleanError = (data, fallback = 'cloudflare_api_error') => {
   const msgs = [...(data?.errors || []), ...(data?.messages || [])]
@@ -122,7 +126,7 @@ async function scriptExists(token, accountId, workerName) {
   }
 }
 
-export async function deployOmniToAccount({ token, requestedAccountId = '', workerName }) {
+export async function deployOmniToAccount({ token, requestedAccountId = '', workerName, origin = '' }) {
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(workerName)) throw new Error('نام Worker باید انگلیسی کوچک، عدد یا خط تیره و حداکثر ۶۳ کاراکتر باشد.');
   if (!/^[A-Za-z0-9_\-]{20,300}$/.test(token)) throw new Error('ساختار API Token معتبر نیست.');
 
@@ -140,15 +144,21 @@ export async function deployOmniToAccount({ token, requestedAccountId = '', work
     databaseId = db?.uuid || db?.id;
     if (!databaseId) throw new Error('Cloudflare شناسه D1 برنگرداند.');
 
-    const bundleResponse = await fetch(BUNDLE_URL, { cf: { cacheTtl: 300, cacheEverything: true } });
-    if (!bundleResponse.ok) throw new Error('دریافت بسته نصب Omni از GitHub ناموفق بود.');
-    const bundle = await bundleResponse.text();
-    if (bundle.length < 100000 || !bundle.includes('cloudflare:sockets')) throw new Error('بسته نصب ناقص است.');
+    // Fixed 1101 root: fetch from origin bundle proxy with fallbacks
+    let bundle = '';
+    const candidates = origin ? [`${origin.replace(/\/+$/, '')}/bundle`, `${origin.replace(/\/+$/, '')}/deploy/omni-worker.bundle.js`] : [];
+    candidates.push(...BUNDLE_URLS);
+    let lastErr = null;
+    for (const u of candidates) {
+      try { const r = await fetch(u, { cf: { cacheTtl: 0, cacheEverything: false } }); if (!r.ok) { lastErr = new Error(`HTTP ${r.status} from ${u}`); continue; } const t = await r.text(); if (t.length < 100000 || !t.includes('cloudflare:sockets')) { lastErr = new Error(`bundle incomplete from ${u}`); continue; } bundle = t; break; } catch(e) { lastErr = e; continue; }
+    }
+    if (!bundle) throw new Error('دریافت بسته نصب Omni ناموفق بود: ' + (lastErr?.message || ''));
 
     const webhookSecret = crypto.randomUUID().replace(/-/g, '').slice(0, 24);
     const metadata = {
       main_module: 'worker.js',
       compatibility_date: '2024-09-23',
+      compatibility_flags: ['nodejs_compat'],
       bindings: [
         { type: 'd1', name: 'DB', id: databaseId },
         { type: 'plain_text', name: 'PANEL_NAME', text: 'Omni' },
