@@ -8,6 +8,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const builtPath = path.join(here, "../build/worker.js");
 const workerPath = fs.existsSync(builtPath) ? builtPath : path.join(here, "../live/worker.js");
 const worker = fs.readFileSync(workerPath, "utf8");
+const panelPath = path.join(here, "../build/panel.html");
+const panelHtml = fs.existsSync(panelPath) ? fs.readFileSync(panelPath, "utf8") : "";
 const start = worker.lastIndexOf("/* =========================================================================\n * OMNI · Managed Bot-Hosting");
 const end = worker.indexOf("export {", start);
 if (start < 0 || end < 0) throw new Error("module markers not found");
@@ -264,6 +266,7 @@ const callVercel = (method, p, body) =>
 let pass = 0;
 const ok = (c, m) => { if (!c) throw new Error("FAIL: " + m); pass++; console.log("  ✓ " + m); };
 ok(worker.includes('p2 === "/api/vercel-relays"') && worker.includes('return omniVercelApi('), "main router dispatches to a separate Vercel API");
+ok(panelHtml.includes("ov-bhk-token") && panelHtml.includes("ov-source") && panelHtml.includes("پروژه‌های همان حساب پیدا می‌شوند") && !panelHtml.includes("رلهٔ آمادهٔ بخش ۵ فقط upstream"), "Vercel UI discovers the user's own Bot-Hosting projects without depending on section 5");
 const upgradeStart = worker.indexOf('async function upgradeOwnedPanel(');
 const upgradeEndMarker = '__name(upgradeOwnedPanel, "upgradeOwnedPanel");';
 const upgradeEnd = worker.indexOf(upgradeEndMarker, upgradeStart);
@@ -298,7 +301,7 @@ let panelUpdateMetadata = null;
 const updateSandbox = {
   __name: (fn) => fn,
   URL, FormData, Blob,
-  OMNI_BUILD: { v: "53.5", rev: 78, md5: "smoke-md5" },
+  OMNI_BUILD: { v: "53.6", rev: 79, md5: "smoke-md5" },
   panel_default: "panel-html-smoke",
   workerBundleHasPanel: (bundle, expected) => bundle === "bundle-smoke" && expected === "panel-html-smoke",
   getReleaseBundle: async () => "bundle-smoke",
@@ -340,7 +343,7 @@ const updateEnv = { __updatePatch: null };
 const updatePanel = { id: 7, owner_chat_id: "123", account_id: "acct-existing", worker_name: "selected-child", panel_url: "https://child.example", last_check_detail: "" };
 const updateResult = await updateSandbox.__upgradeOwnedPanel(updateEnv, updatePanel, undefined, "test-cf-token");
 ok(updateResult.ok && updateResult.reason === "upgraded" && panelUpdateCalls.some((c) => c.method === "PUT" && c.uri.endsWith("/workers/scripts/selected-child")) && !panelUpdateCalls.some((c) => c.method === "DELETE"), "mocked Telegram update PUTs to the selected Worker with no delete/recreate");
-ok(panelUpdateMetadata.bindings.some((b) => b.name === "DB" && b.id === "db-existing") && panelUpdateMetadata.bindings.some((b) => b.name === "UPSTREAM") && panelUpdateMetadata.keep_bindings.includes("secret_text") && updateEnv.__updatePatch.detail.includes("53.5/78"), "mocked upgrade preserves D1/resources/secrets and records the exact release receipt");
+ok(panelUpdateMetadata.bindings.some((b) => b.name === "DB" && b.id === "db-existing") && panelUpdateMetadata.bindings.some((b) => b.name === "UPSTREAM") && panelUpdateMetadata.keep_bindings.includes("secret_text") && updateEnv.__updatePatch.detail.includes("53.6/79"), "mocked upgrade preserves D1/resources/secrets and records the exact release receipt");
 updatePanel.last_check_detail = updateEnv.__updatePatch.detail;
 const putCountBeforeReceiptCheck = panelUpdateCalls.filter((c) => c.method === "PUT").length;
 const receiptResult = await updateSandbox.__upgradeOwnedPanel(updateEnv, updatePanel, undefined, "test-cf-token");

@@ -261,9 +261,9 @@ panel = patchUnique(panel,
   '        <span class="badge ok">\${isVercelTab ? `مدیریت مستقل پروژه و کانفیگ Vercel` : isRailwayArvanTab ? `ساخت با توکن آروان` : isRailwayTab ? `ساخت روی حساب شخصی شما` : isFalixTab ? `\${falixMultiPack.length} کانفیگ مولتی‌پورت آماده` : `\${denoMultiPack.length} کانفیگ مولتی‌پورت آماده`}</span>',
   'Vercel provider badge');
 panel = patchUnique(panel,
-  '        \${isRailwayArvanTab\n          ? `در روش خودکار، دامنهٔ خودتان به CDN آروان و مبدأ مدیریت‌شده متصل می‌شود. گواهی و کانفیگ‌ها خودکار ساخته می‌شوند؛ پینگ باید روی خط خودتان آزمایش شود.`',
-  '        \${isVercelTab\n          ? `این بخش به‌صورت مستقل پروژه و کانفیگ Vercel را می‌سازد و حذف می‌کند؛ رلهٔ آمادهٔ بخش ۵ فقط upstream خوانده می‌شود و تغییر یا حذف نمی‌شود.`\n          : isRailwayArvanTab\n          ? `در روش خودکار، دامنهٔ خودتان به CDN آروان و مبدأ مدیریت‌شده متصل می‌شود. گواهی و کانفیگ‌ها خودکار ساخته می‌شوند؛ پینگ باید روی خط خودتان آزمایش شود.`',
-  'Vercel provider description');
+  'این بخش به‌صورت مستقل پروژه و کانفیگ Vercel را می‌سازد و حذف می‌کند؛ رلهٔ آمادهٔ بخش ۵ فقط upstream خوانده می‌شود و تغییر یا حذف نمی‌شود.',
+  'در این بخش مستقل، کلیدهای Bot-Hosting و Vercel خودت را وارد کن؛ پروژه‌های همان حساب پیدا می‌شوند و پس از انتخاب، رله و کانفیگ اختصاصی روی Vercel ساخته می‌شود. از اطلاعات بخش‌های دیگر استفاده نمی‌شود.',
+  'Vercel UI has no section-5 dependency');
 
 // Stamp the UI hash into the HTML; the API returns the same metadata.
 const placeholderHash = '0'.repeat(32);
@@ -289,7 +289,7 @@ must(worker.split(vercelModuleMarker).length - 1 === 1, 'independent Vercel modu
 
 const buildMatches = worker.match(/var OMNI_BUILD = \{ v: "[^"]+", bytes: \d+, md5: "[^"]+", rev: \d+, at: "[^"]+" \};/g) || [];
 must(buildMatches.length === 1, 'expected one OMNI_BUILD declaration, found ' + buildMatches.length);
-const nextBuild = 'var OMNI_BUILD = { v: "53.5", bytes: ' + panelBytes + ', md5: "' + panelMd5 + '", rev: 78, at: "2026-10-23" };';
+const nextBuild = 'var OMNI_BUILD = { v: "53.6", bytes: ' + panelBytes + ', md5: "' + panelMd5 + '", rev: 79, at: "2026-10-23" };';
 worker = worker.replace(buildMatches[0], nextBuild);
 
 // Fail on a malformed panel string, a misplaced section, or an uninjected relay.
@@ -316,8 +316,8 @@ console.log(JSON.stringify({
   panelBytes,
   panelMd5,
   workerBytes: Buffer.byteLength(worker, 'utf8'),
-  version: '53.5',
-  revision: 78,
+  version: '53.6',
+  revision: 79,
   hasIndependentVercelApi: worker.includes('omniVercelApi') && worker.includes('vercel_relays'),
   hasIndependentVercelPanel: panel.includes('data-sub="vercel"')
 }, null, 2));

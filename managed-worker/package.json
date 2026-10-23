@@ -1,6 +1,6 @@
 {
   "name": "omni-managed-worker-release",
-  "version": "53.5.0",
+  "version": "53.6.0",
   "private": true,
   "type": "module",
   "scripts": {
