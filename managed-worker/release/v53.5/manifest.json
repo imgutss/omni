@@ -1,0 +1,10 @@
+{
+  "version": "53.5",
+  "revision": 78,
+  "built_at": "2026-10-23",
+  "status": "built locally; not deployed",
+  "panel_bytes": 959712,
+  "panel_md5": "dfd504ebbd805022ffaefeebf3ed046f",
+  "worker_bytes": 2912141,
+  "worker_sha256": "14f907a2add51eba79dc2fda022f7757d8ad30d9454636a39f7156a1ee394d98"
+}
