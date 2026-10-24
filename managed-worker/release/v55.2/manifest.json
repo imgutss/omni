@@ -1,0 +1,19 @@
+{
+  "version": "55.2",
+  "revision": 97,
+  "built_at": "2026-10-24",
+  "status": "deployed live on omni (main), omni-cloud-5649 and omni-pulse-ec0f; RELEASES/releases/current byte-identical",
+  "panel_bytes": 983278,
+  "panel_build_md5": "ae62b9d4216564184ce914e40d6ee10f",
+  "worker_bytes": 2975432,
+  "worker_md5": "3fa750f4155cb6e98ff42b19e25f835a",
+  "worker_sha256": "3d013fdb51da8a3355bdf0ebd848c612cab49cf041eaa7f39d78ed8ac007f4dc",
+  "changes": [
+    "FIX: WARP method card rich block (Aether link + QR + 'Add to PattNG/v2rayNG' + IPv4/IPv6/both selector) is rendering again - root cause was a wrong element id ('cfg-patt' vs 'patt-card') in the soft-update map introduced by v55.0; WARP methods ALSO keep building real configs+QR in the preview",
+    "REMOVED: IP Atlas card and /api/vault/atlas endpoint entirely (user: no real action behind it)",
+    "NEW: PattNG-style live discovery in the line-scan card: generates candidates from Cloudflare ranges + a fixed trusted clean list, probes them from the user's own phone/browser, ranks alive ones, builds configs from top alive",
+    "DATA: user-supplied trusted clean IPv6 list added (2606:4700:110:... / 2606:4700:d0::a29f:c001,c301 / d0::bc72:6001 / d1::a29f:c001) - included in the IPv6 source branch and in scan candidates",
+    "WARP6 endpoints extended to 4: :880, :864, [2606:4700:d0::a29f:c301]:878, [2606:4700:d0::a29f:c001]:859",
+    "FIX: 5-per-country batch (180 configs) now interleaves IPv4 + IPv6 entries (was IPv4-only because source was QoS list); batch build pins srcMode to custom with the country's own v4+v6 lists"
+  ]
+}
