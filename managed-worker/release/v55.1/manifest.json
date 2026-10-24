@@ -1,0 +1,18 @@
+{
+  "version": "55.1",
+  "revision": 96,
+  "built_at": "2026-10-24",
+  "status": "deployed live on omni (main), omni-cloud-5649 and omni-pulse-ec0f; RELEASES/releases/current byte-identical",
+  "panel_bytes": 983957,
+  "panel_build_md5": "ef31b3ca6605fb21453b468c3fd2bf6b",
+  "worker_bytes": 2977503,
+  "worker_md5": "98b6792cf0d426ac3ef2ee379da76438",
+  "worker_sha256": "b9c47dafecb5e5699e565d65bfed9614e74cea6614493341eb464bfee234004f",
+  "changes": [
+    "REMOVED terminal AETHER command card; replaced with real on-device line scan: the phone's browser probes the current selection directly and ranks live ms; one click rebuilds configs from the top-10 of the user's own line",
+    "WARP methods (warp / warp6 / masque) now generate REAL configs + QR + sub as before, using their own WARP endpoints (162.159.195.37:942, 188.114.96.73:894, 162.159.192.140:1074, [2606:4700:d0::bc72:6001]:880, [2606:4700:d1::a29f:c001]:864)",
+    "HONEST NAMES: config remarks now state the real identity of the entry IP source (pack name / vault / custom / generic CF range) instead of labeling everything with the country; country exit is shown only as a separate 'exit' badge and only marked as a real exit when a proxyip is actually set",
+    "PING FIX (golden rule): exit-proxy IPs (country proxies and saved proxy_ips) are now banned from ever becoming entry addresses - they only travel in proxyip=; kills the flaky 300-500ms 'ترکیه' entries",
+    "IP Atlas made actionable: every colo row gets a Build button that loads that colo's verified vault addresses as the entry source; /api/vault/atlas now returns per-colo verified address lists (max 14 each)"
+  ]
+}
