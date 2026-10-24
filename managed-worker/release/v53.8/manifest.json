@@ -1,0 +1,18 @@
+{
+  "version": "53.8",
+  "revision": 83,
+  "built_at": "2026-10-24",
+  "status": "deployed live on omni (main), omni-cloud-5649 and omni-pulse-ec0f; RELEASES/releases/current byte-identical",
+  "panel_bytes": 974328,
+  "panel_md5": "8f253e927c2c2e4ca8f82133afd06cd1",
+  "worker_bytes": 2966050,
+  "worker_md5": "74d2593f22037325f82bfff73343e88b",
+  "worker_sha256": "0403e3662a27dd2198c48c69dccda7d225767104529d1d21a04c045e85afec46",
+  "changes": [
+    "vault: one-tap clean-IP packs (MCI v6 / Irancell-TCI F&F / per-country 443 / BlueKnight v4 / all) via POST /api/vault/import",
+    "vault: empty-state now points at the clean-pack buttons",
+    "configs: ECH support - ech=<ECHConfigList b64> emitted on TLS links whose SNI is *.workers.dev (toggle: ECH, default on) - targets the MCI phase-1 SNI filter",
+    "tci profile branch also emits ech",
+    "D1 ip_vault seeded on all three workers with the tested clean pack (state ok + real edge colo); 2a06:98c1:3121::7 pinned"
+  ]
+}
