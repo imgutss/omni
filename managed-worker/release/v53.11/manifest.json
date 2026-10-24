@@ -1,0 +1,19 @@
+{
+  "version": "53.11",
+  "revision": 86,
+  "built_at": "2026-10-24",
+  "status": "deployed live on omni (main), omni-cloud-5649 and omni-pulse-ec0f; RELEASES/releases/current byte-identical",
+  "panel_bytes": 976764,
+  "panel_build_md5": "e06b0dde2f7d0231934054f2a005013a",
+  "worker_bytes": 2968721,
+  "worker_md5": "15c5fb532c5504ee2da907c13aa6e48d",
+  "worker_sha256": "a94ff21fa8633c07e6664a8505867ca7522e4c93e3e68708296485b1d6762a5a",
+  "changes": [
+    "configs UX rebuilt: explicit 'address source' control (auto-by-method / vault / custom) replacing hidden precedence where vault subset/only silently hijacked the output",
+    "real output family filter: همگی / فقط-IPv4 / فقط-IPv6 (previously the vault 'IPv6' chip only affected generation, and the checkbox could only REMOVE v6, never isolate it)",
+    "no more page flash on config buttons: method/aether/src/fam clicks now soft-update only the method card + output (full view rerender removed from those handlers)",
+    "live status bar above output: active method / source / config count / family / ports so every click has visible effect",
+    "vault preset pickers now switch the source control to 'vault' explicitly (visible state)",
+    "vault gen chips relabeled: 'address generation for vault (not the output)'"
+  ]
+}
