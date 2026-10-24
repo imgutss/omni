@@ -1,0 +1,22 @@
+{
+  "version": "55.0",
+  "revision": 95,
+  "built_at": "2026-10-24",
+  "status": "deployed live on omni (main), omni-cloud-5649 and omni-pulse-ec0f; RELEASES/releases/current byte-identical",
+  "panel_bytes": 977200,
+  "panel_build_md5": "e0189d78eb5d2c3907b7e69313108df0",
+  "worker_bytes": 2969890,
+  "worker_md5": "0460ac5f3516e7d9606f9b6b4fa3f44f",
+  "worker_sha256": "3b660c655f6347e0a1b862b200265d8a82dc839a2d968ea414d65c93eaef07ec",
+  "changes": [
+    "FIX ech: default OFF + never injected into IPv6 configs (user-verified ECH breaks ping on v6); manual ECH switch stays for IPv4 only with warning label",
+    "RESTORED operator profiles card: SenPai / Irancell (MTN) / TCI / MCI / Rightel / Gaming / Direct - one click applies fp+fragment+ports+clean IPs",
+    "RESTORED ports/protocol/TLS card: vless+trojan toggles, all 8 ports with TLS labels, fingerprint + fragment-preset selects, FinalMask/IPv6/ECH switches",
+    "RESTORED Patt method card (5 WARP/operator methods: v6, warp6, ff, warp, masque)",
+    "TR==DE reported issue fixed at UX level: country card + selection line now explain entry IPs are shared Cloudflare anycast ranges while exit (cc= + per-country proxy) is what the chip sets",
+    "NEW Global IP Atlas card: per-colo table from real D1 vault probes (ok/total, avg latency, best, stability %, last checked) via new /api/vault/atlas endpoint",
+    "NEW AETHER local-scan command generator with outer/inner endpoints from current selection + copy button",
+    "configs-view interactions stay in-place (no full view rerender): ports/protocol/addr/profile/method now soft-update; selecting a profile/method/addr clears conflicting country/pack picks",
+    "metadata line shows vault ok-count when source=vault"
+  ]
+}
