@@ -1,0 +1,19 @@
+{
+  "version": "53.9",
+  "revision": 84,
+  "built_at": "2026-10-24",
+  "status": "deployed live on omni (main), omni-cloud-5649 and omni-pulse-ec0f; RELEASES/releases/current byte-identical",
+  "panel_bytes": 975485,
+  "panel_build_md5": "7f2386a09458daa0c7709fb27a69f3f6",
+  "worker_bytes": 2967345,
+  "worker_md5": "5cd10bccf6bdc7d6f89b600262abd2c2",
+  "worker_sha256": "16374f184c5c6f0939caa721ebab0ef86354dd0b7e2467ab47998e0e962550e2",
+  "fixes": [
+    "CRITICAL: data-build attribute left at the v53.7 md5 (c7ef...) in v53.8 while OMNI_BUILD reported 8f25... - the panel version checker saw a permanent mismatch, so the 'new version installed' banner never cleared on reload. Build rule added: data-build must always equal OMNI_BUILD.md5 (verified post-build)",
+    "version check fetch now cache-busted (/api/version?_omni_v=timestamp) so no intermediary layer can serve a stale md5",
+    "auto/manual reload now await Cache Storage deletion + service-worker unregistration before navigating, to a unique ?_omni_f= URL",
+    "banner nag-limited: max 3 shows per target md5 (sessionStorage), then silent",
+    "/api/version served with explicit Cache-Control: no-store"
+  ],
+  "build_invariant": "data-build attribute == OMNI_BUILD.md5 - check this on every future build before deploying"
+}
