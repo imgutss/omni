@@ -1,0 +1,13 @@
+{
+  "version": "53.7",
+  "revision": 82,
+  "built_at": "2026-10-23",
+  "status": "deployed: child omni-cloud-5649 (2026-10-23); main omni restored from child bundle (2026-10-24); live on both",
+  "panel_bytes": 969924,
+  "panel_md5": "c7ef2ad2258d380e9f74be96b85574ef",
+  "panel_md5_served": "03625f4ab7efbdd29924492d7c7f0291",
+  "worker_bytes": 2961298,
+  "worker_md5": "89b35d1c5fe7bb6eb8d4d193828bc96e",
+  "worker_sha256": "f1da79c27ac602749eee073cab5c44ff178febc974280cb2056f100e7edbb01d",
+  "notes": "panel.html is the exact byte stream served at / (panel_md5_served). panel_md5 is the OMNI_BUILD constant reported by /api/version (pre-embed hash; same file-vs-constant convention as v53.6). worker_sha256 matches sha256 of worker.js in this directory, which is byte-identical to the deployed main omni worker (deployment 84d86af407a34979b4e91a3abc3acabd) and to script omni-cloud-5649 in the 4lifm27 account."
+}
