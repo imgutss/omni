@@ -1,0 +1,16 @@
+{
+  "version": "53.10",
+  "revision": 85,
+  "built_at": "2026-10-24",
+  "status": "deployed live on omni (main), omni-cloud-5649 and omni-pulse-ec0f; RELEASES/releases/current byte-identical",
+  "panel_bytes": 972798,
+  "panel_build_md5": "a24c2cdb8fe55bc172c6c8128583e190",
+  "worker_bytes": 2964526,
+  "worker_md5": "7359b4f82cbfacd20927ad962be3e1b7",
+  "worker_sha256": "3bec8f35c8b7b97a9f54ce096cb5fc7c904d82178012bfc449b37d2896956321",
+  "changes": [
+    "configs: removed the three relay method chips (ry_arvan / ry_ff / ry_all) from the Patt methods card - relay configs live in their own dedicated sections",
+    "configs: also removed the now-dead info/lab entries and click-handler branches for those chips",
+    "methods kept in the card: v6 (MCI), warp6, ff (Irancell), warp, masque"
+  ]
+}
