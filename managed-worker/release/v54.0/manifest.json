@@ -1,0 +1,19 @@
+{
+  "version": "54.0",
+  "revision": 90,
+  "built_at": "2026-10-24",
+  "status": "deployed live on omni (main), omni-cloud-5649 and omni-pulse-ec0f; RELEASES/releases/current byte-identical",
+  "panel_bytes": 964383,
+  "panel_build_md5": "07fa2a49c6b84574b3a5d0e5724ecd63",
+  "worker_bytes": 2955642,
+  "worker_md5": "c39e0f2d563bd60dc325daf9ac8d7ee2",
+  "worker_sha256": "aafbb1f469b6c0449cac5a0813fb30285040b1e341b844586fdf8570a87e62d6",
+  "changes": [
+    "BREAKING UI REDESIGN: configs section rebuilt from scratch - country-first design",
+    "country grid: every country chip builds configs ONLY with that country's own IPv4+IPv6 and forces the traffic exit to the same country (cc= + proxyip= of its own list); previously the exit silently never applied without saved settings",
+    "76 countries (24 primary chips + expandable full list), per-country data (10x v4, 6x v6, exit proxies) already present in WORLD_COUNTRIES and now actually used",
+    "clean-IP packs as simple chips: MCI v6 / Irancell F&F / BlueKnight v4 / Kurosh 443 + clear button",
+    "removed: old smart-builder markup, Patt method card, vault card from the configs view (vault APIs stay server-side); no more hidden source precedence or full-page rerenders - country/pack clicks soft-update card + output only",
+    "address family switch (all / v4-only / v6-only) applies to the real output; live status bar shows method/source/count/family"
+  ]
+}
