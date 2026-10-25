@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fa" dir="rtl" data-theme="omni" data-build="0e1a9e581ad2fe32f332f156088bfe1c">
+<html lang="fa" dir="rtl" data-theme="omni" data-build="8f1ea7affb73c6669eee1e865fe3b0d2">
 <head>
 
 
@@ -9290,6 +9290,7 @@ async function labRun(e) {
       if (r.samples.length) { var s = r.samples.slice().sort(function (a, b) { return a - b; }); r.ms = s[0]; r.jitter = labJitter(r.samples); }
     });
     
+    var best = labRowsOpen()[0];
     if (best) {
       var sp = await labSpeed();
       LAB.speed = sp;
@@ -9441,7 +9442,7 @@ function labPoolHtml() {
     var age = r.last_ok ? Math.max(0, Math.round((Date.now() - Date.parse(r.last_ok)) / 60000)) : null;
     var ageTxt = age == null ? "—" : age < 60 ? age + "د" : Math.round(age / 60) + "س";
     var dot = r.alive ? "#34d399" : "#69748c";
-    var ep = r.ip + ":2408";
+    var ep = (String(r.ip).indexOf(":") >= 0 ? "[" + r.ip + "]" : r.ip) + ":2408";
     return '<tr><td class="mono" dir="ltr"><span style="color:' + dot + '">●</span> ' + a(r.ip) + '</td><td>' + a(r.rir || "—") + '</td><td class="mono"><b>' + (r.ping != null ? r.ping : "—") + '</b></td><td class="mono">' + (r.jitter != null ? r.jitter : "—") + '</td><td class="mono">' + (r.streak || 0) + '</td><td class="mono">' + ageTxt + '</td><td style="white-space:nowrap"><button type="button" class="btn btn-xs" data-action="omni-ep-pick-dl" data-ep="' + a(ep) + '" data-kind="wg">⬇️WG</button> <button type="button" class="btn btn-xs" data-action="omni-ep-pick-dl" data-ep="' + a(ep) + '" data-kind="awg">⬇️امنزیا</button> <button type="button" class="btn btn-xs" data-action="omni-pool-vless" data-ip="' + a(r.ip) + '">⧉VLESS</button></td></tr>';
   }).join("") : '<tr><td colspan="7" class="muted">خالی است — دکمهٔ ناحیه یا دکمهٔ اسکن را بزن؛ سنجش از خط خودت (مرورگر) انجام می‌شود. هر پاسخ‌دهنده ۳ نمونه می‌گیرد: پینگ=کمترین، جیتر=بیشترین−کمترین. «دست‌دادن» هم شمرده می‌شود چون یعنی مسیر تا آی‌پی زنده است.</td></tr>';
   var regs = [["", "همه"], ["LACNIC", "LACNIC 🌎"], ["AFRINIC", "AFRINIC 🌍"], ["RIPE", "RIPE 🌍"], ["APNIC", "APNIC 🌏"], ["ARIN", "ARIN 🌎"]];
@@ -9449,7 +9450,7 @@ function labPoolHtml() {
     '<p class="hint muted" style="font-size:11px">سنجش واقعی از خط تو (مرورگر): «باز» = پاسخ کامل HTTPS · «دست‌دادن» = TCP زنده ولی TLS بدون SNI می‌میرد — برای اندپوینت اپ (2408/VLESS) همین کافی است · «بسته» = سکوت. پینگ = کمترینِ ۳ نمونه. عددها فقط از گوشی تو می‌آیند. دانلود = کانفیگ آماده با همان آی‌پی:2408.</p>' +
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">' + regs.map(function (x) { return '<button type="button" class="chip" data-action="omni-pool-region" data-v="' + x[0] + '" aria-pressed="' + (fr === x[0]) + '">' + x[1] + '</button>'; }).join("") + '</div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0">' +
-    '<button type="button" class="btn btn-primary btn-xs" data-action="omni-pool-scan" ' + (LAB.poolScan ? "disabled" : "") + '>' + (LAB.poolScan ? "⏳ اسکن از خط تو…" : (fr ? "⛏️ اسکن " + fr + " از خط من" : "⛏️ اسکن همهٔ نواحی از خط من (۳×۴۸)")) + '</button>' +
+    '<button type="button" class="btn btn-primary btn-xs" data-action="omni-pool-scan" ' + (LAB.poolScan ? "disabled" : "") + '>' + (LAB.poolScan ? "⏳ اسکن از خط تو…" : (fr ? "⛏️ اسکن " + fr + " از خط من" : "⛏️ اسکن همهٔ نواحی از خط من (۳ دور)")) + '</button>' +
     '<button type="button" class="btn btn-xs" data-action="omni-pool-apply">📤 برنده‌ها → ساب</button>' +
     '<span id="omni-pool-status" class="muted" style="font-size:11.5px"></span></div>' +
     '<div style="overflow:auto;max-height:320px"><table style="width:100%;font-size:11.5px;border-collapse:collapse"><thead><tr class="muted"><th style="text-align:right">آی‌پی</th><th>RIR</th><th>پینگ</th><th>جیتر</th><th>برد</th><th>سن</th><th></th></tr></thead><tbody>' + body + '</tbody></table></div></div>';
@@ -15364,6 +15365,17 @@ async function labPoolScanRun(e2) {
       var resC = await x("POST", "/api/clean/candidates", { per: 48, rir: rirQ }, { retry: 0, signal: AbortSignal.timeout(20000) });
       if (!resC || !resC.ok) throw new Error((resC && resC.error) || "کاندیدها نیامد");
       var cands = resC.cands || [];
+      try {
+        if (!LAB.ranges) await labRanges();
+        var seenC = {}; cands.forEach(function (cc) { seenC[cc.ip] = 1; });
+        var extra = [];
+        ((LAB.ranges && LAB.ranges.regions) || []).forEach(function (rg) {
+          if (rirQ && rg.code !== rirQ) return;
+          ((rg.seeds && rg.seeds.v4) || []).slice(0, 6).forEach(function (ip4) { if (!seenC[ip4]) { seenC[ip4] = 1; extra.push({ ip: ip4, r: rg.code }); } });
+          ((rg.seeds && rg.seeds.v6) || []).slice(0, 4).forEach(function (ip6) { if (!seenC[ip6]) { seenC[ip6] = 1; extra.push({ ip: ip6, r: rg.code }); } });
+        });
+        cands = cands.concat(extra);
+      } catch (_) {}
       var stEl = function (t2) { var e3 = document.getElementById("omni-pool-status"); if (e3) e3.textContent = t2; };
       var pe2 = document.getElementById("omni-pool"); if (pe2 && pe2.scrollIntoView) try { pe2.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (_) {}
       stEl("دور " + (round + 1) + "/۳ — ۰/" + cands.length);
@@ -16307,7 +16319,8 @@ echo "اجرای اسپوفر محلی روی پورت 40443..."
           if (!ipV) return;
           if (!uuidV) { y("اول یک کاربر را در WARP Studio انتخاب کن تا UUID ولس آماده شود", "warn", 4000); return; }
           var hostV = location.hostname;
-          var linkV = "vless://" + uuidV + "@" + ipV + ":443?encryption=none&security=tls&sni=" + hostV + "&alpn=http%2F1.1&fp=chrome&type=ws&host=" + hostV + "&path=%2F%3Fed%3D2560#OMNI-" + ipV;
+          var hostPartV = ipV.indexOf(":") >= 0 ? "[" + ipV + "]" : ipV;
+          var linkV = "vless://" + uuidV + "@" + hostPartV + ":443?encryption=none&security=tls&sni=" + hostV + "&alpn=http%2F1.1&fp=chrome&type=ws&host=" + hostV + "&path=%2F%3Fed%3D2560#OMNI-" + ipV;
           try { await navigator.clipboard.writeText(linkV); y("⧉ لینک VLESS این آی‌پی کپی شد — در v2rayNG/Hiddify بچسبان", "ok", 3500); }
           catch (err2) { y("کپی نشد: " + (err2 && err2.message || err2), "err", 3500); }
         } else if (i === "omni-pool-apply") {
@@ -16337,6 +16350,7 @@ echo "اجرای اسپوفر محلی روی پورت 40443..."
           setTimeout(function () { var pe = document.getElementById("omni-pool"); if (pe && pe.scrollIntoView) try { pe.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (_) {} }, 90);
           y("🔍 اسکن همهٔ نواحی از خط تو شروع شد", "ok", 3000);
           await labPoolScanRun(e);
+        } else if (i === "omni-lab-neighbors") {
           await labNeighbors(e);
         } else if (i === "omni-lab-stall") {
           await labStall(e);
