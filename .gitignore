@@ -23,3 +23,6 @@ __pycache__/
 cf_accounts_full.json
 cf_token.txt
 .revive_state.json
+
+# Secrets — never commit
+docs/RELEASE-*-body.md

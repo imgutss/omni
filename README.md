@@ -173,4 +173,5 @@ Cloudflare اجازه نمی‌دهد یک Worker با `connect()` به آی‌�
 - **درس‌نوشته‌ها:** `omni-fix/REV146..152_*.md`.
 - **گیت‌ها:** `.gate_worker_*`، `.gate_pack_v92`، `.dom_*`، `.test_morph_*`، `.e2e_*` (ورکر موقت واقعی).
 - ⚠️ **نکتهٔ امنیتی:** `BOT_TOKEN` در `.deploy_v*.js` ماسک شده و `cf_accounts_full.json` / `.revive_state.json` هرگز کامیت نمی‌شوند؛ قبل از deploy واقعی توکن را به‌صورت محلی تنظیم کنید.
+- 📥 **دانلود اپ Omni (اندروید ۸+):** [omni-v0.1.0.apk — لینک مستقیم Releases](https://github.com/imgutss/omni/releases/download/android-v0.1.0/omni-v0.1.0.apk) · [نسخهٔ داخل ریپو](releases/omni-v0.1.0.apk) (اگر صفحهٔ Releases باز نشد) — نقشهٔ راه در [`docs/ANDROID-BLUEPRINT.md`](docs/ANDROID-BLUEPRINT.md).
 - 📱 **اپ اندروید:** `android/` — Omni v0.1.0 (پنل در قالب اپ + دریافت deep-link کانفیگ‌ها). ساخت APK خودکار با GitHub Actions (`android-ci`) و مسیر توسعه در [`docs/ANDROID-BLUEPRINT.md`](docs/ANDROID-BLUEPRINT.md).
