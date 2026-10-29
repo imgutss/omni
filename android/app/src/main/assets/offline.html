@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omni · آفلاین</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#05060B; color:#EEF2FA; font-family:system-ui,-apple-system,"Vazirmatn",Tahoma,sans-serif; text-align:center; }
+  .card { padding:32px 24px; max-width:420px; }
+  .ring { width:76px; height:76px; margin:0 auto 18px; border-radius:50%;
+          border:7px solid #22D3EE; border-top-color:#A78BFA; box-shadow:0 0 34px rgba(34,211,238,.35); }
+  h1 { font-size:20px; margin:0 0 8px; }
+  p { color:#9AA6BB; font-size:14px; line-height:1.9; margin:0 0 22px; }
+  button { background:#22D3EE; color:#04121A; border:0; border-radius:12px; padding:12px 26px;
+           font:600 14px system-ui; cursor:pointer; }
+  button:active { transform:scale(.97); }
+  .ver { margin-top:18px; color:#69748C; font-size:11px; direction:ltr; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="ring"></div>
+  <h1>اتصال برقرار نشد</h1>
+  <p>پنل Omni در دسترس نیست. اینترنت خود را بررسی کنید و دوباره تلاش کنید.</p>
+  <button onclick="try{OmniRetry.go()}catch(e){location.reload()}">تلاش دوباره</button>
+  <div class="ver">Omni · net.omnigate.app · v0.1.0</div>
+</div>
+</body>
+</html>

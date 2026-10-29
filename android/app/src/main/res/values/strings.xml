@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Omni</string>
+    <string name="imports_title">کانفیگ‌های من</string>
+    <string name="imports_empty">هنوز کانفیگی دریافت نشده است.\nلینک‌های vless از بات یا پنل را با اپ باز کنید تا اینجا جمع شوند.</string>
+    <string name="import_added">کانفیگ به فهرست اضافه شد</string>
+    <string name="import_dup">این کانفیگ قبلاً اضافه شده بود</string>
+    <string name="import_bad">پیوند نامعتبر است</string>
+    <string name="copy">کپی</string>
+    <string name="share">اشتراک</string>
+    <string name="delete">حذف</string>
+    <string name="copied">کپی شد</string>
+    <string name="offline_title">اتصال برقرار نشد</string>
+    <string name="offline_body">پنل Omni در دسترس نیست. اینترنت خود را بررسی کنید و دوباره تلاش کنید.</string>
+    <string name="retry">تلاش دوباره</string>
+</resources>

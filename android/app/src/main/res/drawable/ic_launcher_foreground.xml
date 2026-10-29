@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- حلقهٔ Omni (گرادیان سایه‌برند) -->
+    <path
+        android:fillColor="#22D3EE"
+        android:fillType="evenOdd"
+        android:pathData="M54,28 a26,26 0 1,0 0.01,0 z M54,41 a13,13 0 1,0 0.01,0 z" />
+
+    <!-- برق مرکزی -->
+    <path
+        android:fillColor="#A78BFA"
+        android:pathData="M56.5,42 L47,58.5 L53.2,58.5 L51,66.5 L61,51.5 L54.6,51.5 Z" />
+</vector>

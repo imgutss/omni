@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="omni_bg">#05060B</color>
+    <color name="surface">#101319</color>
+    <color name="text">#EEF2FA</color>
+    <color name="text_dim">#9AA6BB</color>
+    <color name="accent">#22D3EE</color>
+    <color name="accent_2">#A78BFA</color>
+    <color name="ic_launcher_bg">#05060B</color>
+</resources>
