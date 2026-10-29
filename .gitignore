@@ -18,3 +18,8 @@ production/*.png
 # Python agent test caches
 __pycache__/
 *.pyc
+
+# Omni workspace sync — never commit credentials
+cf_accounts_full.json
+cf_token.txt
+.revive_state.json
