@@ -1,0 +1,63 @@
+{
+  "deployed_at": "2026-10-30T06:42:49.702Z",
+  "account_id": "e2ff50194f83d8484987ee00dcd4c188",
+  "worker_id": "bfd797a973a44ba88cdfed53bbecd10a",
+  "worker": "omni",
+  "host": "https://omni.nguts.workers.dev",
+  "release_key": "releases/v60.1-rev153-scoped-android",
+  "rollback_key": "releases/v60.1-rev152-ip-packs",
+  "rev152_md5": "eed1a9dbc12d5c556ef97631f0701180",
+  "rev153_md5": "632463e76ce289ee41be750f50e133b0",
+  "rev153_sha256": "54a98c1d8e344691e2836f1a21d8c133ad2192b4453c82fe725727d5178ddae3",
+  "panel_md5": "032799ad4dee372868515a790f642cde",
+  "before_version": {
+    "id": "1462c79c-3224-4a32-95f9-d5380a9297b9",
+    "number": 3,
+    "created_on": "2026-10-30T06:42:13.688814Z"
+  },
+  "after_version": {
+    "id": "ab64773d-4c07-40fb-914a-67be42e2280a",
+    "number": 4,
+    "created_on": "2026-10-30T06:42:42.335639Z"
+  },
+  "bindings_preserved": true,
+  "binding_names": [
+    "BOT_TOKEN",
+    "BOT_USERNAME",
+    "BOT_WEBHOOK_SECRET",
+    "DB",
+    "EGRESS",
+    "KV",
+    "PANEL_NAME",
+    "PUBLIC_HOST",
+    "RELEASES"
+  ],
+  "live_version": {
+    "ok": true,
+    "v": "60.1",
+    "bytes": 1257128,
+    "md5": "032799ad4dee372868515a790f642cde",
+    "rev": 153,
+    "at": "2026-10-29",
+    "egress": 1
+  },
+  "smoke": {
+    "version": true,
+    "panelHttp200": true,
+    "panelBuild": true,
+    "pack865": true,
+    "pack139": true,
+    "noStale255": true,
+    "geoHelper": true,
+    "vpnHint": true,
+    "shecanIp": true,
+    "dnsReference": true,
+    "scopedNoAuth": true,
+    "scopedBadAuth": true,
+    "invalidPairRejected": true,
+    "pairingCodeAdminOnly": true,
+    "adminBearerRejected": true,
+    "anonDnsProtected": true,
+    "anonEchProtected": true
+  }
+}
