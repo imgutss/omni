@@ -32,7 +32,15 @@ jobs:
         run: |
           VERSION=$(node -p 'require("./panel/release.json").version')
           (cd panel/build && zip -q "omni-panel-$VERSION.zip" worker.js panel.html manifest.json SHA256SUMS)
-          gh release create "$GITHUB_REF_NAME" --draft --title "Omni Panel $VERSION" --notes-file docs/RELEASE.md panel/build/worker.js panel/build/panel.html panel/build/manifest.json panel/build/SHA256SUMS "panel/build/omni-panel-$VERSION.zip"
+          DRAFT=$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq '.isDraft' 2>/dev/null || true)
+          if [ "$DRAFT" = "false" ]; then
+            echo "A published version is immutable; prepare a new version."
+            exit 1
+          fi
+          if [ "$DRAFT" != "true" ]; then
+            gh release create "$GITHUB_REF_NAME" --draft --title "Omni Panel $VERSION" --notes-file docs/RELEASE.md
+          fi
+          gh release upload "$GITHUB_REF_NAME" --clobber panel/build/worker.js panel/build/panel.html panel/build/manifest.json panel/build/SHA256SUMS "panel/build/omni-panel-$VERSION.zip"
       - name: Deploy central Worker and synchronize Telegram update bundle
         env:
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}

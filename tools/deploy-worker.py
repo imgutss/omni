@@ -2,7 +2,7 @@
 """Preserving in-place deployment of the canonical Worker + RELEASES bundle.
 Credentials come only from the environment. No D1 writes, deletions, or child rollout.
 """
-import os,json,hashlib,urllib.request,urllib.error,email,email.policy,time,pathlib,sys
+import os,json,hashlib,urllib.request,urllib.error,urllib.parse,email,email.policy,time,pathlib,sys
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 TOKEN=os.environ.get('CF_API_TOKEN','').strip()
 ACCOUNT=os.environ.get('CF_ACCOUNT_ID','').strip()
@@ -81,6 +81,7 @@ try:
  stored,_=call(kv+'releases%2Fcurrent',raw=True)
  if stored!=BUNDLE:raise RuntimeError('RELEASES/current mismatch')
  host=next(b['text'] for b in settings['bindings'] if b['name']=='PUBLIC_HOST')
+ host=urllib.parse.urlsplit(host if '://' in host else 'https://'+host).netloc
  verified=False
  for attempt in range(12):
   try:
