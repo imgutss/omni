@@ -41,7 +41,7 @@ def mapped(bindings):
   else:out.append(b)
  return out
 def upload(bundle,settings):
- metadata={'main_module':'worker.js','compatibility_date':settings['compatibility_date'],'compatibility_flags':settings.get('compatibility_flags',[]),'bindings':mapped(settings['bindings']),'keep_bindings':['secret_text','secret_key']}
+ metadata={'exports':settings['_exports'],'main_module':'worker.js','compatibility_date':settings['compatibility_date'],'compatibility_flags':settings.get('compatibility_flags',[]),'bindings':mapped(settings['bindings']),'keep_bindings':['secret_text','secret_key']}
  for key in ['usage_model','placement','tail_consumers','logpush','tags']:
   if settings.get(key) is not None:metadata[key]=settings[key]
  boundary='omni-release-'+os.urandom(12).hex()
@@ -55,14 +55,35 @@ def binding_identity(bindings):
   if value['type']=='d1':value['id']=value.get('database_id') or value['id'];value.pop('database_id',None)
   result[value['name']]=value
  return result
+def verify_public(settings):
+ host=next(b['text'] for b in settings['bindings'] if b['name']=='PUBLIC_HOST')
+ host=urllib.parse.urlsplit(host if '://' in host else 'https://'+host).netloc
+ for attempt in range(40):
+  try:
+   url='https://'+host+'/api/version?_release='+str(MANIFEST['revision'])
+   with urllib.request.urlopen(url,timeout=15) as response:version=json.load(response)
+   if version.get('v')==MANIFEST['version'] and version.get('rev')==MANIFEST['revision']:
+    with urllib.request.urlopen('https://'+host+'/healthz',timeout=15) as response:
+     if response.status==200:return
+  except Exception:pass
+  time.sleep(3)
+ raise RuntimeError('Public version/health verification failed')
 path='/workers/scripts/'+NAME
 settings=call(path+'/settings')
+workers=call('/workers/workers')
+resource=next(w for w in workers if w['name']==NAME)
+deployments=call(path+'/deployments')['deployments']
+active=max(deployments[0]['versions'],key=lambda v:v['percentage'])['version_id']
+versions=call('/workers/workers/'+resource['id']+'/versions?per_page=100')
+active_config=next(v for v in versions if v['id']==active)
+settings['_exports']=active_config.get('exports',{})
 namespace=next(b['namespace_id']for b in settings['bindings']if b['name']=='RELEASES')
 kv='/storage/kv/namespaces/'+namespace+'/values/'
 previous_raw,kind=call(path,raw=True);previous=js_module(previous_raw,kind)
 previous_release,_=call(kv+'releases%2Fcurrent',raw=True)
 if previous==BUNDLE and previous_release==BUNDLE:
- print('Canonical Worker and RELEASES are already current.');raise SystemExit(0)
+ verify_public(settings)
+ print('Canonical Worker and RELEASES are already current and publicly verified.');raise SystemExit(0)
 # Rollback copies remain in the existing private namespace, never in public artifacts.
 stamp=str(int(time.time()))+'-'+hashlib.sha256(previous).hexdigest()[:12]
 call(kv+'rollback%2F'+stamp+'%2Fworker.js','PUT',previous,'application/javascript+module',raw=True)
@@ -80,19 +101,7 @@ try:
  if js_module(raw,kind)!=BUNDLE:raise RuntimeError('Deployed module hash mismatch')
  stored,_=call(kv+'releases%2Fcurrent',raw=True)
  if stored!=BUNDLE:raise RuntimeError('RELEASES/current mismatch')
- host=next(b['text'] for b in settings['bindings'] if b['name']=='PUBLIC_HOST')
- host=urllib.parse.urlsplit(host if '://' in host else 'https://'+host).netloc
- verified=False
- for attempt in range(12):
-  try:
-   url='https://'+host+'/api/version?_release='+str(MANIFEST['revision'])
-   with urllib.request.urlopen(url,timeout=15) as response:version=json.load(response)
-   if version.get('v')==MANIFEST['version'] and version.get('rev')==MANIFEST['revision']:
-    with urllib.request.urlopen('https://'+host+'/healthz',timeout=15) as response:
-     if response.status==200:verified=True;break
-  except Exception:pass
-  time.sleep(3)
- if not verified:raise RuntimeError('Public version/health verification failed')
+ verify_public(settings)
  print('Deployed Omni Panel '+MANIFEST['version']+' / revision '+str(MANIFEST['revision']))
  print('Existing bindings and secrets retained; central module and RELEASES byte-identical.')
  print('Automatic child rollout was not enabled.')
@@ -100,7 +109,7 @@ except Exception:
  if started:
   try:
    call(kv+'releases%2Fcurrent','PUT',previous_release,'application/javascript+module',raw=True)
-   upload(previous,settings)
-   print('Previous Worker and release bundle restored.',file=sys.stderr)
+   call(path+'/deployments','POST',{'strategy':'percentage','versions':[{'version_id':active,'percentage':100}],'annotations':{'workers/message':'Restore previous known deployment after failed public verification'}})
+   print('Previous deployment selected and release bundle restored; public health requires separate confirmation.',file=sys.stderr)
   except Exception:print('Automatic rollback failed; use the private rollback copies.',file=sys.stderr)
  raise

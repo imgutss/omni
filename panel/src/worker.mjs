@@ -4357,6 +4357,28 @@ function panelCfBindings(list) {
   return out;
 }
 __name(panelCfBindings, "panelCfBindings");
+// Preserve active Durable Object declarations as well as namespace bindings.
+// New Cloudflare versions reconcile exports and reject undeclared live classes.
+async function panelCfExports(token, accountId, workerName) {
+  const base = "https://api.cloudflare.com/client/v4/accounts/" + encodeURIComponent(String(accountId));
+  const read = async (path) => {
+    const response = await fetch(base + path, {headers:{authorization:"Bearer " + token}});
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data || !data.success) throw new Error("Cannot read Cloudflare export configuration; no resources were replaced.");
+    return data.result;
+  };
+  const workers = await read("/workers/workers");
+  const resource = workers.find((worker) => worker.name === workerName);
+  if (!resource) throw new Error("Selected Worker identity was not found; update stopped.");
+  const deployments = await read("/workers/scripts/" + encodeURIComponent(workerName) + "/deployments");
+  const active = [...(deployments.deployments?.[0]?.versions || [])].sort((a,b) => Number(b.percentage)-Number(a.percentage))[0];
+  if (!active) throw new Error("Active Worker version was not found; update stopped.");
+  const versions = await read("/workers/workers/" + encodeURIComponent(resource.id) + "/versions?per_page=100");
+  const version = versions.find((item) => item.id === active.version_id);
+  if (!version) throw new Error("Active Worker export declarations were not found; update stopped.");
+  return version.exports || {};
+}
+__name(panelCfExports, "panelCfExports");
 function panelNeedsUpgrade(info) {
   if (!info)
     return true;
@@ -4399,6 +4421,7 @@ async function upgradeOwnedPanel(env2, panel, bundleIn, tokenIn) {
     const settings = sj.result || {};
     const bs = settings.bindings || [];
     const meta = {
+      exports: await panelCfExports(token, String(panel.account_id), String(panel.worker_name)),
       main_module: "worker.js",
       compatibility_date: settings.compatibility_date || "2024-09-23",
       compatibility_flags: settings.compatibility_flags || ["nodejs_compat"],

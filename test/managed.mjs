@@ -311,6 +311,9 @@ const updateSandbox = {
     const method = opt.method || "GET";
     panelUpdateCalls.push({ uri, method });
     if (uri.startsWith("https://child.example/")) throw new Error("synthetic workers.dev probe failure");
+    if (method === "GET" && uri.endsWith("/workers/workers")) return {ok:true,json:async()=>({success:true,result:[{id:"worker-fixture",name:"selected-child"}]})};
+    if (method === "GET" && uri.endsWith("/deployments")) return {ok:true,json:async()=>({success:true,result:{deployments:[{versions:[{version_id:"version-fixture",percentage:100}]}]}})};
+    if (method === "GET" && uri.includes("/workers/worker-fixture/versions")) return {ok:true,json:async()=>({success:true,result:[{id:"version-fixture",exports:{OmniEgress2:{type:"durable-object",storage:"sqlite"}}}]})};
     if (method === "GET" && uri.endsWith("/settings")) return {
       ok: true, status: 200,
       json: async () => ({ success: true, result: {
@@ -333,6 +336,7 @@ const updateSandbox = {
 };
 vm.createContext(updateSandbox);
 const updateSupport = [
+  markedFunction('async function panelCfExports(', '__name(panelCfExports, "panelCfExports");'),
   markedFunction('async function panelBuildInfo(panelUrl) {', '__name(panelBuildInfo, "panelBuildInfo");'),
   markedFunction('function panelCfBindings(list) {', '__name(panelCfBindings, "panelCfBindings");'),
   markedFunction('function panelNeedsUpgrade(info) {', '__name(panelNeedsUpgrade, "panelNeedsUpgrade");'),
@@ -343,6 +347,7 @@ const updateEnv = { __updatePatch: null };
 const updatePanel = { id: 7, owner_chat_id: "123", account_id: "acct-existing", worker_name: "selected-child", panel_url: "https://child.example", last_check_detail: "" };
 const updateResult = await updateSandbox.__upgradeOwnedPanel(updateEnv, updatePanel, undefined, "test-cf-token");
 ok(updateResult.ok && updateResult.reason === "upgraded" && panelUpdateCalls.some((c) => c.method === "PUT" && c.uri.endsWith("/workers/scripts/selected-child")) && !panelUpdateCalls.some((c) => c.method === "DELETE"), "mocked Telegram update PUTs to the selected Worker with no delete/recreate");
+ok(panelUpdateMetadata.exports?.OmniEgress2?.storage === "sqlite", "in-place upgrade preserves active Durable Object export declarations");
 ok(panelUpdateMetadata.bindings.some((b) => b.name === "DB" && b.id === "db-existing") && panelUpdateMetadata.bindings.some((b) => b.name === "UPSTREAM") && panelUpdateMetadata.keep_bindings.includes("secret_text") && updateEnv.__updatePatch.detail.includes("53.6/79"), "mocked upgrade preserves D1/resources/secrets and records the exact release receipt");
 updatePanel.last_check_detail = updateEnv.__updatePatch.detail;
 const putCountBeforeReceiptCheck = panelUpdateCalls.filter((c) => c.method === "PUT").length;
