@@ -1,0 +1,45 @@
+name: Publish panel
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: panel-production-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Validate release identity
+        run: node -e 'const r=require("./panel/release.json"); if(process.env.GITHUB_REF_TYPE!=="tag" || process.env.GITHUB_REF_NAME!=="v"+r.version) throw Error("Push a version tag matching panel/release.json");'
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm audit --audit-level=high
+      - run: npm run release:package
+      - name: Package and draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p 'require("./panel/release.json").version')
+          (cd panel/build && zip -q "omni-panel-$VERSION.zip" worker.js panel.html manifest.json SHA256SUMS)
+          gh release create "$GITHUB_REF_NAME" --draft --title "Omni Panel $VERSION" --notes-file docs/RELEASE.md panel/build/worker.js panel/build/panel.html panel/build/manifest.json panel/build/SHA256SUMS "panel/build/omni-panel-$VERSION.zip"
+      - name: Deploy central Worker and synchronize Telegram update bundle
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_WORKER_NAME: omni
+        run: python3 tools/deploy-worker.py
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest

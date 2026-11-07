@@ -1,0 +1,38 @@
+# Example for a NEW installation. Existing installations must retain their bindings.
+# Copy to wrangler.local.toml and replace every placeholder before deploying.
+name = "omni-panel"
+main = "panel/build/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+find_additional_modules = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "omni-panel-db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_RUNTIME_KV_ID"
+
+[[kv_namespaces]]
+binding = "RELEASES"
+id = "REPLACE_WITH_RELEASE_KV_ID"
+
+[[durable_objects.bindings]]
+name = "EGRESS"
+class_name = "OmniEgress2"
+
+[[migrations]]
+tag = "omni-panel-v1-new-install"
+new_sqlite_classes = ["OmniEgress2"]
+
+[vars]
+PANEL_NAME = "Omni"
+PUBLIC_HOST = "REPLACE_WITH_YOUR_WORKER_HOST"
+# Set BOT_TOKEN and BOT_WEBHOOK_SECRET with `wrangler secret put`, not here.
+# Set BOT_USERNAME to your own bot username if Telegram operations are enabled.
+# Scheduled maintenance can upgrade managed panels. Review policy before enabling:
+# [triggers]
+# crons = ["*/5 * * * *"]

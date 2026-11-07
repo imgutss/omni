@@ -1,0 +1,30 @@
+{
+  "name": "omni-panel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Omni Panel — Cloudflare control plane, subscriptions and Telegram operations",
+  "scripts": {
+    "build": "node panel/build.mjs",
+    "dev": "wrangler dev --local --ip 0.0.0.0 --port 8787",
+    "predev": "npm run build",
+    "predeploy": "npm run build",
+    "deploy": "node panel/deploy.mjs",
+    "test": "npm run build && node --test panel/test/*.test.mjs && npm run test:managed && npm run test:workerd",
+    "test:managed": "OMNI_WORKER_PATH=panel/build/worker.js OMNI_PANEL_PATH=panel/build/panel.html node test/managed.mjs",
+    "test:workerd": "node panel/test/workerd.mjs",
+    "test:browser": "node panel/test/browser.mjs",
+    "test:all": "npm test && npm run test:browser",
+    "release:prepare": "node tools/prepare-release.mjs",
+    "release:package": "npm run build && node tools/package-release.mjs"
+  },
+  "devDependencies": {
+    "acorn": "^8.19.0",
+    "miniflare": "5.20261104.0-beta",
+    "playwright": "^1.63.0",
+    "wrangler": "4.158.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

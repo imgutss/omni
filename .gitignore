@@ -1,0 +1,33 @@
+node_modules/
+.wrangler/
+test/.wrangler/
+dist/
+*.log
+.dev.vars
+.env
+.env.*
+!.env.example
+.DS_Store
+build/
+coverage/
+
+# playwright evidence screenshots (regenerable with `node production/test/*.test.mjs`)
+production/*.png
+!production/test/**/*.png
+
+# Python agent test caches
+__pycache__/
+*.pyc
+
+# Omni workspace sync — never commit credentials
+cf_accounts_full.json
+cf_token.txt
+.revive_state.json
+
+# Secrets — never commit
+docs/RELEASE-*-body.md
+
+# Local release configuration and generated artifacts
+wrangler.local.toml
+panel/build/
+panel/*.local.toml

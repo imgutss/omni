@@ -1,0 +1,17 @@
+{
+  "name": "Omni Panel",
+  "version": "1.0.0",
+  "revision": 164,
+  "date": "2026-11-07",
+  "baseline": {
+    "coreVersion": "60.6",
+    "revision": 162,
+    "sha256": "b171687339dd03d48142039c798f909e8d236a2deb3a1bf4349c6be5012ab544"
+  },
+  "compatibilityDate": "2024-09-23",
+  "securityChanges": [
+    "Authenticated Telegram webhook header; no shared fallback",
+    "Admin-only bot diagnostic endpoint",
+    "Automatic child upgrades require OMNI_AUTO_UPGRADE=1"
+  ]
+}

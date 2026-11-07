@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="440" viewBox="0 0 1280 440" role="img" aria-labelledby="title desc">
+<title id="title">Omni Panel 1.0.0</title><desc id="desc">One control plane for dashboard, Telegram and edge operations.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#07121d"/><stop offset="1" stop-color="#0a1726"/></linearGradient><linearGradient id="a"><stop stop-color="#3ce7c4"/><stop offset="1" stop-color="#69a6ff"/></linearGradient><radialGradient id="glow"><stop stop-color="#1f6a75" stop-opacity=".45"/><stop offset="1" stop-color="#1f6a75" stop-opacity="0"/></radialGradient></defs>
+<rect width="1280" height="440" rx="28" fill="url(#bg)"/><ellipse cx="1060" cy="170" rx="380" ry="310" fill="url(#glow)"/>
+<g fill="none" stroke="#234150" opacity=".55"><path d="M800 0V440M880 0V440M960 0V440M1040 0V440M1120 0V440M1200 0V440M720 60H1280M720 140H1280M720 220H1280M720 300H1280M720 380H1280"/></g>
+<rect x="64" y="48" width="168" height="30" rx="15" fill="#102f36" stroke="#2b6d6d"/><text x="148" y="68" text-anchor="middle" fill="#70e6cf" font-family="Arial,sans-serif" font-size="12" letter-spacing="2">RELEASE 1.0.0</text>
+<text x="59" y="181" fill="#f0f7fb" font-family="Arial,sans-serif" font-size="84" font-weight="800" letter-spacing="-4">OMNI <tspan fill="#67e4d2">PANEL</tspan></text>
+<text x="65" y="231" fill="#a9bfcd" font-family="Arial,sans-serif" font-size="26">One control plane. Every day.</text>
+<text x="65" y="277" fill="#7e99ab" font-family="Arial,sans-serif" font-size="17">Users. Subscriptions. Node operations.</text>
+<path d="M795 276L916 149L1041 221L1164 111" fill="none" stroke="url(#a)" stroke-width="3"/>
+<g fill="#0b1b29" stroke="#60d7cc" stroke-width="3"><circle cx="795" cy="276" r="10"/><circle cx="916" cy="149" r="10"/><circle cx="1041" cy="221" r="10"/><circle cx="1164" cy="111" r="10"/></g>
+<path d="M916 149L932 193L897 184L913 225L885 170L909 178Z" fill="#63ead3"/>
+<path d="M64 332H1216" stroke="#223644"/>
+<g font-family="Arial,sans-serif" font-size="14" fill="#c8dbe4" letter-spacing="2"><text x="65" y="382">WEB DASHBOARD</text><text x="402" y="382">TELEGRAM CONSOLE</text><text x="808" y="382">CLOUDFLARE EDGE</text></g>
+<g fill="#5fe0ce"><circle cx="284" cy="377" r="3"/><circle cx="690" cy="377" r="3"/></g></svg>
