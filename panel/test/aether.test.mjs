@@ -39,7 +39,7 @@ test('Aether profiles use app protocol names and no fixed endpoint',()=>{
 test('requested links and panel-only Aether UI are present; game publishing card is removed',()=>{
  assert(html.includes('https://bot-hosting.net/dash/developer'));
  assert(html.includes('https://panel.arvancloud.ir/profile/iam/machine-users'));
- assert(html.includes('در Omni App وارد کنید'));
+ assert(html.includes('در O&#109;ni App وارد کنید'));
  assert(!html.includes('gaming-publish-sub'));
  assert(!html.includes('کانفیگ گیم'));
  assert(!targetBlock[0].includes('همراه اول'));
