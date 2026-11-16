@@ -13,7 +13,7 @@
     "test": "npm run build && node --test panel/test/*.test.mjs && npm run test:managed && npm run test:workerd",
     "test:managed": "OMNI_WORKER_PATH=panel/build/worker.js OMNI_PANEL_PATH=panel/build/panel.html node test/managed.mjs",
     "test:workerd": "node panel/test/workerd.mjs",
-    "test:browser": "node panel/test/browser.mjs",
+    "test:browser": "node panel/test/browser.mjs && node panel/test/aether-browser.mjs",
     "test:all": "npm test && npm run test:browser",
     "release:prepare": "node tools/prepare-release.mjs",
     "release:package": "npm run build && node tools/package-release.mjs"

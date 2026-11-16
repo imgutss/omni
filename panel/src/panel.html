@@ -12703,8 +12703,8 @@ function omniMbCardHtml() {
 <h3 id="mb-auto-title" style="margin-top:12px">🟢 رلهٔ bot-hosting خودکار — نسخهٔ بازسازی‌شده</h3>
 <p class="mb-muted">کلید bot-hosting (<code>bhk_</code>) و کلید API آروان را وارد کن؛ ساخت رله، اتصال دامنهٔ آروان، رکوردهای DNS و تست نهایی کاملاً خودکار و مرحله‌ای انجام می‌شود — همان معماری بخش «آروان خودکار». رکوردهایی که این پنل می‌سازد جایی ثبت می‌شود و فقط همان‌ها در حذف، پاک می‌شوند.</p>
 <div class="mb-grid">
-  <div><label for="mb-bhk">کلید bot-hosting</label><input id="mb-bhk" type="password" dir="ltr" autocomplete="off" placeholder="bhk_..."><p class="mb-muted"><a href="https://bot-hosting.net/account" target="_blank" rel="noopener noreferrer">دریافت کلید از حساب bot-hosting</a></p></div>
-  <div><label for="mb-arvan">کلید API آروان</label><input id="mb-arvan" type="password" dir="ltr" autocomplete="off" placeholder="Apikey"><p class="mb-muted"><a href="https://panel.arvancloud.ir/profile/api-keys" target="_blank" rel="noopener noreferrer">ساخت Machine User API Key</a></p></div>
+  <div><label for="mb-bhk">کلید bot-hosting</label><input id="mb-bhk" type="password" dir="ltr" autocomplete="off" placeholder="bhk_..."><p class="mb-muted"><a href="https://bot-hosting.net/dash/developer" target="_blank" rel="noopener noreferrer">دریافت کلید از حساب bot-hosting</a></p></div>
+  <div><label for="mb-arvan">کلید API آروان</label><input id="mb-arvan" type="password" dir="ltr" autocomplete="off" placeholder="Apikey"><p class="mb-muted"><a href="https://panel.arvancloud.ir/profile/iam/machine-users" target="_blank" rel="noopener noreferrer">ساخت Machine User API Key</a></p></div>
 </div>
 <div class="mb-row"><button class="mb-btn" type="button" data-mb="accounts">بررسی کلیدها و دریافت دامنه‌ها</button></div>
 <div id="mb-domain-fields" hidden style="margin-top:16px">
@@ -14931,17 +14931,22 @@ function omniRelayBridgeRowsHtml(platform, rows, accent) {
     { id: "wifi",  label: "🏠 وای‌فای",     ep: "188.114.97.5:2408" }
   ];
 
-  /* Aether — بدون ردیف تکراری. «باز کردن» حذف شد چون بدون نصب PattNG هیچ کاری نمی‌کند. */
+  /* Aether profiles follow Omni App's AetherFmt and contain no fixed endpoints. */
   var AETHER_TARGETS = [
-    { id: "gool-scan", title: "Aether WARP-in-WARP · اسکن خودکار دو هپ", note: "هسته خودش outer و inner را روی همین شبکه پیدا می‌کند", q: { protocol: "gool", scan: "balanced", ip: "both" } },
-    { id: "gool-v6",   title: "Aether WARP-in-WARP · هپ ثابت IPv6 (۸۸۰ ↔ ۸۶۴)", note: "همان دو هپی که روی همراه اول جواب داد", q: { protocol: "gool", scan: "balanced", ip: "both", outer: "[2606:4700:d0::bc72:6001]:880", inner: "[2606:4700:d1::a29f:c001]:864" } },
-    { id: "gool-v6-new", title: "Aether WARP-in-WARP · IPv6 تازهٔ همراه اول (۸۸۰ ↔ ۸۵۹)", note: "آی‌پی سیکس 2606:4700:8d72:…:4421 که خودت دادی", q: { protocol: "gool", scan: "balanced", ip: "both", outer: "[2606:4700:8d72:32cf:7c54:1f4b:b363:4421]:880", inner: "[2606:4700:d0::a29f:c001]:859" } },
-    { id: "gool-v6-new2", title: "Aether WARP-in-WARP · IPv6 تازهٔ همراه اول (۸۶۴ ↔ ۸۸۰)", note: "اگر ترکیب اول پینگ نداد، این را امتحان کن", q: { protocol: "gool", scan: "balanced", ip: "both", outer: "[2606:4700:8d72:32cf:7c54:1f4b:b363:4421]:864", inner: "[2606:4700:d0::bc72:6001]:880" } },
-    { id: "wg-v6",     title: "Aether WireGuard تک‌هپ · فقط IPv6 (همراه اول)", note: "اسکن روی IPv6؛ برای شبکه‌ای که IPv4 را بسته", q: { protocol: "wg", scan: "balanced", ip: "v6" } },
-    { id: "wg-scan",   title: "Aether WireGuard تک‌هپ · اسکن خودکار", note: "ساده‌ترین حالت، وقتی امنزیا جواب نمی‌دهد", q: { protocol: "wg", scan: "balanced", ip: "both" } },
-    { id: "h2",        title: "Aether MASQUE روی HTTP/2 (TCP)", note: "برای شبکه‌ای که UDP را کامل می‌بندد", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "both" } },
-    { id: "h2-v6",     title: "Aether MASQUE روی HTTP/2 · فقط IPv6", note: "همان MASQUE روی استخر IPv6 (همراه اول)", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "v6", fingerprint: "semi-python" } },
-    { id: "h3",        title: "Aether MASQUE روی HTTP/3 (QUIC)", note: "سریع‌ترین حالت وقتی QUIC باز است", q: { protocol: "masque", transport: "h3", scan: "balanced", ip: "both" } }
+    { id: "wireguard", title: "WireGuard", note: "یک تونل WireGuard", q: { protocol: "wg", scan: "balanced", ip: "both" } },
+    { id: "warp-in-warp", title: "WARP-in-WARP", note: "دو تونل WireGuard", q: { protocol: "gool", scan: "balanced", ip: "both" } },
+    { id: "masque-h2", title: "MASQUE · HTTP/2", note: "MASQUE با انتقال TCP", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "both" } },
+    { id: "masque-h3", title: "MASQUE · HTTP/3", note: "MASQUE با انتقال QUIC", q: { protocol: "masque", transport: "h3", scan: "balanced", ip: "both" } },
+    { id: "mim-h2", title: "MASQUE-in-MASQUE · HTTP/2", note: "دو تونل MASQUE با انتقال TCP", q: { protocol: "mim", transport: "h2", scan: "balanced", ip: "both" } },
+    { id: "mim-h3", title: "MASQUE-in-MASQUE · HTTP/3", note: "دو تونل MASQUE با انتقال QUIC", q: { protocol: "mim", transport: "h3", scan: "balanced", ip: "both" } },
+    { id: "wg-masque-h2", title: "WireGuard over MASQUE · HTTP/2", note: "WireGuard درون MASQUE با انتقال TCP", q: { protocol: "wg-over-masque", transport: "h2", scan: "balanced", ip: "both" } },
+    { id: "wg-masque-h3", title: "WireGuard over MASQUE · HTTP/3", note: "WireGuard درون MASQUE با انتقال QUIC", q: { protocol: "wg-over-masque", transport: "h3", scan: "balanced", ip: "both" } },
+    { id: "warp-psiphon", title: "WARP → Psiphon", note: "Psiphon از مسیر WARP", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "both", psiphon: "chain", psiphon_mode: "auto" } },
+    { id: "psiphon-warp", title: "Psiphon → WARP", note: "WARP از مسیر Psiphon", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "both", psiphon: "reverse", psiphon_mode: "auto" } },
+    { id: "psiphon-only", title: "Psiphon only", note: "فقط Psiphon، بدون WARP", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "both", psiphon: "only", psiphon_mode: "auto" } },
+    { id: "warp-tor", title: "WARP → Tor", note: "Tor از مسیر WARP", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "both", tor: "chain", tor_bridges: "auto", tor_relays: "auto" } },
+    { id: "tor-warp", title: "Tor → WARP", note: "WARP از مسیر Tor", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "both", tor: "reverse", tor_bridges: "auto", tor_relays: "auto" } },
+    { id: "tor-only", title: "Tor only", note: "فقط Tor، بدون WARP", q: { protocol: "masque", transport: "h2", scan: "balanced", ip: "both", tor: "only", tor_bridges: "auto", tor_relays: "auto" } }
   ];
 
   var GAMING_VIEW_STATE = {
@@ -17455,10 +17460,10 @@ var OMNI_SEED_V4_CLEAN = ["103.63.30.163","103.63.30.230","107.189.2.206","107.1
       <!-- ۵) Aether -->
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <b style="font-size:14.5px">۵) Aether <span class="muted" style="font-weight:400;font-size:11.5px">(اپ PattNG)</span></b>
+          <b style="font-size:14.5px">۵) Aether <span class="muted" style="font-weight:400;font-size:11.5px">(Omni App)</span></b>
           <button type="button" class="btn btn-xs" data-action="omni-copy" data-text="${a(buildAetherUris().map((x) => x.uri).join("\n"))}">📋 کپی همه (${buildAetherUris().length})</button>
         </div>
-        <p class="muted" style="margin:6px 0 0;font-size:12px;line-height:1.85">در PattNG: منوی + ← «Add Aether Config» ← متن را بچسبان.</p>
+        <p class="muted" style="margin:6px 0 0;font-size:12px;line-height:1.85">کانفیگ را کپی و در Omni App وارد کنید. در صورت نیاز، اسکن و دریافت کلیدهای WARP را داخل اپ انجام دهید.</p>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">
           ${buildAetherUris().map((it) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:9px">
             <div style="min-width:0"><div style="font-size:12.5px">${a(it.title)}</div><div class="muted" style="font-size:11px">${a(it.hint)}</div></div>
@@ -17467,24 +17472,6 @@ var OMNI_SEED_V4_CLEAN = ["103.63.30.163","103.63.30.230","107.189.2.206","107.1
         </div>
       </div>
 
-      <!-- ۶) انتشار -->
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-          <b style="font-size:14.5px">۶) انتشار در ساب «${a(activeUser.username)}»</b>
-          <span class="badge warn" style="font-size:11px">${[...new Set([...buildWireguardUris(st).map((x) => x.uri), ...buildAetherUris().map((x) => x.uri)])].length} کانفیگ گیم</span>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
-          <button type="button" class="btn btn-sm btn-primary" data-action="omni-gaming-publish-sub" data-scope="one" ${activeUser.uuid ? "" : "disabled"}>🚀 انتشار برای «${a(activeUser.username)}»</button>
-          <button type="button" class="btn btn-sm" data-action="omni-gaming-publish-sub" data-scope="all">🌍 انتشار برای همهٔ کاربران</button>
-          <button type="button" class="btn btn-sm" data-action="omni-copy" data-text="${a([...new Set([...buildWireguardUris(st).map((x) => x.uri), ...buildAetherUris().map((x) => x.uri)])].join("\n"))}">📋 کپی همهٔ لینک‌های گیم</button>
-          ${activeUser.sub_token ? `<button type="button" class="btn btn-sm" data-action="omni-copy" data-text="${a(`${location.origin}/s/${encodeURIComponent(activeUser.sub_token)}?cat=game`)}">🔗 لینک ساب گیم</button>` : ""}
-          ${activeUser.sub_token ? `<button type="button" class="btn btn-sm" data-action="omni-copy" data-text="${a(`${location.origin}/s/${encodeURIComponent(activeUser.sub_token)}?cat=normal`)}">🔗 لینک ساب عادی</button>` : ""}
-        </div>
-        ${(() => { const normalUris = activeUser.uuid ? buildStandardSubUrisForOutbound(activeUser.uuid, st.trojan_password || activeUser.uuid, st).filter((u) => !omniIsGamingUri(u)) : []; return normalUris.length ? `<details style="margin-top:10px">
-          <summary class="muted" style="cursor:pointer;font-size:12px">کانفیگ‌های عادی این کاربر (${normalUris.length})</summary>
-          <textarea class="input mono ws-pre" dir="ltr" readonly rows="5" style="margin-top:8px">${a(normalUris.join("\n"))}</textarea>
-        </details>` : ""; })()}
-      </div>
     </div>`;
   }
 
@@ -18386,26 +18373,6 @@ async function labPoolScanRun(e2) {
             if (l?.settings) l.settings.falix_gaming_config = JSON.stringify(j.falix);
             y(j.message || "✅ تنظیمات گیمینگ UDP سرور Falix ذخیره شد!", "ok", 4000);
             e.rerenderView("wireguard_game");
-          } catch (err) {
-            y("❌ " + (err?.message || err), "err", 4000);
-          } finally {
-            s.disabled = false;
-          }
-          return;
-        } else if (i === "omni-gaming-publish-sub") {
-          const scope = s.dataset.scope || "one";
-          const allU = (Array.isArray(l?.users) ? l.users : []).filter(u => u && u.uuid);
-          if (!allU.length) { y("ابتدا حداقل یک کاربر در پنل بسازید", "warn"); return; }
-          const targets = scope === "all" ? allU : [allU.find(u => u.uuid === GAMING_VIEW_STATE.selectedUserUuid) || allU[0]].filter(Boolean);
-          s.disabled = true;
-          try {
-            let count = 0;
-            for (const u of targets) {
-              const uris = buildAllGamingUrisForUser(u, l?.settings || {});
-              await omniBatchSave(u, uris, "gaming");
-              count = uris.length;
-            }
-            y(`🎮 ${count} کانفیگ گیم (WireGuard/Amnezia + Aether) در ساب ${targets.length === 1 ? `«${targets[0].username}»` : `${targets.length} کاربر`} منتشر شد!`, "ok", 4500);
           } catch (err) {
             y("❌ " + (err?.message || err), "err", 4000);
           } finally {
