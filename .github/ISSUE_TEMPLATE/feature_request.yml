@@ -1,0 +1,21 @@
+name: پیشنهاد قابلیت
+description: یک قابلیت یا بهبود پیشنهاد بده
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: مشکل چیست؟
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: چه راه‌حلی داری؟
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: بخش
+      options: [پنل وب, ربات تلگرام, کانفیگ, مسیر خروج, تشخیص, API, مستندات]

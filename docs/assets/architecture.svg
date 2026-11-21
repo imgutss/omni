@@ -1,1 +1,280 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="540" viewBox="0 0 1280 540" role="img" aria-labelledby="title desc"><title id="title">Omni architecture</title><desc id="desc">Web and Telegram reach a shared Worker control plane, backed by D1, KV and Durable Objects. Compatible VPN clients use the transport engine and optional external relays.</desc><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8" fill="#60caba"/></marker></defs><rect width="1280" height="540" rx="24" fill="#091522"/><text x="42" y="53" fill="#a5bfce" font-family="Arial,sans-serif" font-size="16" letter-spacing="3">SHARED STATE. CLEAR BOUNDARIES.</text><rect x="42" y="100" width="250" height="88" rx="16" fill="#102436" stroke="#255364"/><text x="62" y="135" fill="#e0eff7" font-family="Arial,sans-serif" font-size="19" font-weight="bold">Web dashboard</text><text x="62" y="161" fill="#92acbd" font-family="Arial,sans-serif" font-size="13">HTTPS / session</text><rect x="42" y="226" width="250" height="88" rx="16" fill="#102436" stroke="#255364"/><text x="62" y="261" fill="#e0eff7" font-family="Arial,sans-serif" font-size="19" font-weight="bold">Telegram console</text><text x="62" y="287" fill="#92acbd" font-family="Arial,sans-serif" font-size="13">Private path + secret header</text><rect x="42" y="390" width="250" height="88" rx="16" fill="#102436" stroke="#255364"/><text x="62" y="425" fill="#e0eff7" font-family="Arial,sans-serif" font-size="19" font-weight="bold">VPN client</text><text x="62" y="451" fill="#92acbd" font-family="Arial,sans-serif" font-size="13">Compatible profile / transport</text><rect x="424" y="160" width="354" height="135" rx="16" fill="#102436" stroke="#4f9b95"/><text x="444" y="195" fill="#e0eff7" font-family="Arial,sans-serif" font-size="19" font-weight="bold">WORKER</text><text x="444" y="221" fill="#92acbd" font-family="Arial,sans-serif" font-size="13">API · auth · jobs · subscriptions</text><text x="444" y="267" fill="#61dac8" font-family="Arial,sans-serif" font-size="13">Transport and egress engine</text><rect x="930" y="100" width="308" height="88" rx="16" fill="#102436" stroke="#255364"/><text x="950" y="135" fill="#e0eff7" font-family="Arial,sans-serif" font-size="19" font-weight="bold">D1 database</text><text x="950" y="161" fill="#92acbd" font-family="Arial,sans-serif" font-size="13">Users · accounts · jobs · settings</text><rect x="930" y="226" width="308" height="88" rx="16" fill="#102436" stroke="#255364"/><text x="950" y="261" fill="#e0eff7" font-family="Arial,sans-serif" font-size="19" font-weight="bold">KV / RELEASES</text><text x="950" y="287" fill="#92acbd" font-family="Arial,sans-serif" font-size="13">Auxiliary state · release bundle</text><rect x="930" y="352" width="308" height="88" rx="16" fill="#102436" stroke="#255364"/><text x="950" y="387" fill="#e0eff7" font-family="Arial,sans-serif" font-size="19" font-weight="bold">Durable Objects</text><text x="950" y="413" fill="#92acbd" font-family="Arial,sans-serif" font-size="13">Egress coordination</text><rect x="424" y="390" width="354" height="88" rx="16" fill="#102436" stroke="#255364"/><text x="444" y="425" fill="#e0eff7" font-family="Arial,sans-serif" font-size="19" font-weight="bold">Optional provider relays</text><text x="444" y="451" fill="#92acbd" font-family="Arial,sans-serif" font-size="13">Separate accounts and infrastructure</text><path d="M292 144H356V204H418" fill="none" stroke="#60caba" stroke-width="2" marker-end="url(#arrow)"/><path d="M292 270H356V250H418" fill="none" stroke="#60caba" stroke-width="2" marker-end="url(#arrow)"/><path d="M292 434H356V278H418" fill="none" stroke="#60caba" stroke-width="2" marker-end="url(#arrow)"/><path d="M778 197H850V144H924" fill="none" stroke="#60caba" stroke-width="2" marker-end="url(#arrow)"/><path d="M778 229H924" fill="none" stroke="#60caba" stroke-width="2" marker-end="url(#arrow)"/><path d="M778 263H850V396H924" fill="none" stroke="#60caba" stroke-width="2" marker-end="url(#arrow)"/><path d="M600 295V384" fill="none" stroke="#60caba" stroke-width="2" marker-end="url(#arrow)"/><text x="930" y="489" fill="#7896a9" font-family="Arial,sans-serif" font-size="12">Placement is not proof of exit country.</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1100" width="1280" height="1100" role="img" aria-label="Omni architecture">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".8" y2="1">
+      <stop offset="0" stop-color="#05070d"/><stop offset=".5" stop-color="#070c16"/><stop offset="1" stop-color="#05070d"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffb03a"/><stop offset="1" stop-color="#ff7a1a"/></linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4ef0b5"/><stop offset="1" stop-color="#22c9a0"/></linearGradient>
+    <linearGradient id="ice" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9fd8ff"/><stop offset="1" stop-color="#4aa8ff"/></linearGradient>
+    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d6b8ff"/><stop offset="1" stop-color="#a06bff"/></linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2=".6" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".085"/><stop offset="1" stop-color="#ffffff" stop-opacity=".018"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#7fb0ff" stroke-opacity=".045" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff8a1e" stop-opacity=".30"/><stop offset="1" stop-color="#ff8a1e" stop-opacity="0"/></radialGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="22"/></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ff9b3d" fill-opacity=".9"/>
+    </marker>
+    <marker id="arrowI" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5cb0ff" fill-opacity=".9"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="1100" fill="url(#bg)"/>
+  <rect width="1280" height="1100" fill="url(#grid)"/>
+  <ellipse cx="640" cy="420" rx="520" ry="330" fill="url(#glow)" filter="url(#soft)" opacity=".55"/>
+
+  <!-- ================= HEADER ================= -->
+  <g font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif">
+    <text x="64" y="58" font-size="27" font-weight="800" fill="#f4f8ff" letter-spacing="1.2">OMNI · ARCHITECTURE</text>
+    <text x="64" y="82" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="11.5" fill="#6f88a1" letter-spacing="2.2">ONE WORKER · ZERO SERVERS · CLOUDFLARE NATIVE</text>
+  </g>
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" text-anchor="end">
+    <rect x="1010" y="36" width="90" height="26" rx="13" fill="#4ef0b5" fill-opacity=".10" stroke="#4ef0b5" stroke-opacity=".45"/>
+    <circle cx="1026" cy="49" r="3.6" fill="#4ef0b5"/>
+    <text x="1042" y="53" fill="#6ff0c2" text-anchor="start">LIVE</text>
+    <rect x="1112" y="36" width="104" height="26" rx="13" fill="#ffb03a" fill-opacity=".10" stroke="#ffb03a" stroke-opacity=".45"/>
+    <text x="1164" y="53" fill="#ffc46b" text-anchor="middle">rev 187</text>
+  </g>
+  <line x1="64" y1="100" x2="1216" y2="100" stroke="#ffffff" stroke-opacity=".07"/>
+
+  <!-- ================= TIER 0 · CLIENTS ================= -->
+  <g font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" text-anchor="middle">
+    <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10" fill="#5f7b95" letter-spacing="2">
+      <text x="205" y="122">TIER 0 · CLIENT</text>
+    </g>
+    <g>
+      <rect x="80" y="134" width="250" height="64" rx="15" fill="url(#glass)" stroke="#ffb03a" stroke-opacity=".42"/>
+      <text x="205" y="162" font-size="14.5" font-weight="650" fill="#ffd49a">Browser</text>
+      <text x="205" y="181" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10" fill="#7f9ab5">panel · QR · sessions</text>
+    </g>
+    <g>
+      <rect x="370" y="134" width="250" height="64" rx="15" fill="url(#glass)" stroke="#ffb03a" stroke-opacity=".34"/>
+      <text x="495" y="162" font-size="14.5" font-weight="650" fill="#ffd49a">Mobile app</text>
+      <text x="495" y="181" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10" fill="#7f9ab5">pair-code · device tokens</text>
+    </g>
+    <g>
+      <rect x="660" y="134" width="250" height="64" rx="15" fill="url(#glass)" stroke="#4ef0b5" stroke-opacity=".40"/>
+      <text x="785" y="162" font-size="14.5" font-weight="650" fill="#8df3cf">Telegram</text>
+      <text x="785" y="181" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10" fill="#7f9ab5">commands · alerts</text>
+    </g>
+    <g>
+      <rect x="950" y="134" width="250" height="64" rx="15" fill="url(#glass)" stroke="#9fd8ff" stroke-opacity=".38"/>
+      <text x="1075" y="162" font-size="14.5" font-weight="650" fill="#b7e2ff">VPN clients</text>
+      <text x="1075" y="181" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10" fill="#7f9ab5">vless · trojan · sub</text>
+    </g>
+  </g>
+
+  <!-- converge to edge -->
+  <g fill="none" stroke="url(#amber)" stroke-opacity=".40" stroke-width="1.4">
+    <path d="M205 198 V214 Q205 220 211 220 H634"/>
+    <path d="M495 198 V214 Q495 220 501 220 H634"/>
+    <path d="M785 198 V214 Q785 220 779 220 H646"/>
+    <path d="M1075 198 V214 Q1075 220 1069 220 H646"/>
+    <path d="M640 220 V236" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- ================= TIER 1 · EDGE ================= -->
+  <g font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" text-anchor="middle">
+    <rect x="140" y="246" width="1000" height="80" rx="18" fill="url(#glass)" stroke="url(#amber)" stroke-opacity=".55"/>
+    <text x="640" y="274" font-size="11" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#c99a54" letter-spacing="3.4">TIER 1 · EDGE</text>
+    <text x="640" y="298" font-size="19" font-weight="800" fill="#ffffff">Cloudflare Edge</text>
+    <text x="640" y="317" font-size="11.5" fill="#8aa6c0">TLS · anycast · DDoS shield · 300+ PoPs</text>
+    <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#7f9ab5">
+      <text x="300" y="298" text-anchor="end">workers.dev</text>
+      <text x="300" y="313" text-anchor="end">custom domain</text>
+      <text x="980" y="298" text-anchor="start">WARP ingress</text>
+      <text x="980" y="313" text-anchor="start">MASQUE / H3</text>
+    </g>
+  </g>
+
+  <path d="M640 326 V356" fill="none" stroke="url(#amber)" stroke-opacity=".55" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- ================= TIER 2 · CORE ================= -->
+  <g font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" text-anchor="middle">
+    <rect x="340" y="364" width="600" height="86" rx="20" fill="url(#glass)" stroke="url(#mint)" stroke-opacity=".60"/>
+    <text x="640" y="390" font-size="10.5" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#5fc9a6" letter-spacing="3.4">TIER 2 · RUNTIME</text>
+    <text x="640" y="416" font-size="20" font-weight="800" fill="#ffffff">Omni Worker</text>
+    <text x="640" y="437" font-size="11.5" fill="#8aa6c0">single ES-module · 24,283 lines · router + edge logic</text>
+  </g>
+
+  <!-- ================= TIER 3 · MODULES (branch fan) ================= -->
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10" fill="#5fc9a6" letter-spacing="3" text-anchor="start">
+    <text x="64" y="480">TIER 3 · MODULES</text>
+  </g>
+  <g fill="none" stroke="url(#mint)" stroke-opacity=".42" stroke-width="1.4">
+    <path d="M640 452 C640 472, 115 470, 115 492" marker-end="url(#arrowI)"/>
+    <path d="M640 452 C640 472, 325 470, 325 492" marker-end="url(#arrowI)"/>
+    <path d="M640 452 C640 472, 535 470, 535 492" marker-end="url(#arrowI)"/>
+    <path d="M640 452 C640 472, 745 470, 745 492" marker-end="url(#arrowI)"/>
+    <path d="M640 452 C640 472, 955 470, 955 492" marker-end="url(#arrowI)"/>
+    <path d="M640 452 C640 472, 1165 470, 1165 492" marker-end="url(#arrowI)"/>
+  </g>
+
+  <g font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" text-anchor="middle">
+    <g>
+      <rect x="25" y="492" width="180" height="86" rx="15" fill="url(#glass)" stroke="#4ef0b5" stroke-opacity=".38"/>
+      <text x="115" y="520" font-size="13.5" font-weight="700" fill="#eaf6ff">Router</text>
+      <text x="115" y="539" font-size="11" fill="#8aa6c0">&amp; auth</text>
+      <text x="115" y="560" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">cookies · PBKDF2</text>
+    </g>
+    <g>
+      <rect x="235" y="492" width="180" height="86" rx="15" fill="url(#glass)" stroke="#ffb03a" stroke-opacity=".38"/>
+      <text x="325" y="520" font-size="13.5" font-weight="700" fill="#eaf6ff">Panel UI</text>
+      <text x="325" y="539" font-size="11" fill="#8aa6c0">inline SPA</text>
+      <text x="325" y="560" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">1.34 MB · no CDN</text>
+    </g>
+    <g>
+      <rect x="445" y="492" width="180" height="86" rx="15" fill="url(#glass)" stroke="#9fd8ff" stroke-opacity=".38"/>
+      <text x="535" y="520" font-size="13.5" font-weight="700" fill="#eaf6ff">REST API</text>
+      <text x="535" y="539" font-size="11" fill="#8aa6c0">/api/*</text>
+      <text x="535" y="560" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">72 endpoints</text>
+    </g>
+    <g>
+      <rect x="655" y="492" width="180" height="86" rx="15" fill="url(#glass)" stroke="#9fd8ff" stroke-opacity=".30"/>
+      <text x="745" y="520" font-size="13.5" font-weight="700" fill="#eaf6ff">Subscription</text>
+      <text x="745" y="539" font-size="11" fill="#8aa6c0">/sub</text>
+      <text x="745" y="560" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">clash · singbox</text>
+    </g>
+    <g>
+      <rect x="865" y="492" width="180" height="86" rx="15" fill="url(#glass)" stroke="#4ef0b5" stroke-opacity=".34"/>
+      <text x="955" y="520" font-size="13.5" font-weight="700" fill="#eaf6ff">Telegram</text>
+      <text x="955" y="539" font-size="11" fill="#8aa6c0">operations bot</text>
+      <text x="955" y="560" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">webhook · HMAC</text>
+    </g>
+    <g>
+      <rect x="1075" y="492" width="180" height="86" rx="15" fill="url(#glass)" stroke="#d6b8ff" stroke-opacity=".38"/>
+      <text x="1165" y="520" font-size="13.5" font-weight="700" fill="#eaf6ff">Egress</text>
+      <text x="1165" y="539" font-size="11" fill="#8aa6c0">Durable Object</text>
+      <text x="1165" y="560" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">OmniEgress2</text>
+    </g>
+  </g>
+
+  <!-- module chips -->
+  <g fill="none" stroke="#4ef0b5" stroke-opacity=".22" stroke-width="1.2" stroke-dasharray="3 4">
+    <path d="M115 578 V604"/><path d="M325 578 V604"/><path d="M535 578 V604"/>
+    <path d="M745 578 V604"/><path d="M955 578 V604"/><path d="M1165 578 V604"/>
+  </g>
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.6" text-anchor="middle" fill="#7f9ab5">
+    <rect x="25" y="610" width="180" height="60" rx="13" fill="#0c1420" stroke="#ffffff" stroke-opacity=".07"/>
+    <text x="115" y="634" fill="#9db8d2">sessions</text><text x="115" y="652" fill="#5f7b95">revoke · idle 15m</text>
+
+    <rect x="235" y="610" width="180" height="60" rx="13" fill="#0c1420" stroke="#ffffff" stroke-opacity=".07"/>
+    <text x="325" y="634" fill="#9db8d2">15 views</text><text x="325" y="652" fill="#5f7b95">dashboard → help</text>
+
+    <rect x="445" y="610" width="180" height="60" rx="13" fill="#0c1420" stroke="#ffffff" stroke-opacity=".07"/>
+    <text x="535" y="634" fill="#9db8d2">diag · scan</text><text x="535" y="652" fill="#5f7b95">speed · dns · mesh</text>
+
+    <rect x="655" y="610" width="180" height="60" rx="13" fill="#0c1420" stroke="#ffffff" stroke-opacity=".07"/>
+    <text x="745" y="634" fill="#9db8d2">usage headers</text><text x="745" y="652" fill="#5f7b95">quota · expiry</text>
+
+    <rect x="865" y="610" width="180" height="60" rx="13" fill="#0c1420" stroke="#ffffff" stroke-opacity=".07"/>
+    <text x="955" y="634" fill="#9db8d2">self-heal</text><text x="955" y="652" fill="#5f7b95">1101 repair · probe</text>
+
+    <rect x="1075" y="610" width="180" height="60" rx="13" fill="#0c1420" stroke="#ffffff" stroke-opacity=".07"/>
+    <text x="1165" y="634" fill="#9db8d2">stateful</text><text x="1165" y="652" fill="#5f7b95">SQLite · sticky</text>
+  </g>
+
+  <!-- ================= CONTROL PLANE ================= -->
+  <g fill="none" stroke="#ff9b3d" stroke-opacity=".30" stroke-width="1.3" stroke-dasharray="5 6">
+    <path d="M640 670 V 700"/>
+    <path d="M160 700 H1120"/><path d="M64 700 H160" stroke-opacity=".14"/>
+  </g>
+  <g fill="none" stroke="#ff9b3d" stroke-opacity=".22" stroke-width="1.1" stroke-dasharray="4 5">
+    <path d="M160 700 V 716"/><path d="M400 700 V 716"/><path d="M640 700 V 716"/><path d="M880 700 V 716"/><path d="M1120 700 V 716"/>
+  </g>
+  <text x="652" y="692" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#c99a54" letter-spacing="1.8">control plane</text>
+
+  <!-- ================= TIER 4 · INTEGRATIONS ================= -->
+  <text x="64" y="684" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10" letter-spacing="3" fill="#5f7b95">TIER 4 · INTEGRATIONS</text>
+
+  <g font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" text-anchor="middle">
+    <g>
+      <rect x="55" y="716" width="210" height="74" rx="15" fill="url(#glass)" stroke="#ffb03a" stroke-opacity=".34"/>
+      <text x="160" y="744" font-size="13.5" font-weight="700" fill="#ffd49a">Cloudflare API</text>
+      <text x="160" y="763" font-size="10.5" fill="#8aa6c0">deploy · heal · DNS</text>
+      <text x="160" y="779" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">accounts / workers</text>
+    </g>
+    <g>
+      <rect x="295" y="716" width="210" height="74" rx="15" fill="url(#glass)" stroke="#4ef0b5" stroke-opacity=".34"/>
+      <text x="400" y="744" font-size="13.5" font-weight="700" fill="#8df3cf">Telegram Bot API</text>
+      <text x="400" y="763" font-size="10.5" fill="#8aa6c0">messages · menus</text>
+      <text x="400" y="779" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">getWebhookInfo</text>
+    </g>
+    <g>
+      <rect x="535" y="716" width="210" height="74" rx="15" fill="url(#glass)" stroke="#9fd8ff" stroke-opacity=".34"/>
+      <text x="640" y="744" font-size="13.5" font-weight="700" fill="#b7e2ff">Arvan Cloud</text>
+      <text x="640" y="763" font-size="10.5" fill="#8aa6c0">relay · CDN zones</text>
+      <text x="640" y="779" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">managed relays</text>
+    </g>
+    <g>
+      <rect x="775" y="716" width="210" height="74" rx="15" fill="url(#glass)" stroke="#d6b8ff" stroke-opacity=".34"/>
+      <text x="880" y="744" font-size="13.5" font-weight="700" fill="#d6b8ff">Railway</text>
+      <text x="880" y="763" font-size="10.5" fill="#8aa6c0">worker host · relay</text>
+      <text x="880" y="779" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">railway.cjs</text>
+    </g>
+    <g>
+      <rect x="1015" y="716" width="210" height="74" rx="15" fill="url(#glass)" stroke="#9fd8ff" stroke-opacity=".24"/>
+      <text x="1120" y="744" font-size="13.5" font-weight="700" fill="#b7e2ff">Vercel</text>
+      <text x="1120" y="763" font-size="10.5" fill="#8aa6c0">edge relays</text>
+      <text x="1120" y="779" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">vercel-relays</text>
+    </g>
+  </g>
+
+  <!-- ================= TIER 5 · STATE ================= -->
+  <g fill="none" stroke="#b98bff" stroke-opacity=".34" stroke-width="1.3">
+    <path d="M640 790 V 826" marker-end="url(#arrow)"/>
+    <path d="M240 826 H1040"/>
+  </g>
+  <g fill="none" stroke="#b98bff" stroke-opacity=".26" stroke-width="1.1">
+    <path d="M240 826 V 838" marker-end="url(#arrow)"/>
+    <path d="M640 826 V 838" marker-end="url(#arrow)"/>
+    <path d="M1040 826 V 838" marker-end="url(#arrow)"/>
+  </g>
+  <text x="64" y="820" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10" letter-spacing="3" fill="#5f7b95">TIER 5 · STATE</text>
+
+  <g font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif" text-anchor="middle">
+    <g>
+      <rect x="60" y="844" width="360" height="90" rx="16" fill="url(#glass)" stroke="#d6b8ff" stroke-opacity=".40"/>
+      <text x="240" y="872" font-size="14.5" font-weight="750" fill="#efe4ff">D1 · SQLite</text>
+      <text x="240" y="892" font-size="11" fill="#8aa6c0">accounts · users · usage · sessions</text>
+      <text x="240" y="912" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">/api/whoami · migrations</text>
+    </g>
+    <g>
+      <rect x="460" y="844" width="360" height="90" rx="16" fill="url(#glass)" stroke="#d6b8ff" stroke-opacity=".30"/>
+      <text x="640" y="872" font-size="14.5" font-weight="750" fill="#efe4ff">KV</text>
+      <text x="640" y="892" font-size="11" fill="#8aa6c0">releases · assets · settings cache</text>
+      <text x="640" y="912" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">releases/v1.0.2 · assets/panel.html</text>
+    </g>
+    <g>
+      <rect x="860" y="844" width="360" height="90" rx="16" fill="url(#glass)" stroke="#d6b8ff" stroke-opacity=".30"/>
+      <text x="1040" y="872" font-size="14.5" font-weight="750" fill="#efe4ff">DO storage</text>
+      <text x="1040" y="892" font-size="11" fill="#8aa6c0">egress state · per-key locks</text>
+      <text x="1040" y="912" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="9.5" fill="#5f7b95">sqlite-backed</text>
+    </g>
+  </g>
+
+  <!-- ================= LEGEND ================= -->
+  <line x1="64" y1="972" x2="1216" y2="972" stroke="#ffffff" stroke-opacity=".07"/>
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#7f9ab5">
+    <circle cx="72" cy="1002" r="4" fill="#ffb03a"/><text x="86" y="1006">ingress</text>
+    <circle cx="182" cy="1002" r="4" fill="#4ef0b5"/><text x="196" y="1006">runtime</text>
+    <circle cx="292" cy="1002" r="4" fill="#9fd8ff"/><text x="306" y="1006">api</text>
+    <circle cx="382" cy="1002" r="4" fill="#d6b8ff"/><text x="396" y="1006">state</text>
+  </g>
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" text-anchor="middle">
+    <rect x="880" y="984" width="118" height="28" rx="14" fill="#4ef0b5" fill-opacity=".08" stroke="#4ef0b5" stroke-opacity=".3"/>
+    <text x="939" y="1002" fill="#6ff0c2">0 servers</text>
+    <rect x="1008" y="984" width="110" height="28" rx="14" fill="#ffb03a" fill-opacity=".08" stroke="#ffb03a" stroke-opacity=".3"/>
+    <text x="1063" y="1002" fill="#ffc46b">1 worker</text>
+    <rect x="1128" y="984" width="88" height="28" rx="14" fill="#9fd8ff" fill-opacity=".08" stroke="#9fd8ff" stroke-opacity=".3"/>
+    <text x="1172" y="1002" fill="#9fd8ff">72 API</text>
+  </g>
+  <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#4a6478">
+    <text x="64" y="1052">omni · architecture · generated from the shipping build</text>
+    <text x="1216" y="1052" text-anchor="end">workers.dev · edge-native</text>
+  </g>
+</svg>

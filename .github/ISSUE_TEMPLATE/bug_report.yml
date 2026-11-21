@@ -1,0 +1,49 @@
+name: گزارش اشکال
+description: چیزی درست کار نمی‌کند
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        لطفاً توکن، آدرس کامل پنل یا اطلاعات شخصی نگذار.
+  - type: input
+    id: version
+    attributes:
+      label: نسخه
+      description: خروجی `/api/version` را بگذار
+      placeholder: '{"v":"1.0.7","rev":187}'
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: بخش
+      options: [پنل وب, ربات تلگرام, کانفیگ و سابسکرایب, مسیر خروج, تشخیص, نصب و دیپلوی, سایر]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: چه اتفاقی افتاد؟
+      placeholder: انتظار داشتم ... اما ... شد
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: مراحل بازتولید
+      placeholder: |
+        ۱. ...
+        ۲. ...
+  - type: input
+    id: health
+    attributes:
+      label: خروجی /healthz
+      placeholder: '200'
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: تاییدیه
+      options:
+        - label: توکن یا اطلاعات شخصی در گزارش نیست
+          required: true

@@ -1,72 +1,417 @@
 <div align="center">
 
-![Omni Panel](docs/assets/hero.svg)
+<img src="docs/assets/hero.svg" alt="Omni Panel" width="100%" />
 
-# Omni Panel
+<h1 align="center">Omni&nbsp;Panel</h1>
 
-**کاربران، کانفیگ‌ها و مسیر اتصال؛ همه در یک پنل.**
+<p><b>یک Worker. صفر سرور. کل کنترل روی ابرِ خودت.</b><br/>
+<span>پنل وب + کنسول تلگرام روی Cloudflare Workers — با WARP، MASQUE، رله و مسیر هوشمند.</span></p>
 
-پنل وب و کنسول تلگرام روی Cloudflare Workers، همراه با WARP Studio و MASQUE Studio.
+<p>
+<a href="https://github.com/imgutss/omni/releases/latest"><img src="https://img.shields.io/github/v/release/imgutss/omni?style=for-the-badge&color=ff9b3d&labelColor=0b1220&logo=github" alt="release"/></a>
+<a href="https://github.com/imgutss/omni/stargazers"><img src="https://img.shields.io/github/stars/imgutss/omni?style=for-the-badge&color=ffb03a&labelColor=0b1220&logo=githubstars" alt="stars"/></a>
+<a href="https://github.com/imgutss/omni/commits/main"><img src="https://img.shields.io/github/last-commit/imgutss/omni?style=for-the-badge&color=4ef0b5&labelColor=0b1220" alt="last commit"/></a>
+<img src="https://img.shields.io/badge/runtime-Cloudflare%20Workers-ff9b3d?style=for-the-badge&labelColor=0b1220&logo=cloudflare" alt="cf"/>
+<img src="https://img.shields.io/badge/state-D1%20%2B%20KV%20%2B%20DO-d6b8ff?style=for-the-badge&labelColor=0b1220" alt="state"/>
+<img src="https://img.shields.io/badge/API-72%20endpoints-9fd8ff?style=for-the-badge&labelColor=0b1220" alt="api"/>
+</p>
 
-[دانلود نسخهٔ ۱](https://github.com/imgutss/omni/releases/latest) · [شروع کار](docs/GUIDE.fa.md) · [نصب](docs/DEPLOY.fa.md) · [English](README.en.md)
+<p>
+<a href="#-معماری">معماری</a> ·
+<a href="#-نقشهٔ-قابلیت‌ها">قابلیت‌ها</a> ·
+<a href="#-نصب">نصب</a> ·
+<a href="#-ربات-تلگرام">ربات</a> ·
+<a href="#-مرجع-api">API</a> ·
+<a href="docs/GUIDE.fa.md">راهنما</a> ·
+<a href="README.en.md">English</a>
+</p>
 
 </div>
 
-## چهار بخش، چهار کاربرد روشن
+<br/>
 
-### کانفیگ‌ها
-کاربر و مسیر ورودی را انتخاب کنید، آدرس و پورت را تنظیم کنید و خروجی را به‌صورت لینک، QR یا قالب سازگار دریافت کنید. VLESS و Trojan، پک‌های IPv4/IPv6 و تنظیمات Host، SNI و مسیر در یک جا هستند.
+<div align="center">
 
-### اوت‌باند و لوکیشن
-مشخص کنید ترافیک بعد از رسیدن به پنل از کجا خارج شود: مسیر مستقیم، خروجی اختصاصی یا رلهٔ آماده. ورودی کانفیگ و خروجی اینترنت از هم جدا هستند؛ انتخاب نام یک کشور به‌تنهایی IP خروجی را تغییر نمی‌دهد.
-
-### WARP Studio
-حساب WARP پنل و تنظیمات WireGuard را مدیریت کنید؛ اندپوینت، DNS و گزینه‌های شبکه را انتخاب کنید و خروجی مناسب بگیرید. بررسی اندپوینت روی شبکهٔ خودتان، از تکیه به یک عدد پینگ مهم‌تر است.
-
-### MASQUE Studio
-با کلید مستقل MASQUE، خروجی مناسب کلاینت بسازید. H2 یا H3، اندپوینت، پورت و DNS قابل‌انتخاب‌اند؛ گزینه‌های تکمیلی هم با نوع کلاینت تغییر می‌کنند. برای شروع، اندپوینت رسمی و پورت 443 را امتحان کنید.
-
-[راهنمای کوتاه این چهار بخش ←](docs/GUIDE.fa.md)
-
-## بقیهٔ پنل، در یک نگاه
-
-| بخش | برای چه کاری؟ |
-|---|---|
-| **داشبورد** | دید کلی کاربران، مصرف و وضعیت پنل |
-| **کاربران** | ساخت کاربر، حجم و اعتبار، تمدید، غیرفعال‌سازی و اشتراک شخصی |
-| **اینترنت ملی و رله‌ها** | اتصال رله‌های اختیاری، دامنه و زیرساخت متعلق به خودتان |
-| **پروکسی تلگرام** | تنظیم مسیر و کانفیگ‌های مربوط به تلگرام، مطابق حالت پشتیبانی‌شده |
-| **Causal Mesh** | مدیریت و بررسی مسیرهای چندگرهی در قابلیت Mesh؛ نیازمند آزمون همان مسیر |
-| **اسکنر** | یافتن و مرتب‌کردن نامزدهای اتصال؛ پاسخ HTTPS با تونل موفق یکی نیست |
-| **DNS** | تنظیم و بررسی DNS در بخش‌های مربوط |
-| **عیب‌یابی** | مشاهدهٔ خطاها و بررسی لایه‌های اتصال |
-| **تنظیمات و نشست‌ها** | نام و سیاست‌های پنل، امنیت، پشتیبان و مدیریت نشست‌های ورود |
-
-## شروع ساده
-
-۱. در [ربات Omni](https://t.me/OmniAiGateBot) دستور `/start` را بفرستید و پنل خودتان را بسازید یا انتخاب کنید. فقط حساب و منابعی را متصل کنید که اجازهٔ مدیریتشان را دارید.
-
-۲. در پنل یک کاربر بسازید؛ حجم، مدت اعتبار و مسیر دلخواه را تنظیم کنید.
-
-۳. از **کانفیگ‌ها** یا یکی از استودیوها خروجی بگیرید و در کلاینت سازگار امتحان کنید.
-
-[**Omni App 1.0.0**](https://github.com/imgutss/Omni-App/releases/tag/v1.0.0) کلاینت اندروید همراه پروژه است. پشتیبانی هر قالب به هستهٔ کلاینت بستگی دارد؛ پنل و اپ به یکدیگر محدود نیستند.
-
-## نصب و توسعه
-
-```bash
-# Node.js 22+
-npm ci
-npm run build
-npm test
+```
+ ┌──────────────────────────────────────────────────────────────────────────────┐
+ │  ONE  WORKER  →  24,283 lines  →  72 endpoints  →  15 views  →  ∞ panels     │
+ └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-خروجی آماده در `panel/build/` ساخته می‌شود. سورس پنل در `panel/src/`، ابزار انتشار در `tools/` و رلهٔ اختیاری Railway در `relay/` است. Dockerfile ریشه فقط رله را اجرا می‌کند، نه پنل Cloudflare.
+</div>
 
-[نصب و پشتیبان‌گیری](docs/DEPLOY.fa.md) · [معماری](docs/ARCHITECTURE.fa.md) · [انتشار نسخهٔ بعدی](docs/MAINTAINER.fa.md)
+<table align="center">
+<tr>
+<td align="center" width="25%"><h3>⚡ <code>0</code></h3><sub>سرور</sub></td>
+<td align="center" width="25%"><h3>🛡️ <code>300+</code></h3><sub>PoP لبه</sub></td>
+<td align="center" width="25%"><h3>🧩 <code>15</code></h3><sub>نمای پنل</sub></td>
+<td align="center" width="25%"><h3>🔌 <code>72</code></h3><sub>endpoint</sub></td>
+</tr>
+</table>
 
-> سرویس‌ها سهمیه و شرایط مستقل دارند؛ رایگان‌بودن، سرعت یا اتصال روی تمام شبکه‌ها تضمین نمی‌شود. فایل کانفیگ، کلید استودیوها و خروجی SQL را محرمانه نگه دارید.
+---
 
-[امنیت](SECURITY.md) · [حقوق و وابستگی‌ها](THIRD_PARTY_NOTICES.md)
+## 🧭 معماری
 
-<div align="center">Omni · <a href="https://github.com/imgutss">imgutss</a></div>
+<div align="center">
+<img src="docs/assets/architecture.svg" alt="Omni Architecture" width="100%" />
+</div>
+
+<br/>
+
+<details open>
+<summary><b>دیاگرام شاخه‌ای لایه‌ها — متن خوانا (ASCII)</b></summary>
+
+<br/>
+
+```
+Omni
+│
+├── TIER 0 · CLIENT  ──────────────────────────────── ورودی‌های کاربر
+│   ├── Browser ......... پنل وب، QR، مدیریت سشن‌ها
+│   ├── Mobile app ...... pair-code، ابزارهای دستگاه
+│   ├── Telegram ........ دستورات، منوها، هشدارها
+│   └── VPN clients ..... VLESS، Trojan، سابسکرایب
+│
+├── TIER 1 · EDGE  ────────────────────────────────── کلادفلر
+│   ├── workers.dev .... دامنهٔ پیش‌فرض
+│   ├── Custom domain .. دامنهٔ اختصاصی
+│   ├── TLS / Anycast .. تمرکز و پخش بار
+│   └── WARP / MASQUE .. مسیر ورود اختصاصی
+│
+├── TIER 2 · RUNTIME  ─────────────────────────────── هستهٔ اجرا
+│   └── Omni Worker ..... یک ES-module، بدون وابستگی خارجی
+│       ├── Router ...... مسیر‌یابی + نشست + کوکی
+│       ├── Panel UI .... SPA درون‌خطی (بدون CDN)
+│       ├── REST API .... ۷۲ endpoint
+│       ├── Subscription  /sub با هدرهای مصرف
+│       ├── Telegram .... webhook امضاشده
+│       └── Egress ...... Durable Object (OmniEgress2)
+│
+├── TIER 3 · MODULES  ─────────────────────────────── بخش‌های پنل
+│   ├── dashboard ....... نمای کلی و شمارنده‌ها
+│   ├── configs ......... کانفیگ‌ساز (VLESS/Trojan)
+│   ├── users ........... کاربر، کوتا، انقضا، دستگاه
+│   ├── outbound ........ خروجی مستقیم / رله / WARP
+│   ├── masque .......... استودیوی MASQUE / H3
+│   ├── wireguard_game .. وایرگارد و امنزیا
+│   ├── mesh ............ آزمایشگاه مسیر و رقابت لبه
+│   ├── scanner ......... اسکن و امتیازدهی IP
+│   ├── dns ............. DNS، ECH، تشخیص
+│   ├── diag ............ پینگ، سرعت، لاگ، نگهداری
+│   ├── sessions ........ دستگاه‌ها و ابطال نشست
+│   ├── tg_proxy ........ پل تلگرام
+│   ├── national_net .... رلهٔ WebSocket
+│   ├── settings ........ تنظیمات کامل پنل
+│   └── help ............ راهنمای درون‌پنلی
+│
+├── TIER 4 · INTEGRATIONS  ────────────────────────── سرویس‌های بیرونی
+│   ├── Cloudflare API .. دیپلوی، ترمیم، DNS
+│   ├── Telegram Bot API  پیام، منو، health
+│   ├── Arvan Cloud ..... رله و زون CDN
+│   ├── Railway ......... میزبان ورکر/رله
+│   └── Vercel .......... رله‌های لبه
+│
+└── TIER 5 · STATE  ───────────────────────────────── ذخیره‌سازی
+    ├── D1 · SQLite ..... حساب، کاربر، مصرف، نشست
+    ├── KV .............. release، asset، کش تنظیمات
+    └── DO storage ...... وضعیت Egress، قفل‌های کلید
+```
+
+</details>
+
+<br/>
+
+### جریان یک درخواست
+
+```mermaid
+flowchart LR
+    A([مرورگر]) -->|HTTPS| B{{Cloudflare Edge}}
+    B --> C{Omni Router}
+    C -->|"/"| D[Panel UI<br/>1.34 MB inline]
+    C -->|"/api/*"| E[REST API<br/>72 endpoints]
+    C -->|"/sub"| F[Subscription<br/>clash · singbox]
+    C -->|"/tg/*"| G[Telegram webhook]
+    E --> H[(D1)]
+    E --> I[(KV)]
+    E --> J[[OmniEgress2<br/>Durable Object]]
+    G --> K[Telegram Bot API]
+    E --> L[Cloudflare API<br/>deploy · heal]
+    F --> M([VPN clients])
+```
+
+<br/>
+
+### چرخهٔ حیات یک پنل
+
+```mermaid
+stateDiagram-v2
+    [*] --> Provision: توکن کلادفلر
+    Provision --> Deploy: ساخت Worker + D1
+    Deploy --> Setup: /api/setup
+    Setup --> Healthy: healthz 200
+    Healthy --> Degraded: پالس ناموفق
+    Degraded --> Repair: خودترمیمی
+    Repair --> Healthy: probe موفق
+    Repair --> Rebuild: probe ناموفق
+    Rebuild --> Healthy: حذف + ساخت مجدد
+    Rebuild --> Missing: تلاش دوباره
+    Missing --> Provision: پاک‌سازی و شروع تازه
+```
+
+<br/>
+
+---
+
+## 🎛️ نقشهٔ قابلیت‌ها
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**🔐 دسترسی**
+- ورود با PBKDF2 + سشن کوتاه‌عمر (۱۵ دقیقه idle)
+- ثبت‌نام عمومی قابل خاموش‌کردن
+- کد بازیابی + بازیابی رمز
+- ابطال نشست از هر دستگاه
+
+**👥 کاربران**
+- کوتا، انقضا، محدودیت دستگاه و درخواست
+- فعال‌سازی در اولین اتصال
+- برچسب، یادداشت، فرگمنت و فینگرپرینت
+- عملیات گروهی (`/api/users/bulk`)
+
+</td>
+<td width="50%" valign="top">
+
+**🔗 کانفیگ‌ساز**
+- VLESS و Trojan با پورت و SNI دلخواه
+- استخر IPv4 / IPv6 و انتخاب خودکار
+- QR و لینک و قالب آماده
+- سابسکرایب با هدر مصرف و انقضا
+
+**🌐 مسیر خروج**
+- مستقیم، رلهٔ آماده یا خروجی اختصاصی
+- WARP و MASQUE (H3)
+- رلهٔ ابری روی آروان، Railway و Vercel
+- جدایی کامل ورودی از خروجی
+
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+
+**🔬 تشخیص و آزمایش**
+- پینگ، سرعت، DNS و ECH
+- اسکن دامنه و امتیازدهی IP
+- آزمایشگاه مسیر (mesh) با مسابقهٔ لبه
+- لاگ زنده و نگهداری دوره‌ای
+
+**🤖 تلگرام**
+- راه‌اندازی و مدیریت کامل از چت
+- هشدار خودکار خرابی
+- پنل‌های چندحسابی
+- ترمیم خودکار سرویس
+
+</td>
+<td width="50%" valign="top">
+
+**🛠️ نگهداری**
+- `/healthz` سبک و بدون احراز
+- خودترمیمی: بازنویسی → probe → بازسازی کامل
+- بکاپ و بازیابی دیتابیس
+- به‌روزرسانی نسخه از داخل پنل
+
+**📱 اپلیکیشن**
+- اتصال با pair-code
+- توکن دستگاه و گزارش وضعیت
+- همان API پنل، بدون مسیر جداگانه
+
+</td>
+</tr>
+</table>
+
+<br/>
+
+---
+
+## 🚀 نصب
+
+### پیش‌نیاز
+
+| لازم | چرا |
+|---|---|
+| حساب Cloudflare | Workers، D1، KV |
+| API Token با دسترسی Workers + D1 | دیپلوی و ساخت دیتابیس |
+| ربات تلگرام (اختیاری) | فقط اگر کنسول تلگرام را می‌خواهی |
+
+### گام‌به‌گام
+
+```bash
+# ۱ · کلون
+git clone https://github.com/imgutss/omni.git && cd omni
+
+# ۲ · نصب
+npm install
+
+# ۳ · انتشار
+npm run release          # ساخت باندل نهایی در panel/build
+```
+
+سپس از داخل ربات یا پنل، توکن کلادفلر را بده و «ساخت خودکار روی حساب من» را بزن. پنل روی `workers.dev` بالا می‌آید و `/api/setup` اولین ادمین را می‌سازد.
+
+<details>
+<summary><b>دستی با wrangler</b></summary>
+
+```bash
+cp wrangler.toml wrangler.local.toml   # شناسه‌های خودت را بگذار
+npx wrangler deploy --config wrangler.local.toml
+```
+
+سپس یک‌بار `/api/setup` را صدا بزن تا جدول‌ها و ادمین ساخته شوند.
+
+</details>
+
+### بررسی سلامت
+
+```bash
+curl -s https://<your-worker>/healthz          # → 200
+curl -s https://<your-worker>/api/whoami | jq  # → installed:true
+```
+
+<br/>
+
+---
+
+## 🤖 ربات تلگرام
+
+<div align="center">
+
+```text
+ /start        منوی اصلی            /panels      فهرست پنل‌ها
+ /new          ساخت پنل تازه        /repair      ترمیم پنل خراب
+ /status       وضعیت زنده           /backup      بکاپ دیتابیس
+ /users        کاربران              /help        راهنما
+```
+
+</div>
+
+- وبهوک با `secret_token` امضا می‌شود؛ درخواست بدون امضا رد می‌شود.
+- `getWebhookInfo` باید `pending: 0` و بدون خطا باشد.
+- ترمیم سه‌مرحله‌ای است: بازنویسی → probe → در صورت شکست، حذف و ساخت دوباره با همان نام.
+
+> [!NOTE]
+> خطای **1101** روی کلادفلر یعنی خود سرویس مرده، نه کد. بازنویسی درجا هیچ‌وقت کافی نیست؛ باید اسکریپت حذف و با همان نام از نو ساخته شود. Omni این کار را خودکار انجام می‌دهد.
+
+<br/>
+
+---
+
+## 🔌 مرجع API
+
+<div align="center">
+
+| گروه | نمونه | کار |
+|---|---|---|
+| هویت | `/api/whoami` `/api/login` `/api/setup` | ورود و وضعیت |
+| کاربران | `/api/users` `/api/users/bulk` | مدیریت کاربر |
+| کانفیگ | `/api/fragments` `/api/countries` `/api/ech-config` | ساخت خروجی |
+| مسیر | `/api/mesh/*` `/api/clean/*` | آزمایش و بهینه‌سازی |
+| تشخیص | `/api/diag/*` `/api/scan/*` | پینگ، سرعت، اسکن |
+| امنیت | `/api/sessions` `/api/vault/*` | نشست و گاوصندوق |
+| تلگرام | `/api/bot/status` `/api/bot/notify` | اتصال ربات |
+| سرویس | `/api/healthz` `/api/version` | پایش |
+
+</div>
+
+<details>
+<summary><b>قرارداد پاسخ</b></summary>
+
+```json
+{
+  "ok": true,
+  "v": "1.0.7",
+  "rev": 187,
+  "egress": 1
+}
+```
+
+خطاها همیشه با `ok:false` و `code` ماشین‌خوان برمی‌گردند:
+
+```json
+{ "ok": false, "code": "bad_credentials", "error": "نام کاربری اشتباه است" }
+```
+
+</details>
+
+<br/>
+
+---
+
+## 🧱 ساختار مخزن
+
+```text
+omni/
+├── panel/
+│   ├── src/
+│   │   ├── worker.mjs        ← هستهٔ ES-module (ورکر کامل)
+│   │   └── panel.html        ← رابط کاربری درون‌خطی
+│   ├── test/                 ← release · workerd · browser
+│   ├── build.mjs             ← ساخت باندل نهایی
+│   └── release.json          ← نسخه و متادیتا
+├── docs/
+│   ├── assets/               ← hero و دیاگرام معماری (SVG)
+│   ├── GUIDE.fa.md           ← راهنمای کاربر
+│   ├── DEPLOY.fa.md          ← نصب
+│   └── ARCHITECTURE.fa.md    ← معماری
+├── relay/railway.cjs         ← رلهٔ Railway
+├── tools/                    ← دیپلوی و بسته‌بندی
+├── test/managed.mjs          ← تست یکپارچه
+└── wrangler.toml
+```
+
+<br/>
+
+---
+
+## 🧪 تست
+
+```bash
+npm test            # release + workerd + browser
+npm run test:rel    # فقط تست انتشار
+```
+
+<div align="center">
+
+```
+ ✓ release    ✓ workerd    ✓ browser
+```
+
+</div>
+
+<br/>
+
+---
+
+## 🛡️ امنیت
+
+- توکن‌ها هرگز در مخزن ذخیره نمی‌شوند؛ همه از طریق Secret یا D1.
+- `.gitignore` جلوی `.env`، `cf_token.txt` و فایل‌های حساب را می‌گیرد.
+- کوکی نشست `HttpOnly · Secure · SameSite=Lax` است.
+- وبهوک تلگرام بدون `secret_token` اجرا نمی‌شود.
+- گزارش آسیب‌پذیری: [SECURITY.md](SECURITY.md)
+
+<br/>
+
+---
+
+<div align="center">
+
+### ساخته‌شده برای اینکه همه‌چیز زیر دست خودت باشد.
+
+<a href="https://t.me/OmniAiGateBot"><img src="https://img.shields.io/badge/Telegram-@OmniAiGateBot-4ef0b5?style=for-the-badge&labelColor=0b1220&logo=telegram" alt="bot"/></a>
+<a href="https://github.com/imgutss/omni/issues"><img src="https://img.shields.io/badge/Issue-باز%20کن-ff9b3d?style=for-the-badge&labelColor=0b1220" alt="issue"/></a>
+
+<sub>Omni · rev 187 · نسخهٔ ۱.۰.۷</sub>
+
+</div>
